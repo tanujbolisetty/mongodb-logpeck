@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "logpeck"
+version = "2.7.0"
+authors = [
+    { name = "Tanuj Kumar Bolisetty" }
+]
+description = "High-fidelity MongoDB Log Forensics & Diagnostic Engine"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "python-dateutil",
+    "rich"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/tanujbolisetty/mongodb-logpeck"
+
+[project.scripts]
+peck = "logpeck.cli:main"
+
+[tool.setuptools]
+packages = ["logpeck"]

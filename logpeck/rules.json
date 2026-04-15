@@ -1,0 +1,198 @@
+{
+  "version": "0.6.0",
+  "description": "LogPeck Master Diagnostic Rules - Expert Forensic Edition",
+  "rules": [
+    {
+      "id": "COLLSCAN",
+      "type": "pattern",
+      "field": "plan_summary",
+      "technical_path": "attr.planSummary",
+      "op": "contains",
+      "value": "COLLSCAN",
+      "label": "🚨 COLLSCAN (Missing Index)",
+      "severity": "critical",
+      "description": "Targeted collection has no index for this query shape. MongoDB must scan every document to satisfy the result set, causing massive CPU and I/O overhead."
+    },
+    {
+      "id": "UNINDEXED_SORT",
+      "type": "logic",
+      "field": "plan_summary",
+      "technical_path": "attr.planSummary (SCAN + SORT check)",
+      "condition": "SORT in plan_summary and IXSCAN not in plan_summary",
+      "label": "🚨 In-Memory Sort",
+      "severity": "critical",
+      "description": "Result set was sorted in memory without the help of an index. This is extremely slow for large datasets and carries a high risk of 'Sort exceeded memory limit' errors."
+    },
+    {
+      "id": "HIGH_PLANNING",
+      "type": "ratio",
+      "numerator": "total_planning_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.planningTimeMicros / attr.durationMillis",
+      "threshold": 0.15,
+      "label": "⚠️ High Planning ({value:.0f}%)",
+      "severity": "warning",
+      "description": "The query optimizer is spending a disproportionate amount of time choosing an execution plan. Often caused by index complexity, high plan cache churn, or lack of hint usage."
+    },
+    {
+      "id": "IO_BOUND",
+      "type": "ratio",
+      "numerator": "total_io_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.storage.data.time(Reading|Writing)Micros / attr.durationMillis",
+      "threshold": 0.30,
+      "label": "⚠️ I/O Bound ({value:.0f}%)",
+      "severity": "warning",
+      "description": "Operation spent over 30% of its time waiting for disk. This indicates heavy physical read/write activity, possible disk throttling, or a 'cold cache' situation."
+    },
+    {
+      "id": "INEFFICIENT_INDEX",
+      "type": "ratio",
+      "numerator": "keysExamined",
+      "denominator": "nreturned",
+      "technical_path": "attr.keysExamined / attr.nreturned",
+      "threshold": 100,
+      "min_numerator": 1000,
+      "exclude_ops": ["aggregate", "count", "distinct"],
+      "label": "⚠️ Inefficient Index (Ratio: {value:.0f}:1)",
+      "severity": "warning",
+      "description": "The index used for this query is not selective enough. MongoDB is scanning many index keys to return very few documents, indicating suboptimal index field ordering."
+    },
+    {
+      "id": "HIGH_YIELDS",
+      "type": "ratio",
+      "numerator": "total_yields",
+      "denominator": "count",
+      "technical_path": "attr.numYields",
+      "threshold": 50,
+      "label": "🚨 High Yields ({value:.0f}/op)",
+      "severity": "critical",
+      "description": "The operation yielded its lock frequently to other threads. High yield counts often follow high I/O wait times or indicate extreme concurrency stress on the cluster."
+    },
+    {
+      "id": "LATENCY_CLIFF",
+      "type": "ratio",
+      "numerator": "max_ms",
+      "denominator": "avg_ms",
+      "technical_path": "Statistical Outlier (max vs avg durationMillis)",
+      "threshold": 10,
+      "min_count": 10,
+      "label": "🚨 Latency Cliff ({value:.1f}x Avg)",
+      "severity": "critical",
+      "description": "Extreme performance variance detected. The slowest sample is significantly slower than the average, indicating intermittent blocking, resource spikes, or lock queuing."
+    },
+    {
+      "id": "WRITE_CONFLICTS",
+      "type": "threshold",
+      "field": "total_write_conflicts",
+      "technical_path": "attr.writeConflicts",
+      "op": "gt",
+      "value": 0,
+      "label": "🚨 Write Conflicts",
+      "severity": "critical",
+      "description": "Optimistic concurrency failure. Multiple operations attempted to write to the same document or range simultaneously, forcing the database to retry the operation."
+    },
+    {
+      "id": "CPU_BOUND",
+      "type": "ratio",
+      "numerator": "cpu_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.cpuNanos / attr.durationMillis",
+      "threshold": 0.8,
+      "label": "🚨 CPU Bound ({value:.0f}%)",
+      "severity": "critical",
+      "description": "The operation spent nearly all its time in compute. This is typical for complex aggregations, heavy data encoding/decoding, or cryptographic operations."
+    },
+    {
+      "id": "PIPELINE_COLLAPSE",
+      "type": "ratio",
+      "numerator": "keysExamined",
+      "denominator": "nreturned",
+      "technical_path": "attr.keysExamined / attr.nreturned",
+      "threshold": 500,
+      "min_numerator": 1000,
+      "include_ops": ["aggregate", "count", "distinct"],
+      "label": "📉 REDUCTION PIPELINE (Ratio: {value:.0f}:1)",
+      "severity": "info",
+      "description": "Stage-heavy aggregation that examines many documents in early stages before collapsing into few results. Often indicates a missing or late $match stage."
+    },
+    {
+      "id": "IDLE_TRANSACTION",
+      "type": "ratio",
+      "numerator": "total_app_wait_ms",
+      "denominator": "total_active_ms",
+      "technical_path": "attr.timeInactiveMicros",
+      "threshold": 0.5,
+      "label": "🐌 IDLE TRANSACTION",
+      "severity": "info",
+      "description": "The multi-statement transaction was open but inactive for more than 50% of its duration. This usually indicates the transaction is waiting on external application logic."
+    },
+    {
+      "id": "ACTIVE_TRANSACTION",
+      "type": "pattern",
+      "field": "op",
+      "technical_path": "message context",
+      "op": "contains",
+      "value": "transaction",
+      "label": "🔗 ACTIVE TRANSACTION",
+      "severity": "info",
+      "description": "Multi-document transaction identified. These operations carry higher overhead and lock pressure than standard CRUD."
+    },
+    {
+      "id": "OPLOG_WAIT",
+      "type": "ratio",
+      "numerator": "total_oplog_wait_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.totalOplogSlotDurationMicros / attr.durationMillis",
+      "threshold": 0.4,
+      "label": "🚨 OPLOG WAIT ({value:.0f}%)",
+      "severity": "critical",
+      "description": "Concurrency bottleneck during write operations. Indicates high parallel write pressure or slow oplog application on secondary nodes."
+    },
+    {
+      "id": "EXECUTION_QUEUE",
+      "type": "ratio",
+      "numerator": "total_queue_wait_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.queues.execution.totalTimeQueuedMicros / attr.durationMillis",
+      "threshold": 0.5,
+      "label": "🚨 EXECUTION QUEUE ({value:.0f}%)",
+      "severity": "critical",
+      "description": "Significant ticket queueing detected. The query spent most of its life waiting for an available execution slot, indicating the cluster has reached its concurrency limit."
+    },
+    {
+      "id": "QUERY_TIMEOUT",
+      "type": "threshold",
+      "field": "timeout_count",
+      "technical_path": "attr.errCode: 50 | attr.errName: MaxTimeMSExpired",
+      "op": "gt",
+      "value": 0,
+      "label": "🚨 TIMEOUT",
+      "severity": "critical",
+      "description": "Operation was terminated by the server because it exceeded its 'maxTimeMS' limit. Results are likely incomplete or failed entirely."
+    },
+    {
+      "id": "SEARCH_RESOURCES",
+      "type": "ratio",
+      "numerator": "total_search_wait_ms",
+      "denominator": "total_ms",
+      "technical_path": "attr.workingMillis / attr.durationMillis (Atlas Search mongot waiting)",
+      "threshold": 0.7,
+      "include_ops": ["aggregate"],
+      "label": "🚨 SEARCH BOTTLENECK ({value:.0f}%)",
+      "severity": "critical",
+      "description": "Atlas Search bottleneck. The database engine spent over 70% of its time waiting for results from the 'mongot' search process."
+    },
+    {
+      "id": "REGEX_SCAN",
+      "type": "threshold",
+      "field": "has_regex",
+      "technical_path": "cmd_obj string search ($regex | $regularExpression)",
+      "op": "gt",
+      "value": 0,
+      "label": "🚨 REGEX SCAN",
+      "severity": "warning",
+      "description": "The query uses a regular expression filter. Regex matches, especially those with the 'i' (case-insensitive) flag or non-anchored patterns, are CPU-intensive and cannot always fully leverage indexes."
+    }
+  ]
+}
