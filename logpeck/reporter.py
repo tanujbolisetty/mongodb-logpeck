@@ -2,7 +2,7 @@ import os
 import json
 from typing import List, Dict, Any
 from .version import __version__ as VERSION
-from .specification import FIELD_DISPLAY, METRIC_TYPE, METRIC_SOURCES
+from .specification import FIELD_DISPLAY, METRIC_TYPE, METRIC_SOURCES, ERROR_CODE_MAP
 from .utils import format_duration, format_bytes
 
 """
@@ -112,10 +112,32 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     user_wave_html = render_wave(conn.get("top_users", {}))
     driver_mapping_html = "<table style='margin-top:1rem'><thead><tr><th>CLIENT APPLICATION</th><th>DRIVER STITCHING</th><th>COUNT</th></tr></thead><tbody>" + "".join([f"<tr><td style='font-size:0.85rem;color:var(--text-secondary)'>{m.get('app', 'N/A')}</td><td style='font-size:0.82rem;color:var(--accent);font-weight:700'>{m.get('driver', 'N/A')}</td><td style='font-family:monospace'>{m.get('count', 0):,}</td></tr>" for m in conn.get("app_driver_mapping", [])]) + "</tbody></table>"
 
-    def render_summary_rows(data_list, start_idx=0, is_health_view=False, is_timeout_view=False):
+    # 🧬 Executive Failure Summary (v2.7.16)
+    failure_summary_html = "<table><thead><tr><th>CODE</th><th>ERROR / DESCRIPTION</th><th>OCCURRENCES</th><th>AVG DELAY</th><th>PRIMARY NAMESPACE</th><th>MOST IMPACTED APP</th></tr></thead><tbody>"
+    ecs = stats.get("error_code_summary", [])
+    if not ecs:
+        failure_summary_html += "<tr><td colspan='6' style='text-align:center;color:var(--text-secondary);padding:2rem'>No workload failures detected in this trace window</td></tr>"
+    for e in ecs:
+        e_code = e.get("code", "N/A")
+        e_name = e.get("name", "UnknownError")
+        e_desc = e_name.replace(f" ({e_code})", "").replace(f" {e_code}", "")
+        failure_summary_html += f"""
+            <tr>
+                <td><span style="font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)">{e_code}</span></td>
+                <td><strong style="color:var(--text-primary)">{e_desc}</strong></td>
+                <td><span class="tag-critical">{e.get("count", 0):,}</span></td>
+                <td>{format_duration(e.get("avg_ms", 0))}</td>
+                <td style="font-size:0.75rem">{e.get("top_ns", "N/A")}</td>
+                <td style="font-size:0.75rem; color:var(--text-secondary)">{e.get("top_app", "N/A")}</td>
+            </tr>
+        """
+    failure_summary_html += "</tbody></table>"
+
+    def render_summary_rows(data_list, start_idx=0, is_system_view=False, is_timeout_view=False):
         rows = ""
         for i, row in enumerate(data_list):
-            did = f"d_{start_idx + i}"; l_pct = row.get("load_pct", 0); l_wid = min(l_pct * 1.5, 100)
+            did = f"sys_{start_idx + i}" if is_system_view else (f"to_{start_idx + i}" if is_timeout_view else f"d_{start_idx + i}")
+            l_pct = row.get("load_pct", 0); l_wid = min(l_pct * 1.5, 100)
             tags = row.get("diagnostic_tags", [])
             chip_list = [f"<span class='tag-{str(t.get('severity', 'info')).lower()}'>{t.get('label', 'UNKNOWN')}</span>" for t in tags]
             chips = f'<div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">{" ".join(chip_list)}</div>'
@@ -127,8 +149,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+</div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
             
             def render_f_row(k, d1, d2):
-                v1, v2 = d1.get(k, "-"), d2.get(k, "-")
-                if v1 == "-" and v2 == "-": return ""
+                v1, v2 = d1.get(k, 0), d2.get(k, 0)
+
                 def apply_format(val, key):
                     if not isinstance(val, (int, float)): return val
                     m_type = METRIC_TYPE.get(key)
@@ -160,8 +182,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             l_panel = f'<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
             l_panel += f'<tr><td class="f-label" title="Wall-Clock duration of the operation">Wall-Clock Latency</td><td class="f-val-fast" style="color:var(--tier1)">{format_duration(row.get("min_time", 0))}</td><td class="f-val-slow" style="color:var(--error)">{format_duration(row.get("max_time", 0))}</td></tr>'
             l_panel += render_category("📊 READ FORENSICS", ["keysExamined", "docsExamined", "nreturned", "reslen"], row)
-            l_panel += render_category("🖋️ WRITE CHURN", ["ninserted", "keysInserted", "nModified", "keysUpdated", "ndeleted", "keysDeleted", "upserted", "writeConflicts", "waitForWriteConcernDurationMillis", "totalOplogSlotDurationMicros", "txnBytesDirty"], row)
-            l_panel += render_category("💾 STORAGE WAIT", ["storage_wait", "flowControlMillis"], row)
+            l_panel += render_category("🖋️ WRITE CHURN", ["ninserted", "keysInserted", "nModified", "keysUpdated", "ndeleted", "keysDeleted", "upserted", "writeConflicts", "txnBytesDirty"], row)
+            l_panel += render_category("💾 STORAGE WAIT", ["storage_wait", "totalOplogSlotDurationMicros", "waitForWriteConcernDurationMillis", "flowControlMillis"], row)
             l_panel += render_category("🔒 LOCK WAIT", ["lock_wait"], row)
             l_panel += render_category("🧭 PLANNING", ["planning", "remoteOpWaitMillis"], row)
             l_panel += render_category("⚙️ PURE EXECUTION", ["execution", "numYields", "nStages", "cpuNanos"], row)
@@ -181,40 +203,47 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             slow_json = json.dumps(row.get('max_peek_attr') or {}, indent=2)
 
             # Build optional columns based on view type
-            if is_health_view:
-                extra_cols = ""
-                colspan_val = "7"
-                aas_load_col = ""
-                t_cnt = row.get("timeout_count", 0)
-                if t_cnt > 0:
-                    diag_col_health = f'<td><span class="badge" style="background:var(--tier6); color:white; border:none; font-size:0.65rem">🚨 TIMEOUT ({t_cnt})</span></td>'
-                else:
-                    diag_col_health = '<td><span style="color:var(--text-secondary); font-size:0.75rem">Operational</span></td>'
+            if is_system_view:
+                # System Forensics now gets the FULL column set
+                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{row.get('plan_summary', 'N/A')}</td>"""
+                colspan_val = "11"
+                aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
             elif is_timeout_view:
                 hash_val = row.get('query_shape_hash', 'N/A')
                 short_hash = hash_val[:12] + '...' if len(hash_val) > 12 else hash_val
                 extra_cols = f"""<td style="font-family:'JetBrains Mono', monospace; font-size:0.75rem; color:var(--accent)">{short_hash}</td><td style="font-size:0.75rem;color:var(--accent)">{ns_display}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td>"""
-                colspan_val = "6"
+                colspan_val = "7"
                 aas_load_col = ""
             else:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{row.get('plan_summary', 'N/A')}</td>"""
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
 
-            diag_col_health = ""
-
             if is_timeout_view:
-                t_cnt = row.get("timeout_count", 0)
-                e_cnt = row.get("count", 0) - t_cnt
-                badge_html = ""
-                if t_cnt > 0:
-                    badge_html += f'<span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--tier6);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700;margin-right:4px">🚨 TIMEOUT ({t_cnt})</span>'
-                if e_cnt > 0:
-                    badge_html += f'<span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--tier4);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">☢️ ERROR ({e_cnt})</span>'
+                t_cnt = row.get('count', 0)
+                e_cnt = row.get('error_count', 0)
+                e_code = row.get("error_code") or (row.get("max_forensic", {}).get("errCode")) or ("50" if t_cnt > 0 else "N/A")
+                e_name = row.get("error_name") or (row.get("max_forensic", {}).get("errName")) or ("MaxTimeMSExpired" if t_cnt > 0 else "UnknownError")
                 
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td>{badge_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+                # 🏮 Truth Engine Promotion (v2.7.12)
+                # If error is Unknown but we have a code, try to resolve it now
+                if e_name == "UnknownError" and isinstance(e_code, int) and e_code in ERROR_CODE_MAP:
+                    e_name = ERROR_CODE_MAP[e_code]
+
+                
+                # Cleanup: remove numeric suffix often found in some aggregated descriptions if redundant
+                e_desc = e_name.replace(f" ({e_code})", "").replace(f" {e_code}", "")
+                
+                code_html = f'<span style="font-family:\'JetBrains Mono\'; font-weight:700; color:{ "var(--tier6)" if t_cnt > 0 else "var(--tier4)" }">{e_code}</span>'
+                desc_html = f'<span style="font-weight:700; color:var(--text-primary)">{e_desc}</span>'
+                if t_cnt > 0:
+                    desc_html = f'🚨 {desc_html}'
+                elif e_cnt > 0:
+                    desc_html = f'☢️ {desc_html}'
+
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
             else:
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{diag_col_health}{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
             
             rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
@@ -272,7 +301,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         return rows
 
     rows_html = render_summary_rows(summary, 0)
-    system_rows_html = render_summary_rows(system_summary, 1000, is_health_view=True)
+    system_rows_html = render_summary_rows(system_summary, 1000, is_system_view=True)
     timeout_forensic_rows_html = render_summary_rows(timeout_summary, 2000, is_timeout_view=True)
 
     # 📚 Forensic Knowledge Base: Diagnostic Decoder (v2.7.0)
@@ -396,8 +425,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     </div>
 
     <div class="tabs">
-        <div class="tab active" onclick="openTab('health', this)">🏥 System Health</div>
-        <div class="tab" onclick="openTab('slow', this)">🐢 Slow Query Forensics</div>
+        <div class="tab active" onclick="openTab('health', this)">🏥 Health Overview</div>
+        <div class="tab" onclick="openTab('system', this)">🛠️ System Query Forensics</div>
+        <div class="tab" onclick="openTab('slow', this)">🐢 Business Workload Forensics</div>
         <div class="tab" onclick="openTab('timeouts', this)">🚨 Failure Forensics</div>
         <div class="tab" onclick="openTab('connections', this)">🔌 Connection Analytics</div>
         <div class="tab" onclick="openTab('reference', this)">📚 Reference</div>
@@ -411,7 +441,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             {bottleneck_radar_html}
         </div>
         <div style="margin-bottom:1.5rem">
-            <input type="text" id="healthSearch" onkeyup="filterRows('healthSearch', 'healthContent')" placeholder="🔍 Filter hotspots, error patterns, or system events..." style="width:100%; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
+            <input type="text" id="healthSearch" onkeyup="filterRows('healthSearch', 'healthContent')" placeholder="🔍 Filter hotspots, error patterns, or component workloads..." style="width:100%; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
         </div>
         <div id="healthContent">
             <div class="comparison-grid">
@@ -422,18 +452,31 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 <div class="card"><div class="card-label">Top Active Namespaces</div><div style="margin-top:1.2rem">{ns_grid_html}</div></div>
                 <div class="card"><div class="card-label">Top Message Patterns</div><div style="margin-top:1.2rem">{msg_grid_html}</div></div>
             </div>
+        </div>
+    </div>
+
+    <div id="system" class="tab-content">
+        <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+            <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Forensic search of background tasks, heartbeats, and admin commands..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
+            <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
+        </div>
+        <div id="systemContent">
             <div class="card" style="margin-top:1.5rem">
-                <div class="card-label" style="color:var(--accent)">🧬 Platform & System Operations</div>
+                <div class="card-label" style="color:var(--warn)">🧬 System Query Forensics (Infrastructure Telemetry)</div>
                 <table id="systemTable">
                     <thead>
                         <tr>
                             <th style="width:40px">#</th>
-                            <th style="width:200px">EVENT</th>
-                            <th style="width:80px">AVG</th>
-                            <th style="width:80px">MAX</th>
-                            <th style="width:80px">COUNT</th>
-                            <th style="width:90px">TOTAL MS</th>
-                            <th>TARGET NAMESPACE</th>
+                            <th style="width:80px">OP</th>
+                            <th style="width:80px">Avg</th>
+                            <th style="width:80px">Max</th>
+                            <th style="width:80px">Count</th>
+                            <th style="width:110px">AAS Load</th>
+                            <th style="width:100px">Total MS</th>
+                            <th style="width:220px">Namespace</th>
+                            <th style="width:350px">Diagnostic</th>
+                            <th style="width:180px">Component/App</th>
+                            <th>Plan</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -451,6 +494,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         </div>
         <div id="timeoutContent">
             <div class="card">
+                <div class="card-label" style="color:var(--warn)">📊 Executive Failure Summary (Error Code Distribution)</div>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:1.5rem">Systemic view of errors across all query shapes. Use this to identify global infrastructure bottlenecks.</p>
+                {failure_summary_html}
+            </div>
+
+            <div class="card" style="margin-top:1.5rem">
                 <div class="card-label" style="color:var(--error)">⚠️ Critical Timeout & Execution Limit Patterns (Pass 1)</div>
                 {timeout_table_html}
             </div>
@@ -459,11 +508,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 <table id="timeoutTable">
                     <thead>
                         <tr>
-                            <th style="width:50px">#</th>
-                            <th style="width:160px">TIMEOUT EVENT</th>
-                            <th style="width:80px">COUNT</th>
-                            <th style="width:180px">SHAPE HASH</th>
-                            <th style="width:250px">NAMESPACE</th>
+                            <th style="width:40px">#</th>
+                            <th style="width:80px">CODE</th>
+                            <th style="width:250px">ERROR / DESCRIPTION</th>
+                            <th style="width:70px">COUNT</th>
+                            <th style="width:150px">SHAPE HASH</th>
+                            <th style="width:220px">NAMESPACE</th>
                             <th style="width:200px">CONTEXT / APP</th>
                         </tr>
                     </thead>

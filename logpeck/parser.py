@@ -2,6 +2,7 @@ import json
 import re
 import hashlib
 from typing import Dict, Any, List, Optional, Set
+from .specification import ERROR_CODE_MAP
 
 # 🕵️ Heuristic Forensic Patterns (v1.3.5)
 RE_HEURISTIC_NS = [
@@ -36,30 +37,32 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
     2. If a key is in SEARCH_STRUCTURAL_FIELDS, we recurse into its value.
     3. All other keys are treated as business-level fields and harvested.
     """
-    if depth > 15 or not obj: return
+    if depth > 32 or not obj: return  # 🧪 Depth Boost (v2.7.10): For complex Atlas Search
     if isinstance(obj, dict):
         # 🧪 Atlas Search Path Extraction (v1.1.50)
         # If we find a "path" field, its value is the actual business field name we want to harvest.
-        if "path" in obj and isinstance(obj["path"], str):
-            field_name = obj["path"]
-            if field_name not in SEARCH_STRUCTURAL_FIELDS:
-                # 🧪 Intelligent Value Harvesting (v1.1.53)
-                val = obj.get("query") or obj.get("value")
-                if val is None:
-                    # Look for range bounds or common operator keys
-                    val_keys = ["gte", "lte", "gt", "lt", "origin", "pivot"]
-                    found_vals = {vk: obj[vk] for vk in val_keys if vk in obj}
-                    val = found_vals if found_vals else True
-                
-                # Overwrite protection: Don't let meta-values (like sorts) overwrite sample values
-                if field_name in params_found:
-                    old_v = params_found[field_name]
-                    if isinstance(old_v, (dict, list)) and not isinstance(val, (dict, list)):
-                        pass # Keep the "richer" filter value
+        if "path" in obj and isinstance(obj["path"], (str, list)):
+            paths = [obj["path"]] if isinstance(obj["path"], str) else obj["path"]
+            for field_name in paths:
+                if not isinstance(field_name, str): continue
+                if field_name not in SEARCH_STRUCTURAL_FIELDS:
+                    # 🧪 Intelligent Value Harvesting (v1.1.53)
+                    val = obj.get("query") or obj.get("value")
+                    if val is None:
+                        # Look for range bounds or common operator keys
+                        val_keys = ["gte", "lte", "gt", "lt", "origin", "pivot"]
+                        found_vals = {vk: obj[vk] for vk in val_keys if vk in obj}
+                        val = found_vals if found_vals else True
+                    
+                    # Overwrite protection: Don't let meta-values (like sorts) overwrite sample values
+                    if field_name in params_found:
+                        old_v = params_found[field_name]
+                        if isinstance(old_v, (dict, list)) and not isinstance(val, (dict, list)):
+                            pass # Keep the "richer" filter value
+                        else:
+                            params_found[field_name] = val
                     else:
                         params_found[field_name] = val
-                else:
-                    params_found[field_name] = val
              
         for k, v in obj.items():
             if k.startswith("$"):
@@ -85,6 +88,7 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
                             params_found[k] = v
     elif isinstance(obj, list):
         for item in obj: _harvest_params(item, params_found, depth + 1)
+
 
 def extract_query_schema(cmd_obj: dict, op: str) -> List[str]:
     params = extract_query_params(cmd_obj, op)
@@ -183,30 +187,15 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         # Database in auth line is the target of the auth (often admin), but user is the key anchor
         if "user" in attr: attr["user"] = attr["user"]
     
-    from .specification import SIMPLIFIED_OPS
-    for pattern, simple_name in SIMPLIFIED_OPS.items():
-        if pattern.lower() in str(raw_op).lower() or (msg and pattern.lower() in msg.lower()):
-            op = simple_name # Preserve case from specification
-            # 🕵️ Transaction Detection (v2.3.5)
-            # Check top-level attr, CRUD block, and nested parameters (v2.7.2 Fix)
-            params = attr.get("parameters", {})
-            is_tx = str(ns).endswith(".$cmd") or "txnNumber" in attr or (isinstance(crud, dict) and "txnNumber" in crud) or "txnNumber" in params
-            # Ensure namespace is resolved for the result set (v1.3.16)
-            if (is_tx or not ns or ns == "unknown") and cmd_obj:
-               for k in COMMON_COMMAND_KEYS:
-                   if k in cmd_obj and isinstance(cmd_obj[k], str):
-                       db_f = str(ns).split(".")[0] if ns and "." in str(ns) else "admin"
-                       db = attr.get("db") or attr.get("$db") or cmd_obj.get("$db") or attr.get("dbName") or db_f
-                       ns = f"{db}.{cmd_obj[k]}" if "." not in str(cmd_obj[k]) else cmd_obj[k]
-                       break
-            return op, ns
+    # 🕵️ Forensic Attribute Recovery (v2.7.5)
+    # Recover namespace from attributes (common in housekeeping logs like TTL index)
+    if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
+        ns = attr.get("namespace") or ns
 
-    op = str(raw_op).lower()
-    # 🕵️ Transaction Detection: Check for $cmd namespace OR presence of transaction metadata (v2.3.5)
-    # Check top-level attr, CRUD block, and nested parameters (v2.7.2 Fix)
+    # 🕵️ Transaction & Command Namespace Resolution (v2.7.6)
     params = attr.get("parameters", {})
     is_tx = str(ns).endswith(".$cmd") or "txnNumber" in attr or (isinstance(crud, dict) and "txnNumber" in crud) or "txnNumber" in params
-
+    
     if is_tx or ns == "unknown" or not ns:
         coll = None
         for k in COMMON_COMMAND_KEYS:
@@ -214,23 +203,28 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
                 coll = cmd_obj[k]
                 break
         
-        if not coll and op == "getmore" and "collection" in cmd_obj:
+        if not coll and str(raw_op).lower() == "getmore" and "collection" in cmd_obj:
             coll = cmd_obj["collection"]
+            if coll == "oplog.rs":
+                raw_op = "OplogFetcher"
         
         if isinstance(coll, str):
             # Resolve DB: Check cmd_obj, top-level attr, or fallback to the prefix of the $cmd namespace
             db_fallback = str(ns).split(".")[0] if ns and "." in str(ns) else "admin"
             db = attr.get("db") or attr.get("$db") or cmd_obj.get("$db") or attr.get("dbName") or db_fallback
             ns = f"{db}.{coll}" if "." not in str(coll) else coll
-    
-    if is_tx and op in ["update", "insert", "delete", "findandmodify"]:
-        op = f"tx-{op}"
-    
-    # 🕵️ Heuristic Fallback for Errors/Timeouts (v1.3.5)
-    if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
-        # Check attr for 'namespace' (common in system health logs like TTL)
-        ns = attr.get("namespace") or ns
-        
+
+    from .specification import SIMPLIFIED_OPS
+    op = str(raw_op).lower() # Default to raw op
+
+    for pattern, simple_name in SIMPLIFIED_OPS.items():
+        if pattern.lower() in str(raw_op).lower() or (msg and pattern.lower() in msg.lower()):
+            op = simple_name # Preserve case from specification
+    # Final Normalization and Transaction Enrichment
+    if is_tx and op.lower() in ["update", "insert", "delete", "findandmodify", "find"]:
+        if not op.lower().startswith("tx-"):
+            op = f"tx-{op}"
+
     if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
         h_ns = heuristic_extract_ns(msg)
         if not h_ns and "error" in attr:
@@ -258,7 +252,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     """
     attr = entry.get("attr")
     if not isinstance(attr, dict):
-        return None
+        attr = {}
     # Handle both standard command logs and transactional CRUD blocks (v2.3.5)
     cmd_obj = attr.get("command") or attr.get("CRUD") or {}
     msg = entry.get("msg", "unknown")
@@ -308,9 +302,13 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         val = attr.get(k) or harvested_error.get(k)
         if val is not None: forensic[k] = val
     
-    # Validation Fallback (v2.7.0): If we have a failure but no errName, use errMsg as the anchor.
+    # Validation Fallback (v2.7.0): If we have a failure but no errName, use ERROR_CODE_MAP or errMsg
     if ("errCode" in forensic or "errMsg" in forensic) and "errName" not in forensic:
-        forensic["errName"] = str(forensic.get("errCode") or forensic.get("errMsg", "DirectError"))
+        code = forensic.get("errCode")
+        if code and code in ERROR_CODE_MAP:
+            forensic["errName"] = ERROR_CODE_MAP[code]
+        else:
+            forensic["errName"] = str(code or forensic.get("errMsg", "DirectError"))
     
     # 🕵️ Deep Queue Harvesting (v2.6.11): Extract nested execution metrics if missing from top-level attr
     if "totalTimeQueuedMicros" not in forensic:
@@ -342,8 +340,14 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
     s_read = (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
     s_write = (get_nested_value(entry, "attr.storage.data.timeWritingMicros") or 0) + (attr.get("waitForWriteConcernDurationMillis") or 0) * 1000
-    if s_read > 0 or s_write > 0: 
-        val = round((s_read + s_write) / 1000.0, 2)
+    
+    # 🧪 Write Bottleneck Unification (v2.7.13)
+    # Include Oplog Slot Duration in storage wait for mutation ops (update, findAndModify, delete, insert)
+    # This aligns the 'I/O Bound' diagnostic with realistic write-path concurrency pressure.
+    oplog_wait = (attr.get("totalOplogSlotDurationMicros") or 0)
+    
+    if s_read > 0 or s_write > 0 or oplog_wait > 0: 
+        val = round((s_read + s_write + oplog_wait) / 1000.0, 2)
         # 🧪 Wall-Clock Hardening (v2.3.1)
         # Cap visual components at total duration if they represent cumulative parallel effort.
         waits_ms["storage_wait"] = min(val, ms) if ms > 0 else val
@@ -396,19 +400,27 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "") -
     if op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
         return False
 
-    # 1. Component check
+    # 1. Explicit System Namespace check (Priority 1)
+    if ns and ns != "unknown":
+        if any(ns.startswith(p) for p in SYSTEM_NAMESPACES) or ".system." in ns or ns == "oplog.rs":
+            return True
+            
+    # 2. System Identity check (Priority 2: Identity > Business Namespace)
+    # This captures background tasks even if they target business namespaces (e.g. TTL, mongot)
     if str(component).upper() in SYSTEM_COMPONENTS:
         return True
-    
-    # 2. App Name check
     if any(str(app).startswith(s) for s in SYSTEM_APP_NAMES):
         return True
     
-    # 3. Namespace check
-    if not ns or ns == "unknown":
-        return False # Forensic default: preserve unknown for Pass 2 context stitching
+    # Explicitly route infrastructure-driven operations to System
+    if op in ["Wire Spec Update", "Replica Set Change", "TTL Index", "Oplog Processing", "Oplog Truncation", "OplogFetcher"]:
+        return True
+
+    # 3. Business Namespace check (Priority 3)
+    if ns and ns != "unknown":
+        return False
         
-    return any(ns.startswith(p) for p in SYSTEM_NAMESPACES)
+    return False
 
 def get_nested_value(obj: Any, path: str) -> Any:
     try:

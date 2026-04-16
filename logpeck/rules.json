@@ -144,7 +144,7 @@
       "numerator": "total_oplog_wait_ms",
       "denominator": "total_ms",
       "technical_path": "attr.totalOplogSlotDurationMicros / attr.durationMillis",
-      "threshold": 0.4,
+      "threshold": 0.3,
       "label": "🚨 OPLOG WAIT ({value:.0f}%)",
       "severity": "critical",
       "description": "Concurrency bottleneck during write operations. Indicates high parallel write pressure or slow oplog application on secondary nodes."
@@ -193,6 +193,160 @@
       "label": "🚨 REGEX SCAN",
       "severity": "warning",
       "description": "The query uses a regular expression filter. Regex matches, especially those with the 'i' (case-insensitive) flag or non-anchored patterns, are CPU-intensive and cannot always fully leverage indexes."
+    },
+    {
+      "id": "NOT_SUPPORTED_ON_VIEW",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 166 | attr.code: 166",
+      "op": "eq",
+      "value": 166,
+      "label": "🚨 NOT SUPPORTED ON VIEW",
+      "severity": "critical",
+      "description": "Namespace is a view, not a collection. Certain operations (like $collStats or storageStats) cannot be performed directly on views."
+    },
+    {
+      "id": "CLIENT_DISCONNECT",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 279 | ClientDisconnect",
+      "op": "eq",
+      "value": 279,
+      "label": "🚨 CLIENT DISCONNECT",
+      "severity": "warning",
+      "description": "The operation was interrupted because the client closed the connection. Often indicates a client-side timeout or network instability."
+    },
+    {
+      "id": "MEMORY_LIMIT_EXCEEDED",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 147 | ExceededMemoryLimit",
+      "op": "eq",
+      "value": 147,
+      "label": "🚨 MEMORY LIMIT EXCEEDED",
+      "severity": "critical",
+      "description": "The operation exceeded the internal memory limit (typically 100MB for sorts/aggregations). Consider optimizing indexes or enabling 'allowDiskUse'."
+    },
+    {
+      "id": "OPERATION_INTERRUPTED",
+      "type": "pattern",
+      "field": "error_name",
+      "technical_path": "attr.errName: Interrupted*",
+      "op": "contains",
+      "value": "Interrupted",
+      "label": "🚨 OPERATION INTERRUPTED",
+      "severity": "warning",
+      "description": "The operation was interrupted by the server, likely due to a shutdown, stepdown, or manual kill command."
+    },
+    {
+      "id": "DUPLICATE_KEY",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 11000 | DuplicateKey",
+      "op": "eq",
+      "value": 11000,
+      "label": "🚨 DUPLICATE KEY",
+      "severity": "critical",
+      "description": "Unique constraint violation. The application attempted to insert or update a document with a key that already exists in a unique index."
+    },
+    {
+      "id": "UNAUTHORIZED",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 13 | Unauthorized",
+      "op": "eq",
+      "value": 13,
+      "label": "🚨 UNAUTHORIZED",
+      "severity": "critical",
+      "description": "Permission denied. The user authenticated to the session does not have the required RBAC privileges to perform this operation."
+    },
+    {
+      "id": "WRITE_CONFLICT",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 112 | WriteConflict",
+      "op": "eq",
+      "value": 112,
+      "label": "🚨 WRITE CONFLICT",
+      "severity": "warning",
+      "description": "Concurrent write operation detected. The storage engine was unable to commit due to a conflict with another transaction. Usually handled by automatic retries."
+    },
+    {
+      "id": "NAMESPACE_NOT_FOUND",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 26 | NamespaceNotFound",
+      "op": "eq",
+      "value": 26,
+      "label": "🚨 NAMESPACE NOT FOUND",
+      "severity": "critical",
+      "description": "The specified database or collection does not exist. Verify the connection string and application logic."
+    },
+    {
+      "id": "AUTH_FAILED",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 18 | AuthenticationFailed",
+      "op": "eq",
+      "value": 18,
+      "label": "🚨 AUTHENTICATION FAILED",
+      "severity": "critical",
+      "description": "Invalid credentials provided for the database user. Check secrets and connection string parameters."
+    },
+    {
+      "id": "CURSOR_NOT_FOUND",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 43 | CursorNotFound",
+      "op": "eq",
+      "value": 43,
+      "label": "🚨 CURSOR NOT FOUND",
+      "severity": "warning",
+      "description": "The cursor requested by getMore has either timed out or was closed on the server. Consider increasing batch sizes or checking cursor lifetimes."
+    },
+    {
+      "id": "LOCK_TIMEOUT",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 24 | LockTimeout",
+      "op": "eq",
+      "value": 24,
+      "label": "🚨 LOCK TIMEOUT",
+      "severity": "critical",
+      "description": "Resource lock acquisition timed out. Indicates extreme resource contention or deadlocks in the storage engine."
+    },
+    {
+      "id": "STEPDOWN_INTERRUPT",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 189 | 11602 | Stepdown",
+      "op": "in",
+      "value": [189, 11602],
+      "label": "🚨 PRIMARY STEPDOWN",
+      "severity": "warning",
+      "description": "Operation was interrupted because the primary node stepped down to a secondary state. Check for cluster elections or maintenance."
+    },
+    {
+      "id": "INTERNAL_ERROR",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 1 | InternalError",
+      "op": "eq",
+      "value": 1,
+      "label": "🚨 INTERNAL SERVER ERROR",
+      "severity": "critical",
+      "description": "A generic internal server error occurred. Check the mongod logs for stack traces or specific crash information."
+    },
+    {
+      "id": "TRANSACTION_EXCEEDED_TIME_LIMIT",
+      "type": "threshold",
+      "field": "error_code",
+      "technical_path": "attr.errCode: 262 | ExceededTimeLimit",
+      "op": "eq",
+      "value": 262,
+      "label": "🚨 TRANSACTION TIMEOUT",
+      "severity": "warning",
+      "description": "The transaction or operation exceeded the allotted time limit (maxTimeMS or transaction lifetime). Verify timeout settings."
     }
   ]
 }

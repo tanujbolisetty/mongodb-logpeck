@@ -195,13 +195,20 @@ def main():
     filter_parser.add_argument("--cards", action="store_true", help="Show individual log cards instead of summary table")
     filter_parser.add_argument("--json", action="store_true", help="Output time card in JSON format")
 
-    # Command: workload (formerly slow)
-    workload_parser = subparsers.add_parser("workload", help="Analyze workload hotspots and failures via terminal table")
+    # Command: workload (Business Workload Forensics)
+    workload_parser = subparsers.add_parser("workload", help="Analyze business workload hotspots and latency cliffs (excludes system noise)")
     workload_parser.add_argument("--file", required=True, help="Path to mongod.log")
-    workload_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) to include")
+    workload_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
     workload_parser.add_argument("--limit", type=int, default=10, help="Number of shapes to analyze")
     workload_parser.add_argument("--rules", default=None, help="Path to custom rules.json")
     workload_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Command: system-workload (System Query Forensics)
+    system_workload_parser = subparsers.add_parser("system-workload", help="Analyze system infrastructure forensics (TTL, Oplog, Admin, Indices)")
+    system_workload_parser.add_argument("--file", required=True, help="Path to mongod.log")
+    system_workload_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
+    system_workload_parser.add_argument("--limit", type=int, default=10, help="Number of shapes to analyze")
+    system_workload_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Command: connections
     connections_parser = subparsers.add_parser("connections", help="Analyze client applications and connection churn")
@@ -209,11 +216,11 @@ def main():
     connections_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Command: dashboard (formerly report)
-    dashboard_parser = subparsers.add_parser("dashboard", help="Generate the professional HTML forensic dashboard")
+    dashboard_parser = subparsers.add_parser("dashboard", help="Generate the professional 6-tab HTML forensic dashboard")
     dashboard_parser.add_argument("--file", help="Path to a single mongod.log")
     dashboard_parser.add_argument("--folder", help="Path directory for batch processing")
     dashboard_parser.add_argument("--html", default="output/logpeck_report.html", help="Dashboard output path")
-    dashboard_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture")
+    dashboard_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
     dashboard_parser.add_argument("--limit", type=int, default=50, help="Max hotspots per tab")
     dashboard_parser.add_argument("--rules", default=None)
 
@@ -313,21 +320,28 @@ def main():
             # --- Panel 6: Component & Failure Audit ---
             audit_table = Table(box=None, padding=(0, 2))
             audit_table.add_column("🏗️ Component Workload", style="cyan", ratio=1)
-            audit_table.add_column("⚠️ Critical Failures", style="red", ratio=1)
+            audit_table.add_column("⚠️ Critical Failures (by Code)", style="red", ratio=1)
             
             comp_list = list(s.get("components", {}).items())[:6]
-            to_list = s.get("timeout_patterns", [])[:6]
+            # 🧪 Systemic Failure View (v2.7.16): Prioritise Error Code Summary for CLI
+            ecs_list = s.get("error_code_summary", [])[:6]
             
-            for i in range(max(len(comp_list), len(to_list))):
-                comp_str = f"{comp_list[i][0]:<25} ({comp_list[i][1]:,})" if i < len(comp_list) else ""
-                if i < len(to_list):
-                    t = to_list[i]
-                    to_str = f"{t['ns'][:20]}.. ({t['count']})"
+            for i in range(max(len(comp_list), len(ecs_list))):
+                if i < len(comp_list):
+                    comp_str = f"{comp_list[i][0]:<25} ({comp_list[i][1]:,})"
+                else:
+                    comp_str = ""
+                    
+                if i < len(ecs_list):
+                    e = ecs_list[i]
+                    e_name = str(e.get("name", "UnknownError")).replace(" (50)", "")
+                    to_str = f"[[bold]{e.get('code')}[/bold]] {e_name[:18]} ({e.get('count')})"
                 else:
                     to_str = ""
+                    
                 audit_table.add_row(comp_str, to_str)
                 
-            console.print(Panel(audit_table, title="Technical Audit & System Interruption Patterns", border_style="dim"))
+            console.print(Panel(audit_table, title="Technical Audit & Systemic Failures", border_style="dim"))
 
             # --- Panel 7: Platform & System Diagnostics ---
             # Surfaces background tasks (TTL, Oplog) that may impact primary performance.
@@ -401,8 +415,15 @@ def main():
             result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, limit=args.limit, rules_path=args.rules)
             if args.json: print(json.dumps(result["summary"], indent=2)); return
 
-            console.print(f"\n[bold yellow]🔍 Workload Forensic Table (v{VERSION})[/bold yellow]")
+            console.print(f"\n[bold yellow]🐢 Business Workload Forensics (v{VERSION})[/bold yellow]")
             print_forensic_table(result["summary"])
+
+        elif args.command == "system-workload":
+            result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, limit=args.limit)
+            if args.json: print(json.dumps(result["system_summary"], indent=2)); return
+
+            console.print(f"\n[bold cyan]🛠️ System Query Forensics (v{VERSION})[/bold cyan]")
+            print_forensic_table(result["system_summary"])
 
         elif args.command == "connections":
             # Pass threshold 0 to get all connection metadata
