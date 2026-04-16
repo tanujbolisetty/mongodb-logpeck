@@ -10,7 +10,7 @@ logpeck: reporter.py
 Engine for generating high-fidelity forensic HTML reports.
 """
 
-# 🧠 Diagnostic Documentation Loader (v2.7.0)
+# 🧠 Diagnostic Documentation Loader (v3.1.0)
 # Pulls forensic explanations directly from rules.json to ensure the dashboard remains a live 'Truth Engine'.
 def load_glossary_rules() -> List[Dict[str, Any]]:
     default_path = os.path.join(os.path.dirname(__file__), "rules.json")
@@ -179,32 +179,39 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                     if line: content += line; count += 1
                 return content if count > 0 else ""
 
-            l_panel = f'<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
-            l_panel += f'<tr><td class="f-label" title="Wall-Clock duration of the operation">Wall-Clock Latency</td><td class="f-val-fast" style="color:var(--tier1)">{format_duration(row.get("min_time", 0))}</td><td class="f-val-slow" style="color:var(--error)">{format_duration(row.get("max_time", 0))}</td></tr>'
-            l_panel += render_category("📊 READ FORENSICS", ["keysExamined", "docsExamined", "nreturned", "reslen"], row)
-            l_panel += render_category("🖋️ WRITE CHURN", ["ninserted", "keysInserted", "nModified", "keysUpdated", "ndeleted", "keysDeleted", "upserted", "writeConflicts", "txnBytesDirty"], row)
-            l_panel += render_category("💾 STORAGE WAIT", ["storage_wait", "totalOplogSlotDurationMicros", "waitForWriteConcernDurationMillis", "flowControlMillis"], row)
-            l_panel += render_category("🔒 LOCK WAIT", ["lock_wait"], row)
-            l_panel += render_category("🧭 PLANNING", ["planning", "remoteOpWaitMillis"], row)
-            l_panel += render_category("⚙️ PURE EXECUTION", ["execution", "numYields", "nStages", "cpuNanos"], row)
-            l_panel += render_category("🚶 QUEUED", ["queued"], row)
-            l_panel += render_category("🔗 TRANSACTIONS", ["timeActiveMicros", "timeInactiveMicros", "prepareReadConflictMillis"], row)
-            l_panel += "</tbody></table>"
+            # 🧪 Surgical Visibility Guards (v3.1.0)
+            metrics_content = ""
+            metrics_content += render_category("📊 READ FORENSICS", ["keysExamined", "docsExamined", "nreturned", "reslen"], row)
+            metrics_content += render_category("🖋️ WRITE CHURN", ["ninserted", "keysInserted", "nModified", "keysUpdated", "ndeleted", "keysDeleted", "upserted", "writeConflicts", "txnBytesDirty"], row)
+            metrics_content += render_category("💾 STORAGE WAIT", ["storage_wait", "totalOplogSlotDurationMicros", "waitForWriteConcernDurationMillis", "flowControlMillis"], row)
+            metrics_content += render_category("🔒 LOCK WAIT", ["lock_wait"], row)
+            metrics_content += render_category("🧭 PLANNING", ["planning", "remoteOpWaitMillis"], row)
+            metrics_content += render_category("⚙️ PURE EXECUTION", ["execution", "numYields", "nStages", "cpuNanos"], row)
+            metrics_content += render_category("🚶 QUEUED", ["queued"], row)
+            metrics_content += render_category("🔗 TRANSACTIONS", ["timeActiveMicros", "timeInactiveMicros", "prepareReadConflictMillis"], row)
             
-            r_panel = f'<table class="forensic-table"><thead><tr><th>EXTRACTED FIELD</th><th>🥊 VALUE</th><th>🐢 VALUE</th></tr></thead><tbody>'
+            has_metrics = len(metrics_content) > 0
+            l_panel = ""
+            if has_metrics:
+                l_panel = f'<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
+                l_panel += f'<tr><td class="f-label" title="Wall-Clock duration of the operation">Wall-Clock Latency</td><td class="f-val-fast" style="color:var(--tier1)">{format_duration(row.get("min_time", 0))}</td><td class="f-val-slow" style="color:var(--error)">{format_duration(row.get("max_time", 0))}</td></tr>'
+                l_panel += metrics_content
+                l_panel += "</tbody></table>"
+            
             pm1, pm2 = row.get("min_query_params", {}), row.get("max_query_params", {})
-            if not pm1 and not pm2: r_panel += "<tr><td colspan='3' style='text-align:center;font-style:italic;padding:5rem;color:var(--text-secondary);font-size:0.9rem'>No specific query parameters extracted during forensic pass</td></tr>"
-            else:
+            has_params = len(pm1) > 0 or len(pm2) > 0
+            r_panel = ""
+            if has_params:
+                r_panel = f'<table class="forensic-table"><thead><tr><th>EXTRACTED FIELD</th><th>🥊 VALUE</th><th>🐢 VALUE</th></tr></thead><tbody>'
                 for k in sorted(list(set(pm1.keys()) | set(pm2.keys()))): r_panel += render_f_row(k, pm1, pm2)
-            r_panel += "</tbody></table>"
+                r_panel += "</tbody></table>"
             
-            schema_tags = "".join([f'<span class="tag-info" style="margin-left:8px; margin-bottom:4px">{f}</span>' for f in row.get("query_schema", [])]) or "None"
+            schema_tags = "".join([f'<span class="tag-info" style="margin-left:8px; margin-bottom:4px">{f}</span>' for f in row.get("query_schema", [])])
             fast_json = json.dumps(row.get('min_peek_attr') or {}, indent=2)
             slow_json = json.dumps(row.get('max_peek_attr') or {}, indent=2)
 
             # Build optional columns based on view type
             if is_system_view:
-                # System Forensics now gets the FULL column set
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{row.get('plan_summary', 'N/A')}</td>"""
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
@@ -224,57 +231,49 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 e_cnt = row.get('error_count', 0)
                 e_code = row.get("error_code") or (row.get("max_forensic", {}).get("errCode")) or ("50" if t_cnt > 0 else "N/A")
                 e_name = row.get("error_name") or (row.get("max_forensic", {}).get("errName")) or ("MaxTimeMSExpired" if t_cnt > 0 else "UnknownError")
-                
-                # 🏮 Truth Engine Promotion (v2.7.12)
-                # If error is Unknown but we have a code, try to resolve it now
                 if e_name == "UnknownError" and isinstance(e_code, int) and e_code in ERROR_CODE_MAP:
                     e_name = ERROR_CODE_MAP[e_code]
-
                 
-                # Cleanup: remove numeric suffix often found in some aggregated descriptions if redundant
                 e_desc = e_name.replace(f" ({e_code})", "").replace(f" {e_code}", "")
-                
                 code_html = f'<span style="font-family:\'JetBrains Mono\'; font-weight:700; color:{ "var(--tier6)" if t_cnt > 0 else "var(--tier4)" }">{e_code}</span>'
                 desc_html = f'<span style="font-weight:700; color:var(--text-primary)">{e_desc}</span>'
-                if t_cnt > 0:
-                    desc_html = f'🚨 {desc_html}'
-                elif e_cnt > 0:
-                    desc_html = f'☢️ {desc_html}'
+                if t_cnt > 0: desc_html = f'🚨 {desc_html}'
+                elif e_cnt > 0: desc_html = f'☢️ {desc_html}'
 
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
             else:
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
             
+            schema_col = ""
+            if schema_tags:
+                schema_col = f"""
+                    <div style="flex:1; text-align:right">
+                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">DISCOVERED QUERY SCHEMA</div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; margin-top:0.4rem">{schema_tags}</div>
+                    </div>"""
+
+            forensic_grid = ""
+            if has_metrics or has_params:
+                grid_style = "grid-template-columns: 1.2fr 1fr;"
+                if not has_metrics or not has_params: grid_style = "grid-template-columns: 1fr;"
+                
+                l_col = f"""<div><div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> FORENSIC EXECUTION METRICS</div>{l_panel}</div>""" if has_metrics else ""
+                r_col = f"""<div><div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg> EXTRACTED QUERY PARAMETERS</div>{r_panel}</div>""" if has_params else ""
+                
+                forensic_grid = f"""<div class="comparison-grid" style="margin-top:3rem; {grid_style}">{l_col}{r_col}</div>"""
+
             rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
                     <div style="flex:1">
                         <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
                         <div style="color:{'var(--text-secondary)' if row.get('query_shape_hash') == 'N/A' else 'var(--accent)'}; font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
                     </div>
-                    <div style="flex:1; text-align:right">
-                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">DISCOVERED QUERY SCHEMA</div>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; margin-top:0.4rem">{schema_tags}</div>
-                    </div>
+                    {schema_col}
                 </div>
                 <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
                 <div class="dist-bar" style="height:26px">{wave_html}</div>
                 <div class="legend-grid" style="margin-top:0.8rem">{legend_html}</div>
-                <div class="comparison-grid" style="margin-top:3rem">
-                    <div>
-                        <div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> 
-                            FORENSIC EXECUTION METRICS
-                        </div>
-                        {l_panel}
-                    </div>
-                    <div>
-                        <div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg> 
-                            EXTRACTED QUERY PARAMETERS
-                        </div>
-                        {r_panel}
-                    </div>
-                </div>
+                {forensic_grid}
                 <div class="comparison-grid" style="margin-top:3rem; grid-template-columns: 1fr 1fr;">
                     <div>
                         <div class="card-label" style="display:flex; align-items:center; gap:20px;">
