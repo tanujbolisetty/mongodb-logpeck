@@ -886,13 +886,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             # ✨ Advanced Clinical Suite v4.0.0 (The Full Stack)
             "cache_pressure": round(max_d.get("forensic", {}).get("txnBytesDirty", 0) / (1024 * 1024), 1),
             "replication_backpressure": max(max_d.get("forensic", {}).get("flowControlMillis", 0), max_d.get("max_peek_attr", {}).get("waitForWriteConcernDurationMillis", 0)),
-            "storage_intensity": min(100.0, round(((
-                max_d.get("forensic", {}).get("timeReadingMicros", 0) + 
-                max_d.get("forensic", {}).get("timeReadingMicros_index", 0) +
-                max_d.get("forensic", {}).get("timeWritingMicros", 0) +
-                max_d.get("forensic", {}).get("timeWaitingMicros_cache", 0) +
-                max_d.get("forensic", {}).get("totalOplogSlotDurationMicros", 0)
-            )) / (max(avg_ms, 1) * 10) , 1)),
+            "storage_intensity": min(100.0, round((max_d.get("waits_ms", {}).get("storage_wait", 0) / max(max_d.get("ms", 1), 1)) * 100, 1)),
             "search_latency": max_d.get("forensic", {}).get("mongot_wait", 0)
         }
 
