@@ -1,0 +1,265 @@
+{
+  "metrics": [
+    {
+      "id": "keysExamined",
+      "label": "Keys Examined",
+      "category": "📊 READ FORENSICS",
+      "unit": "count",
+      "source": "attr.keysExamined",
+      "markers": ["keysExamined"],
+      "description": "Total number of index entries scanned during the operation."
+    },
+    {
+      "id": "docsExamined",
+      "label": "Docs Examined",
+      "category": "📊 READ FORENSICS",
+      "unit": "count",
+      "source": "attr.docsExamined",
+      "markers": ["docsExamined"],
+      "description": "Total number of documents scanned from disk/cache."
+    },
+    {
+      "id": "nreturned",
+      "label": "Docs Returned",
+      "category": "📊 READ FORENSICS",
+      "unit": "count",
+      "source": "attr.nreturned",
+      "markers": ["nreturned", "ntoreturn"],
+      "description": "Number of documents returned to the client."
+    },
+    {
+      "id": "totalReturnedUnits",
+      "label": "Total Returned Units",
+      "category": "📊 READ FORENSICS",
+      "unit": "count",
+      "source": "attr.nreturned (Alias)",
+      "markers": ["totalReturnedUnits"],
+      "description": "Units of data returned (often mapped from nreturned)."
+    },
+    {
+      "id": "reslen",
+      "label": "Result Size (Bytes)",
+      "category": "📊 READ FORENSICS",
+      "unit": "bytes",
+      "source": "attr.reslen",
+      "markers": ["reslen"],
+      "description": "Total size of the result set in bytes."
+    },
+    {
+      "id": "ninserted",
+      "label": "Docs Inserted",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.ninserted",
+      "markers": ["ninserted"],
+      "description": "Number of documents inserted."
+    },
+    {
+      "id": "keysInserted",
+      "label": "Keys Inserted",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.keysInserted",
+      "markers": ["keysInserted"],
+      "description": "Number of index entries created."
+    },
+    {
+      "id": "nModified",
+      "label": "Docs Modified",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.nModified",
+      "markers": ["nModified"],
+      "description": "Number of existing documents modified."
+    },
+    {
+      "id": "keysUpdated",
+      "label": "Keys Updated",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.keysUpdated",
+      "markers": ["keysUpdated"],
+      "description": "Number of index entries updated."
+    },
+    {
+      "id": "ndeleted",
+      "label": "Docs Deleted",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.ndeleted",
+      "markers": ["ndeleted"],
+      "description": "Number of documents removed."
+    },
+    {
+      "id": "keysDeleted",
+      "label": "Keys Deleted",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.keysDeleted",
+      "markers": ["keysDeleted"],
+      "description": "Number of index entries removed."
+    },
+    {
+      "id": "upserted",
+      "label": "Docs Upserted",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.upserted",
+      "markers": ["upserted"],
+      "description": "Number of documents created via upsert."
+    },
+    {
+      "id": "txnBytesDirty",
+      "label": "Cache Dirty (Bytes)",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "bytes",
+      "source": "attr.storage.data.txnBytesDirty",
+      "markers": ["txnBytesDirty"],
+      "description": "Amount of data modified in cache that requires a sweep to disk."
+    },
+    {
+      "id": "writeConflicts",
+      "label": "Write Conflicts",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.writeConflicts",
+      "markers": ["writeConflicts"],
+      "description": "Number of times the operation was retried due to a write conflict."
+    },
+    {
+      "id": "storage_wait",
+      "label": "Unified Storage I/O (ms)",
+      "category": "💾 STORAGE WAIT",
+      "unit": "ms",
+      "source": "Cumulative I/O Effort",
+      "markers": ["storage_wait"],
+      "description": "Combined time spent on storage engine I/O tasks."
+    },
+    {
+      "id": "totalOplogSlotDurationMicros",
+      "label": "Oplog Slot Wait",
+      "category": "💾 STORAGE WAIT",
+      "unit": "us",
+      "source": "attr.totalOplogSlotDurationMicros",
+      "markers": ["totalOplogSlotDurationMicros"],
+      "description": "Time waiting for a global oplog slot (write concurrency)."
+    },
+    {
+      "id": "waitForWriteConcernDurationMillis",
+      "label": "Write Concern Wait",
+      "category": "💾 STORAGE WAIT",
+      "unit": "ms",
+      "source": "attr.waitForWriteConcernDurationMillis",
+      "markers": ["waitForWriteConcernDurationMillis"],
+      "description": "Time spent waiting for acknowledgement from secondaries."
+    },
+    {
+      "id": "flowControlMillis",
+      "label": "Flow Control Wait",
+      "category": "💾 STORAGE WAIT",
+      "unit": "ms",
+      "source": "attr.flowControlMillis",
+      "markers": ["flowControlMillis"],
+      "description": "Throttling time imposed by the primary to prevent secondary lag."
+    },
+    {
+      "id": "lock_wait",
+      "label": "Lock Acquisition (ms)",
+      "category": "🔒 LOCK WAIT",
+      "unit": "ms",
+      "source": "attr.locks.timeAcquiringMicros",
+      "markers": ["timeAcquiringMicros"],
+      "description": "Time spent waiting for document, collection, or database locks."
+    },
+    {
+      "id": "planning",
+      "label": "Planning Time (µs)",
+      "category": "🧭 PLANNING",
+      "unit": "us",
+      "source": "attr.planningTimeMicros",
+      "markers": ["planningTimeMicros"],
+      "description": "Time spent by the query optimizer to find an ideal execution plan."
+    },
+    {
+      "id": "remoteOpWaitMillis",
+      "label": "Remote Op Wait",
+      "category": "🧭 PLANNING",
+      "unit": "ms",
+      "source": "attr.remoteOpWaitMillis",
+      "markers": ["remoteOpWaitMillis"],
+      "description": "Time waiting for results from other shards or remote nodes."
+    },
+    {
+      "id": "workingMillis",
+      "label": "Raw Execution (ms)",
+      "category": "⚙️ PURE EXECUTION",
+      "unit": "ms",
+      "source": "attr.workingMillis",
+      "markers": ["workingMillis"],
+      "description": "Raw time spent inside the execution loop."
+    },
+    {
+      "id": "numYields",
+      "label": "Lock Yields",
+      "category": "⚙️ PURE EXECUTION",
+      "unit": "count",
+      "source": "attr.numYields",
+      "markers": ["numYields"],
+      "description": "Number of times the operation yielded its locks to other threads."
+    },
+    {
+      "id": "nStages",
+      "label": "Execution Stages",
+      "category": "⚙️ PURE EXECUTION",
+      "unit": "count",
+      "source": "attr.nStages",
+      "markers": ["nStages"],
+      "description": "Number of work stages in the query execution plan."
+    },
+    {
+      "id": "cpuNanos",
+      "label": "CPU Time (ns)",
+      "category": "⚙️ PURE EXECUTION",
+      "unit": "ns",
+      "source": "attr.cpuNanos",
+      "markers": ["cpuNanos"],
+      "description": "Exact CPU cycles consumed by the operation (if instrumented)."
+    },
+    {
+      "id": "queued",
+      "label": "Execution Queue (ms)",
+      "category": "🚶 QUEUED",
+      "unit": "ms",
+      "source": "attr.queues.execution.totalTimeQueuedMicros",
+      "markers": ["totalTimeQueuedMicros"],
+      "description": "Time spent in the global execution ticket queue."
+    },
+    {
+      "id": "timeActiveMicros",
+      "label": "Time Active (µs)",
+      "category": "🔗 TRANSACTIONS",
+      "unit": "us",
+      "source": "attr.timeActiveMicros",
+      "markers": ["timeActiveMicros"],
+      "description": "Total time the transaction was actively processing."
+    },
+    {
+      "id": "timeInactiveMicros",
+      "label": "Time Inactive (µs)",
+      "category": "🔗 TRANSACTIONS",
+      "unit": "us",
+      "source": "attr.timeInactiveMicros",
+      "markers": ["timeInactiveMicros"],
+      "description": "Time the transaction was held open while idle."
+    },
+    {
+      "id": "prepareReadConflictMillis",
+      "label": "Read Conflict Wait",
+      "category": "🔗 TRANSACTIONS",
+      "unit": "ms",
+      "source": "attr.prepareReadConflictMillis",
+      "markers": ["prepareReadConflictMillis"],
+      "description": "Time spent waiting for a consistent snapshot of the data."
+    }
+  ]
+}

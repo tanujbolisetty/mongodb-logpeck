@@ -2,7 +2,7 @@ import os
 import json
 from typing import List, Dict, Any
 from .version import __version__ as VERSION
-from .specification import FIELD_DISPLAY, METRIC_TYPE, METRIC_SOURCES, ERROR_CODE_MAP
+from .specification import FIELD_DISPLAY, METRIC_TYPE, METRIC_SOURCES, ERROR_CODE_MAP, METRIC_REGISTRY, METRIC_CATEGORIES
 from .utils import format_duration, format_bytes
 
 """
@@ -148,8 +148,15 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             wave_html = "".join([f'<div style="width:{(dist.get(t, 0)/total_d)*100}%; background:{t_colors[j]}; height:100%"></div>' for j, t in enumerate(tiers) if (dist.get(t, 0)/total_d)*100 > 0])
             legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+</div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
             
-            def render_f_row(k, d1, d2):
+            def render_f_row(k, d1, d2, force_show=False):
                 v1, v2 = d1.get(k, 0), d2.get(k, 0)
+                
+                # 🧪 Zero-Value Suppression (v3.2.0)
+                # If neither sample has a value, hide the row unless force_show is set.
+                if not force_show:
+                    def is_falsy(v):
+                        return not v or v == 0 or str(v).lower() in ["0", "0ms", "0.0ms", "0 b"]
+                    if is_falsy(v1) and is_falsy(v2): return ""
 
                 def apply_format(val, key):
                     if not isinstance(val, (int, float)): return val
@@ -180,17 +187,15 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 return content if count > 0 else ""
 
             # 🧪 Surgical Visibility Guards (v3.1.0)
+            # 🧪 Surgical Visibility Guards (v3.2.0): Dynamic categories from registry
             metrics_content = ""
-            metrics_content += render_category("📊 READ FORENSICS", ["keysExamined", "docsExamined", "nreturned", "reslen"], row)
-            metrics_content += render_category("🖋️ WRITE CHURN", ["ninserted", "keysInserted", "nModified", "keysUpdated", "ndeleted", "keysDeleted", "upserted", "writeConflicts", "txnBytesDirty"], row)
-            metrics_content += render_category("💾 STORAGE WAIT", ["storage_wait", "totalOplogSlotDurationMicros", "waitForWriteConcernDurationMillis", "flowControlMillis"], row)
-            metrics_content += render_category("🔒 LOCK WAIT", ["lock_wait"], row)
-            metrics_content += render_category("🧭 PLANNING", ["planning", "remoteOpWaitMillis"], row)
-            metrics_content += render_category("⚙️ PURE EXECUTION", ["execution", "numYields", "nStages", "cpuNanos"], row)
-            metrics_content += render_category("🚶 QUEUED", ["queued"], row)
-            metrics_content += render_category("🔗 TRANSACTIONS", ["timeActiveMicros", "timeInactiveMicros", "prepareReadConflictMillis"], row)
+            for cat in METRIC_CATEGORIES:
+                fields = [m["id"] for m in METRIC_REGISTRY if m["category"] == cat]
+                metrics_content += render_category(cat, fields, row)
             
-            has_metrics = len(metrics_content) > 0
+            # 🧪 Surgical Visibility Guard Refinement (v3.2.0)
+            # Only show forensic card if there is non-zero content OR wall-clock latency > 0
+            has_metrics = len(metrics_content) > 0 or row.get("max_time", 0) > 0
             l_panel = ""
             if has_metrics:
                 l_panel = f'<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
@@ -203,7 +208,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             r_panel = ""
             if has_params:
                 r_panel = f'<table class="forensic-table"><thead><tr><th>EXTRACTED FIELD</th><th>🥊 VALUE</th><th>🐢 VALUE</th></tr></thead><tbody>'
-                for k in sorted(list(set(pm1.keys()) | set(pm2.keys()))): r_panel += render_f_row(k, pm1, pm2)
+                # For query parameters, always force show even if value is "0" as it is structural identity
+                for k in sorted(list(set(pm1.keys()) | set(pm2.keys()))): r_panel += render_f_row(k, pm1, pm2, force_show=True)
                 r_panel += "</tbody></table>"
             
             schema_tags = "".join([f'<span class="tag-info" style="margin-left:8px; margin-bottom:4px">{f}</span>' for f in row.get("query_schema", [])])
@@ -316,17 +322,25 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             </tr>
         """)
 
-    # 📐 Metric Source Registry
+    # 📐 Metric Source Registry (v3.2.0): Fully Dynamic Reference Grid
     metric_rows = []
-    for m_key, m_label in FIELD_DISPLAY.items():
-        m_src = METRIC_SOURCES.get(m_key, "N/A")
-        metric_rows.append(f"""
-            <div style="padding:1rem; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.02)">
-                <h4 style="color:var(--text-primary); margin-bottom:0.4rem; font-size:0.9rem">{m_label}</h4>
-                <div style="font-family:'JetBrains Mono'; font-size:0.7rem; color:var(--accent); margin-bottom:0.5rem">{m_src}</div>
-                <p style="color:var(--text-secondary); font-size:0.8rem">Primary telemetry field for resource bottleneck analysis.</p>
-            </div>
-        """)
+    # Group registry by category for the reference tab
+    for cat in METRIC_CATEGORIES:
+        cat_metrics = [m for m in METRIC_REGISTRY if m["category"] == cat]
+        if not cat_metrics: continue
+        
+        metric_rows.append(f'<div style="grid-column: 1 / -1; margin-top: 1.5rem; color:var(--accent); font-weight:700; font-size:0.8rem">{cat} Metrics</div>')
+        for m in cat_metrics:
+            m_label = m["label"]
+            m_src = m["source"]
+            m_desc = m.get("description", "Primary telemetry field for resource bottleneck analysis.")
+            metric_rows.append(f"""
+                <div style="padding:1rem; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.02)">
+                    <h4 style="color:var(--text-primary); margin-bottom:0.4rem; font-size:0.9rem">{m_label}</h4>
+                    <div style="font-family:'JetBrains Mono'; font-size:0.7rem; color:var(--accent); margin-bottom:0.5rem">{m_src}</div>
+                    <p style="color:var(--text-secondary); font-size:0.8rem">{m_desc}</p>
+                </div>
+            """)
 
     final_html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -575,6 +589,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         </div>
         
         <div id="referenceContent">
+            <div class="card" style="margin-bottom:2rem; border-left: 4px solid #00ED64">
+                <div class="card-label" style="color:#00ED64">🌐 External Documentation</div>
+                <div style="margin-top:1rem; font-size:0.9rem">
+                    For a complete list of all MongoDB error codes and their internal meanings, refer to the official 
+                    <a href="https://www.mongodb.com/docs/manual/reference/error-codes/" target="_blank" style="color:var(--accent); text-decoration:none; font-weight:700">MongoDB Error Code Reference</a>.
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-label" style="color:var(--accent)">🚦 Forensic Diagnostic Decoder (v1.3.10)</div>
                 <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem">Expert-curated conditions and forensic significance for every query tag the engine generates.</p>

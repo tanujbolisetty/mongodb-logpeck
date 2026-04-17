@@ -154,12 +154,14 @@
       "type": "ratio",
       "numerator": "total_queue_wait_ms",
       "denominator": "total_ms",
+      "min_numerator": 200,
       "technical_path": "attr.queues.execution.totalTimeQueuedMicros / attr.durationMillis",
       "threshold": 0.5,
       "label": "🚨 EXECUTION QUEUE ({value:.0f}%)",
       "severity": "critical",
       "description": "Significant ticket queueing detected. The query spent most of its life waiting for an available execution slot, indicating the cluster has reached its concurrency limit."
     },
+
     {
       "id": "QUERY_TIMEOUT",
       "type": "threshold",
@@ -261,15 +263,15 @@
       "description": "Permission denied. The user authenticated to the session does not have the required RBAC privileges to perform this operation."
     },
     {
-      "id": "WRITE_CONFLICT",
+      "id": "WRITE_CONFLICT_ERROR",
       "type": "threshold",
       "field": "error_code",
       "technical_path": "attr.errCode: 112 | WriteConflict",
       "op": "eq",
       "value": 112,
-      "label": "🚨 WRITE CONFLICT",
+      "label": "🚨 WRITE CONFLICT ERROR",
       "severity": "warning",
-      "description": "Concurrent write operation detected. The storage engine was unable to commit due to a conflict with another transaction. Usually handled by automatic retries."
+      "description": "Concurrent write operation detected. The storage engine was unable to commit due to a conflict with another transaction. This is a fatal error returned to the application."
     },
     {
       "id": "NAMESPACE_NOT_FOUND",

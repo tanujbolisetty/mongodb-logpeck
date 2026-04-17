@@ -40,10 +40,11 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 | `lock_wait` | `attr.locks.timeAcquiringMicros` | Lock Acquisition | ms |
 | `storage_wait` | `timeReading` + `timeWriting` + `oplogSlot` | Unified Storage I/O | ms |
 | `cpuNanos` | `attr.cpuNanos` | CPU Time | ns |
-| `oplogSlot` | `attr.totalOplogSlotDurationMicros`| Oplog Slot Wait | µs |
-| `globalQueue` | `attr.queues.execution.totalTimeQueuedMicros` | Global Queue Wait| µs |
+| `oplogSlot` | `attr.totalOplogSlotDurationMicros` | Oplog Slot Wait | µs |
+| `globalQueue` | `attr.totalTimeQueuedMicros` | Global Queue Wait | µs |
 | `txnBytesDirty` | `attr.storage.data.txnBytesDirty` | Cache Dirty | bytes |
 | `mongot_wait` | `attr.mongot.timeWaitingMillis` | Atlas Search Wait | ms |
+| `writeConflicts` | `attr.writeConflicts` | Write Conflicts | count |
 
 ---
 
@@ -51,12 +52,17 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 
 The engine implements surgical logic to differentiate between business workloads and infrastructure noise.
 
-### 🧬 Hierarchical Diagnostic Routing (v2.7.6)
-LogPeck implements a **Hierarchy-First** routing policy to ensure high-fidelity analytical partitioning. Events are bucketed based on the following priority:
+### 3.1 Three-Tab Partitioning Strategy (v3.2.1 Failure Primacy)
+LogPeck partitions query shapes into three dedicated diagnostic channels based on a strict priority hierarchy:
 
-1.  **System Namespace**: Any event on `admin.*`, `config.*`, `local.*`, or `oplog.rs` is routed to **System Query Forensics**.
-2.  **System Identity**: Any event originating from a known system application (e.g., `mongot`, `MongoDB Automation Agent`, `TTL Index`) or infrastructure operation (e.g., `Wire Spec Update`) is routed to **System Query Forensics**, even if it targets a business namespace.
-3.  **Business Workload**: All other events (CRUD, Aggregations) targeting user-level namespaces are routed to **Slow Query Forensics** (Performance) or **Failure Forensics** (Errors).
+| Tab | Priority | Routing Criteria |
+| :--- | :--- | :--- |
+| **🚨 Forensic Failures** | **1 (Highest)** | Any operation containing an `errCode`, `code`, or `MaxTimeMSExpired` timeout. **Failures always trump namespace**; an error in `local.oplog` is routed here, not to System. |
+| **🛠️ System Forensics** | **2 (Medium)** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL Cleanup, Heartbeats, `mongot`). |
+| **🐢 Business Workload** | **3 (Standard)** | All successful user-level operations (`find`, `update`, etc.) targeting business namespaces. |
+
+### 3.2 Hierarchical Diagnostic Routing (v2.7.6)
+Events are bucketed using the priority defined in Section 3.1 to ensure that infrastructure noise never masks workload performance issues or critical failures.
 
 ---
 

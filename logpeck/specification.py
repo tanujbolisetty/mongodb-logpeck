@@ -7,94 +7,42 @@ It defines the deterministic conversion of raw BSON/JSON attributes into standar
 forensic metrics, ensuring parity between the CLI and the HTML Dashboard.
 """
 
+import os
+import json
+
 # 🏛️ 1. Metric Display & Naming Contract
 # ==============================================================================
-# The human-readable labels used in both CLI and HTML reports.
-# Modifying these keys requires an update to the SPECIFICATION.md.
-FIELD_DISPLAY = {
-    "keysExamined": "Keys Examined", 
-    "docsExamined": "Docs Examined", 
-    "nreturned": "Docs Returned",
-    "totalReturnedUnits": "Total Returned Units",
-    "reslen": "Result Size (Bytes)",
-    "nMatched": "Docs Matched",
-    "nModified": "Docs Modified",
-    "ninserted": "Docs Inserted",
-    "ndeleted": "Docs Deleted",
-    "upserted": "Docs Upserted",
-    "numYields": "Lock Yields",
-    "workingMillis": "Execution (ms)",
-    "planning": "Planning Time (µs)",
-    "lock_wait": "Lock Acquisition (ms)",
-    "storage_wait": "Unified Storage I/O (ms)",
-    "queued": "Execution Queue (ms)",
-    "writeConflicts": "Write Conflicts",
-    "flowControlMillis": "Flow Control Wait",
-    "remoteOpWaitMillis": "Remote Op Wait",
-    "prepareReadConflictMillis": "Read Conflict Wait",
-    "timeActiveMicros": "Time Active (µs)",
-    "timeInactiveMicros": "Time Inactive (µs)",
-    "cpuNanos": "CPU Time (ns)",
-    "waitForWriteConcernDurationMillis": "Write Concern Wait",
-    "totalOplogSlotDurationMicros": "Oplog Slot Wait",
-    "totalTimeQueuedMicros": "Global Queue Wait",
-    "txnBytesDirty": "Cache Dirty (Bytes)",
-    "shards": "Shards Involved",
-    "mongot_wait": "Atlas Search Wait (ms)"
-}
+# The human-readable labels and metadata are now loaded from metrics.json.
+def load_metrics():
+    path = os.path.join(os.path.dirname(__file__), "metrics.json")
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+            return data.get("metrics", [])
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load metrics.json: {e}")
+        return []
 
-# 🧪 2. Metrology Standard (Units & Normalization)
-# ==============================================================================
-# Defines the canonical unit for each metric to ensure unambiguous dashboard display.
-# The analyzer is responsible for scaling raw values to these target units.
-METRIC_TYPE = {
-    # Time Metrics (Standardized to ms/us/ns)
-    "timeActiveMicros": "us", "timeInactiveMicros": "us", 
-    "totalTimeQueuedMicros": "us", "totalOplogSlotDurationMicros": "us", 
-    "lock_wait": "ms", "storage_wait": "ms", "planning": "ms", "execution": "ms", "queued": "ms",
-    "cpuNanos": "ns",
-    "ms": "ms", "durationMillis": "ms", "workingMillis": "ms",
-    "waitForWriteConcernDurationMillis": "ms",
-    "prepareReadConflictMillis": "ms", "flowControlMillis": "ms", "remoteOpWaitMillis": "ms",
-    "mongot_wait": "ms",
-    
-    # Storage Metrics (Bytes)
-    "reslen": "bytes", "txnBytesDirty": "bytes"
-}
+METRIC_REGISTRY = load_metrics()
 
-# 🕵️ 3. Forensic Source Mapping
-# ==============================================================================
-# Maps internal metrics back to their raw MongoDB BSON paths. 
-# Used for 'Forensic Info' tooltips and architectural auditability.
-METRIC_SOURCES = {
-    "keysExamined": "attr.keysExamined",
-    "docsExamined": "attr.docsExamined",
-    "nreturned": "attr.nreturned",
-    "totalReturnedUnits": "attr.nreturned (Alias for Docs Returned)",
-    "nMatched": "attr.nMatched",
-    "nModified": "attr.nModified",
-    "ninserted": "attr.ninserted",
-    "ndeleted": "attr.ndeleted",
-    "upserted": "attr.upserted",
-    "workingMillis": "attr.workingMillis (Raw execution time)",
-    "numYields": "attr.numYields (Locks yielded during execution)",
-    "planning": "attr.planningTimeMicros",
-    "lock_wait": "attr.locks.timeAcquiringMicros",
-    "storage_wait": "Cumulative I/O Effort (Total timeReading/timeWriting) + Oplog Slot Wait + Write Concern Wait",
-    "writeConflicts": "attr.writeConflicts",
-    "flowControlMillis": "attr.flowControlMillis",
-    "remoteOpWaitMillis": "attr.remoteOpWaitMillis",
-    "prepareReadConflictMillis": "attr.prepareReadConflictMillis",
-    "timeActiveMicros": "attr.timeActiveMicros",
-    "timeInactiveMicros": "attr.timeInactiveMicros",
-    "cpuNanos": "attr.cpuNanos",
-    "waitForWriteConcernDurationMillis": "attr.waitForWriteConcernDurationMillis",
-    "totalOplogSlotDurationMicros": "attr.totalOplogSlotDurationMicros",
-    "totalTimeQueuedMicros": "attr.queues.execution.totalTimeQueuedMicros",
-    "txnBytesDirty": "attr.storage.data.txnBytesDirty",
-    "shards": "attr.shardNames (Length)",
-    "mongot_wait": "attr.mongot.timeWaitingMillis"
-}
+# Derived mapping constants for backward compatibility
+FIELD_DISPLAY = {m["id"]: m["label"] for m in METRIC_REGISTRY}
+METRIC_TYPE = {m["id"]: m["unit"] for m in METRIC_REGISTRY}
+METRIC_SOURCES = {m["id"]: m["source"] for m in METRIC_REGISTRY}
+
+# Marker-to-ID mapping for discovery-based harvesting
+METRIC_MARKERS = {}
+for m in METRIC_REGISTRY:
+    for marker in m.get("markers", [m["id"]]):
+        METRIC_MARKERS[marker] = m["id"]
+
+
+# Unique categories for UI grouping
+METRIC_CATEGORIES = []
+for m in METRIC_REGISTRY:
+    if m["category"] not in METRIC_CATEGORIES:
+        METRIC_CATEGORIES.append(m["category"])
+
 
 
 # 🏺 4. System Governance (Exclusions & Denoising)

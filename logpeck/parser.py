@@ -2,7 +2,7 @@ import json
 import re
 import hashlib
 from typing import Dict, Any, List, Optional, Set
-from .specification import ERROR_CODE_MAP
+from .specification import ERROR_CODE_MAP, FIELD_DISPLAY, METRIC_MARKERS
 
 # 🕵️ Heuristic Forensic Patterns (v1.3.5)
 RE_HEURISTIC_NS = [
@@ -146,7 +146,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     
     # 🏺 Common Command Keys Probe (v1.3.17)
     # Registry of keys that carry the target collection name in the command object.
-    COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count", "distinct", "findAndModify", "getMore"]
+    COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count", "distinct", "findAndModify", "getMore", "$search"]
     
     crud = attr.get("CRUD")
     if attr_type and attr_type != "command":
@@ -240,7 +240,41 @@ def normalize_conn_id(ctx: str) -> str:
     raw = str(ctx).strip("[]").replace("conn", "").strip()
     return f"conn{raw}" if raw else "unknown"
 
-def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = False) -> Optional[Dict[str, Any]]:
+def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Standardizes varied log formats (Standard, Flat, Lean) into a canonical header view.
+    Utilizes Ghost Timestamping to anchor lean logs to the previous known event.
+    """
+    canonical = {}
+    
+    # 1. Timestamp Induction (Ghost Stitching v3.2.7)
+    ts = entry.get("t", {}).get("$date") if isinstance(entry.get("t"), dict) else entry.get("t")
+    canonical["t"] = ts or entry.get("time") or entry.get("ts") or last_ts
+    
+    # 2. Severity Induction
+    s = entry.get("s") or entry.get("severity") or entry.get("level")
+    if not s:
+        s = "E" if "error" in entry or "errorMessage" in entry else "I"
+    canonical["s"] = str(s)
+    
+    # 3. Message/Identity Induction
+    msg = entry.get("msg")
+    if not msg:
+        if entry.get("type") == "command": msg = "Slow query"
+        elif "error" in entry: msg = "Infrastructure Failure"
+        else: msg = "unknown"
+    canonical["msg"] = msg
+    
+    # 4. Context Induction
+    ctx = entry.get("ctx") or entry.get("host") or entry.get("target") or entry.get("connectionId") or "unknown"
+    canonical["ctx"] = normalize_conn_id(str(ctx))
+    
+    # 5. Component/Category Induction
+    canonical["c"] = entry.get("c") or entry.get("component") or entry.get("category") or "unknown"
+    
+    return canonical
+
+def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = False, last_ts: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Surgically extracts forensic metrics from a raw MongoDB log entry.
     
@@ -250,58 +284,136 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     - Forensic Counters (keysExamined, docsExamined, etc.)
     - Query Schema & Shape Hashing
     """
+    # 🧪 Unified Schema Induction (v3.2.8)
+    # Standardize headers (Timestamp, Severity, Msg, Context) across all formats.
+    header = induce_log_schema(entry, last_ts)
     attr = entry.get("attr")
+    
     if not isinstance(attr, dict):
+        # 🧪 Flat-Block Hybrid Induction (v3.2.5)
+        # If the 'attr' block is missing, the log is likely 'flat'.
+        # We synthesize a temporary attr block from top-level fields.
         attr = {}
+        # Registry of top-level keys that may carry forensic metadata in flat/lean logs.
+        # We also look into 'error' and 'outcome' blocks for secondary discovery.
+        SEARCH_PROBES = [
+            "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
+            "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
+            "queryHash", "queryShapeHash", "planCacheShapeHash", "target", "host",
+            "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
+            "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
+            "nreturned", "reslen", "ninserted", "nModified", "ndeleted"
+        ]
+        for k in SEARCH_PROBES:
+            if k in entry: attr[k] = entry[k]
+        
+        # 🕵️ Nested Error Extraction (v3.2.6): Flatten 'error' dict if present
+        err_obj = entry.get("error")
+        if isinstance(err_obj, dict):
+            for k, v in err_obj.items():
+                if k not in attr: attr[k] = v
+        elif isinstance(err_obj, str) and "error" not in attr:
+            attr["error"] = err_obj
+            
     # Handle both standard command logs and transactional CRUD blocks (v2.3.5)
-    cmd_obj = attr.get("command") or attr.get("CRUD") or {}
-    msg = entry.get("msg", "unknown")
+    cmd_obj = attr.get("command") or attr.get("CRUD") or entry.get("command") or {}
+    msg = header["msg"]
     ns_raw = attr.get("ns") or entry.get("ns") or "unknown"
     
     op, ns = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
     
     # Deep Identity Harvesting (v1.3.16)
-    # Prefer top-level attr, but fallback to originatingCommand for cursors
+    # Prefer top-level attr, but fallback to entry (flat) or originatingCommand
     orig_cmd = attr.get("originatingCommand", {})
-    app_name = str(attr.get("appName") or orig_cmd.get("appName") or "unknown")
-    user_id = str(attr.get("user") or orig_cmd.get("user") or "unknown")
+    app_name = str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or "unknown")
+    user_id = str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "unknown")
 
     # Shape Hash Hardening (v1.1.49)
     # Prefer MongoDB 8.0 queryShapeHash > planCacheShapeHash > queryHash
-    # For getMore, pivot to originatingCommand if top-level hash is missing
     shape_hash = attr.get("queryShapeHash") or attr.get("planCacheShapeHash") or attr.get("queryHash")
+    if not shape_hash:
+        shape_hash = entry.get("queryShapeHash") or entry.get("planCacheShapeHash") or entry.get("queryHash")
+    
     if not shape_hash and op == "getmore" and "originatingCommand" in attr:
         orig = attr["originatingCommand"]
         shape_hash = orig.get("queryShapeHash") or orig.get("planCacheShapeHash") or orig.get("queryHash")
     
     q_hash = shape_hash or "N/A"
-    ms = attr.get("durationMillis") or attr.get("durationMS") or 0
+    
+    # Hybrid Duration Discovery
+    ms = attr.get("durationMillis") or attr.get("durationMS") or entry.get("durationMillis") or entry.get("durationMS") or 0
     if not ms and "parameters" in attr: ms = attr["parameters"].get("durationMillis", 0)
 
-    # 🕵️ Senior Forensic Error Harvesting (v2.7.0)
-    # Recursively harvest error metadata from nested objects (e.g. attr.error)
+    # 🕵️ Senior Forensic Error Harvesting (v3.2.9)
+    # Recursively harvest error metadata with Dynamic Name Resolution from ERROR_CODE_MAP.
     forensic = {}
     harvested_error = {}
-    err_obj = attr.get("error")
+    err_obj = attr.get("error") or entry.get("error")
     if isinstance(err_obj, dict):
-        harvested_error["errCode"] = err_obj.get("code")
-        harvested_error["errName"] = err_obj.get("codeName")
-        harvested_error["errMsg"] = err_obj.get("errmsg")
+        harvested_error["errCode"] = err_obj.get("code") or err_obj.get("errCode")
+        harvested_error["errName"] = err_obj.get("codeName") or err_obj.get("errName")
+        harvested_error["errMsg"] = err_obj.get("errmsg") or err_obj.get("errMsg")
     elif isinstance(err_obj, str):
+        # 🧪 String-Format Extract (v3.2.10): NotYetInitialized: Replication...
+        if ":" in err_obj:
+            p_name = err_obj.split(":")[0].strip()
+            # If the prefix looks like a primary code name, harvest it
+            for code, name in ERROR_CODE_MAP.items():
+                if p_name == name:
+                    harvested_error["errCode"] = code
+                    harvested_error["errName"] = name
+                    break
         harvested_error["errMsg"] = err_obj
+        
+    # 🧬 Dynamic Error Name Resolution (v3.2.11)
+    if harvested_error.get("errCode") and not harvested_error.get("errName"):
+        code = harvested_error["errCode"]
+        if code in ERROR_CODE_MAP:
+            harvested_error["errName"] = ERROR_CODE_MAP[code]
+            if not harvested_error.get("errMsg"):
+                harvested_error["errMsg"] = f"{ERROR_CODE_MAP[code]} (Code: {code})"
 
-    clinical_fields = [
-        "keysExamined", "docsExamined", "nreturned", "ninserted", "keysInserted", "ndeleted", "keysDeleted",
-        "nMatched", "nModified", "keysUpdated", "upserted", 
-        "numYields", "reslen", "timeActiveMicros", "timeInactiveMicros", "totalReturnedUnits", 
-        "nStages", "writeConflicts", "prepareReadConflictMillis", "flowControlMillis", "remoteOpWaitMillis",
-        "cpuNanos", "waitForWriteConcernDurationMillis", "totalOplogSlotDurationMicros", "totalTimeQueuedMicros",
-        "errCode", "errName", "errMsg", "ok", "workingMillis"
-    ]
-    for k in clinical_fields:
-        val = attr.get(k) or harvested_error.get(k)
-        if val is not None: forensic[k] = val
+    # 🕵️ Universal Discovery Harvester (v3.2.0): Breadth-First Search for markers
+    def discovery_harvest(obj, marker_map, result=None, depth=0):
+        if result is None: result = {}
+        if depth > 3 or not isinstance(obj, dict): return result
+        for k, v in obj.items():
+            # If marker matched and not already harvested (prioritize top-level)
+            if k in marker_map:
+                std_id = marker_map[k]
+                if std_id not in result:
+                    # 🧬 Inline Normalization (v3.2.2)
+                    if isinstance(v, (int, float)):
+                        if k.endswith("Micros") or k in ["timeAcquiringMicros", "planningTimeMicros"]:
+                            v = round(v / 1000.0, 3)
+                        elif k.endswith("Nanos") or k == "cpuNanos":
+                            v = round(v / 1000000.0, 3)
+                    result[std_id] = v
+            if isinstance(v, dict):
+                discovery_harvest(v, marker_map, result, depth + 1)
+        return result
+
+    # Perform discovery on 'attr' and 'harvested_error'
+    forensic = discovery_harvest(attr, METRIC_MARKERS)
     
+    # Check harvested_error as well (flattened)
+    for k, v in harvested_error.items():
+        if k in METRIC_MARKERS:
+            std_id = METRIC_MARKERS[k]
+            if std_id not in forensic:
+                # Normalization for error fields
+                if isinstance(v, (int, float)):
+                    if k.endswith("Micros"): v = round(v / 1000.0, 3)
+                    elif k.endswith("Nanos"): v = round(v / 1000000.0, 3)
+                forensic[std_id] = v
+    
+    # 🧪 Metadata Promotion (v3.2.5): Ensure critical metadata is always in forensic dict
+    for meta_key in ["errCode", "errName", "errMsg", "ok"]:
+        if meta_key in harvested_error and meta_key not in forensic:
+            forensic[meta_key] = harvested_error[meta_key]
+        elif meta_key in attr and meta_key not in forensic:
+            forensic[meta_key] = attr[meta_key]
+
     # Validation Fallback (v2.7.0): If we have a failure but no errName, use ERROR_CODE_MAP or errMsg
     if ("errCode" in forensic or "errMsg" in forensic) and "errName" not in forensic:
         code = forensic.get("errCode")
@@ -309,14 +421,11 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
             forensic["errName"] = ERROR_CODE_MAP[code]
         else:
             forensic["errName"] = str(code or forensic.get("errMsg", "DirectError"))
-    
-    # 🕵️ Deep Queue Harvesting (v2.6.11): Extract nested execution metrics if missing from top-level attr
-    if "totalTimeQueuedMicros" not in forensic:
-        q_wait = get_nested_value(entry, "attr.queues.execution.totalTimeQueuedMicros")
-        if q_wait is not None: forensic["totalTimeQueuedMicros"] = q_wait
-    
+
+
     if "shardNames" in attr: forensic["shards"] = len(attr["shardNames"])
     mongot_wait = get_nested_value(entry, "attr.mongot.timeWaitingMillis")
+
     if mongot_wait: forensic["mongot_wait"] = mongot_wait
     
     txn_bytes_dirty = get_nested_value(entry, "attr.storage.data.txnBytesDirty")
