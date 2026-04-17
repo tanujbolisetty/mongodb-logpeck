@@ -4,6 +4,11 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 
 ---
 
+## [4.3.2] - 2026-04-17
+### Fixed
+- **Forensic Unit Alignment**: Resolved a 1000x discrepancy in 'Storage Intensity' by unifying wait-time normalization and correcting the MS-to-MS percentage ratio.
+- **Diagnostic Transparency**: Explicitly labeled all clinical insights in the HTML dashboard as either '(Worst Sample)' or '(Workload Aggregate)' for forensic clarity.
+
 ## [4.3.1] - 2026-04-17
 ### Fixed
 - **Forensic Honesty**: Restricted the `OPTIMAL` clinical status to only apply when measurable forensic data (Read/Write metrics) is present, preventing false positives for indeterminate or sparse query shapes.

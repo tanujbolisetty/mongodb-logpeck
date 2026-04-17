@@ -189,7 +189,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                     
                     insights.append(f'''
                     <div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}">
-                        <div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Ratio of Index Keys written/modified per single Document mutated.">INDEX AMPLIFICATION (Keys per Doc)</div>
+                        <div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Ratio of Index Keys written/modified per single Document mutated across the entire query shape.">INDEX AMPLIFICATION (Workload Aggregate)</div>
                         <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
                         <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
                             <span title="Average index keys inserted per document insertion.">ins_keys:{ins_a:,.1f}</span>
@@ -211,20 +211,20 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 rb = row_data.get("replication_backpressure", 0)
                 if rb > 0:
                     rb_clr = "var(--tier1)" if rb < 50 else ("#fbbf24" if rb < 200 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {rb_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">REPLICATION BACKPRESSURE</div><div style="font-size:1.3rem; font-weight:800; color:{rb_clr}; margin:0.3rem 0">{rb:,.0f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">WRITE CONCERN / FLOW WAIT</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {rb_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">REPLICATION BACKPRESSURE (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{rb_clr}; margin:0.3rem 0">{rb:,.0f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">WRITE CONCERN / FLOW WAIT</div></div>')
 
                 # 7. STORAGE INTENSITY (I/O Dominance)
                 si = row_data.get("storage_intensity", 0)
                 if si > 0.1: # Surface all measurable storage activity for transparency
                     si_clr = "var(--tier1)" if si < 30 else ("#fbbf24" if si < 70 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {si_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">STORAGE INTENSITY</div><div style="font-size:1.3rem; font-weight:800; color:{si_clr}; margin:0.3rem 0">{si:,.1f}%</div><div style="font-size:0.6rem; color:var(--text-secondary)">TIME SPENT ON DISK I/O</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {si_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">STORAGE INTENSITY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{si_clr}; margin:0.3rem 0">{si:,.1f}%</div><div style="font-size:0.6rem; color:var(--text-secondary)">TIME SPENT ON DISK I/O</div></div>')
 
                 # 8. SEARCH LATENCY (Atlas Search Backend)
                 sl = row_data.get("search_latency", 0)
                 if sl > 0:
                     sl_clr = "var(--tier1)" if sl < 100 else ("#fbbf24" if sl < 500 else "var(--error)")
                     sl_fmt = f"{sl/1000:,.1f}s" if sl >= 1000 else f"{sl:,.0f}ms"
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend Process">SEARCH LATENCY</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT (Worst Case)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend process.">SEARCH LATENCY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT</div></div>')
 
                 if not insights:
                     # 🏥 Clinical Triage: Optimal vs. Unknown
