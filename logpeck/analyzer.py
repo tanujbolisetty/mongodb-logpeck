@@ -571,24 +571,33 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
             except: pass
 
         # 🧠 Pass 2: Expert Synthesis (Unified v2.6.0)
-        # We now use the dedicated synthesis logic for the full sweep results.
+        # Calculate global denominator for cross-tab AAS synchronization (v3.2.14)
+        global_active_ms = (
+            sum(s["total_active_ms"] for s in shape_stats.values()) +
+            sum(s["total_active_ms"] for s in system_shape_stats.values()) +
+            sum(s["total_active_ms"] for s in timeout_shape_stats.values())
+        )
+
         final_results = finalize_forensic_summary(
             shape_stats=shape_stats,
             log_dur_sec=log_dur_sec,
-            rules=rules
+            rules=rules,
+            global_total_active=global_active_ms
         )
         
         system_summary = finalize_forensic_summary(
             shape_stats=system_shape_stats,
             log_dur_sec=log_dur_sec,
-            rules=[] # No diagnostic rules for system ops yet
+            rules=[], # No diagnostic rules for system ops yet
+            global_total_active=global_active_ms
         )
         system_summary = [s for s in system_summary if s["total_ms"] > 0]
         
         timeout_summary = finalize_forensic_summary(
             shape_stats=timeout_shape_stats,
             log_dur_sec=log_dur_sec,
-            rules=rules 
+            rules=rules,
+            global_total_active=global_active_ms
         )
 
         global_total_ms = sum(s["total_ms"] for s in shape_stats.values())
@@ -711,7 +720,7 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
                 s["histogram"][b] += 1; break
     return shape_stats
 
-def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float = 1.0, rules: List = None) -> List[Dict]:
+def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float = 1.0, rules: List = None, global_total_active: float = None) -> List[Dict]:
     """
     Synthesizes the Complete Forensic Data Contract (v2.6.2).
     This function is the Single Source of Truth for both CLI and Web views.
@@ -720,7 +729,9 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
     final_results = []
     rules = rules or []
     top_shapes = sorted(shape_stats.values(), key=lambda x: x["total_ms"], reverse=True)
-    sum_total_active = sum(s["total_active_ms"] for s in shape_stats.values()) or 1
+    
+    # Use global active time if provided, otherwise fall back to local tab total
+    sum_total_active = global_total_active if global_total_active is not None else (sum(s["total_active_ms"] for s in shape_stats.values()) or 1)
     
     for i, q in enumerate(top_shapes):
         tags = []

@@ -52,7 +52,7 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 
 The engine implements surgical logic to differentiate between business workloads and infrastructure noise.
 
-### 3.1 Three-Tab Partitioning Strategy (v3.2.1 Failure Primacy)
+### 3.1 Three-Tab Partitioning Strategy (v3.2.14 Global Attribution)
 LogPeck partitions query shapes into three dedicated diagnostic channels based on a strict priority hierarchy:
 
 | Tab | Priority | Routing Criteria |
@@ -60,6 +60,8 @@ LogPeck partitions query shapes into three dedicated diagnostic channels based o
 | **🚨 Forensic Failures** | **1 (Highest)** | Any operation containing an `errCode`, `code`, or `MaxTimeMSExpired` timeout. **Failures always trump namespace**; an error in `local.oplog` is routed here, not to System. |
 | **🛠️ System Forensics** | **2 (Medium)** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL Cleanup, Heartbeats, `mongot`). |
 | **🐢 Business Workload** | **3 (Standard)** | All successful user-level operations (`find`, `update`, etc.) targeting business namespaces. |
+
+**🚨 Global AAS Attribution**: As of v3.2.14, the **AAS Load %** (green progress bar) is a **global cluster metric**. The denominator is the total active time across ALL three tabs. This ensure that load percentages are perfectly proportional across the entire dashboard, allowing for direct comparison between infrastructure tasks and business transactions.
 
 ### 3.2 Hierarchical Diagnostic Routing (v2.7.6)
 Events are bucketed using the priority defined in Section 3.1 to ensure that infrastructure noise never masks workload performance issues or critical failures.
