@@ -37,6 +37,15 @@
       "description": "Units of data returned (often mapped from nreturned)."
     },
     {
+      "id": "storage_wait",
+      "label": "Storage Effort",
+      "category": "LATENCY",
+      "unit": "ms",
+      "source": "Derived: (read + write + oplog/cache stalls)",
+      "markers": ["io"],
+      "description": "Total physical storage latency. Sum of disk reads, writes, and cache pressure stalls. Signal: Disk I/O saturation."
+    },
+    {
       "id": "reslen",
       "label": "Result Size (Bytes)",
       "category": "📊 READ FORENSICS",
@@ -109,6 +118,15 @@
       "description": "Number of documents created via upsert."
     },
     {
+      "id": "nMatched",
+      "label": "Docs Matched",
+      "category": "🖋️ WRITE CHURN",
+      "unit": "count",
+      "source": "attr.nMatched",
+      "markers": ["nMatched"],
+      "description": "Number of documents that matched the update criteria but were not necessarily modified."
+    },
+    {
       "id": "txnBytesDirty",
       "label": "Cache Dirty (Bytes)",
       "category": "🖋️ WRITE CHURN",
@@ -127,13 +145,40 @@
       "description": "Number of times the operation was retried due to a write conflict."
     },
     {
-      "id": "storage_wait",
-      "label": "Unified Storage I/O (ms)",
+      "id": "timeReadingMicros",
+      "label": "Physical Data Read Wait",
       "category": "💾 STORAGE WAIT",
-      "unit": "ms",
-      "source": "Derived: read + write + oplog",
-      "markers": ["storage_wait"],
-      "description": "Total storage effort. Calculated as: (timeReadingMicros + timeWritingMicros + totalOplogSlotDurationMicros) / 1000."
+      "unit": "us",
+      "source": "attr.storage.data.timeReadingMicros",
+      "markers": ["timeReadingMicros"],
+      "description": "Total wait time for physical data reads from disk."
+    },
+    {
+      "id": "timeReadingMicros_index",
+      "label": "Physical Index Read Wait",
+      "category": "💾 STORAGE WAIT",
+      "unit": "us",
+      "source": "attr.storage.index.timeReadingMicros",
+      "markers": ["timeReadingMicros_index"],
+      "description": "Total wait time for physical index reads from disk."
+    },
+    {
+      "id": "timeWritingMicros",
+      "label": "Physical Write Wait",
+      "category": "💾 STORAGE WAIT",
+      "unit": "us",
+      "source": "attr.storage.data.timeWritingMicros",
+      "markers": ["timeWritingMicros"],
+      "description": "Total wait time for physical writes to disk (WiredTiger journal/data)."
+    },
+    {
+      "id": "timeWaitingMicros_cache",
+      "label": "WiredTiger Cache Stall",
+      "category": "💾 STORAGE WAIT",
+      "unit": "us",
+      "source": "attr.storage.timeWaitingMicros.cache",
+      "markers": ["timeWaitingMicros.cache"],
+      "description": "Wait time induced by WiredTiger cache pressure (waiting for dirty data eviction)."
     },
     {
       "id": "totalOplogSlotDurationMicros",
@@ -154,22 +199,13 @@
       "description": "Time spent waiting for acknowledgement from secondaries."
     },
     {
-      "id": "flowControlMillis",
-      "label": "Flow Control Wait",
-      "category": "💾 STORAGE WAIT",
+      "id": "replication_wait",
+      "label": "Replication Throttling",
+      "category": "LATENCY",
       "unit": "ms",
       "source": "attr.flowControlMillis",
       "markers": ["flowControlMillis"],
-      "description": "Throttling time imposed by the primary to prevent secondary lag."
-    },
-    {
-      "id": "lock_wait",
-      "label": "Lock Acquisition (ms)",
-      "category": "🔒 LOCK WAIT",
-      "unit": "ms",
-      "source": "attr.locks.timeAcquiringMicros",
-      "markers": ["timeAcquiringMicros"],
-      "description": "Time spent waiting for document, collection, or database locks."
+      "description": "Replication backpressure gate. Signal: Primary slowing writes to let secondaries catch up."
     },
     {
       "id": "planning",
@@ -199,6 +235,24 @@
       "description": "Raw time spent inside the execution loop."
     },
     {
+      "id": "queue_wait",
+      "label": "Ticket Queue",
+      "category": "LATENCY",
+      "unit": "ms",
+      "source": "attr.queues.execution.totalTimeQueuedMicros",
+      "markers": ["totalTimeQueuedMicros"],
+      "description": "Pre-execution admission control. Time spent waiting for an execution ticket. Signal: Global concurrency saturation."
+    },
+    {
+      "id": "lock_wait",
+      "label": "Lock Contention",
+      "category": "LATENCY",
+      "unit": "ms",
+      "source": "attr.locks.*.timeAcquiringMicros",
+      "markers": ["timeAcquiringMicros"],
+      "description": "During-execution acquisition wait. Time spent waiting for Global, DB, or Collection locks. Signal: High-velocity contention."
+    },
+    {
       "id": "numYields",
       "label": "Lock Yields",
       "category": "⚙️ PURE EXECUTION",
@@ -224,15 +278,6 @@
       "source": "attr.cpuNanos",
       "markers": ["cpuNanos"],
       "description": "Exact CPU cycles consumed by the operation (if instrumented)."
-    },
-    {
-      "id": "queued",
-      "label": "Execution Queue (ms)",
-      "category": "🚶 QUEUED",
-      "unit": "ms",
-      "source": "attr.queues.execution.totalTimeQueuedMicros",
-      "markers": ["totalTimeQueuedMicros"],
-      "description": "Time spent in the global execution ticket queue."
     },
     {
       "id": "timeActiveMicros",

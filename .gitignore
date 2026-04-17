@@ -32,12 +32,12 @@ wheels/
 .cache
 nosetests.xml
 coverage.xml
-*,html
+*.html
 .pytest_cache/
+tests/
 
 # OS
 .DS_Store
-tests/
 
 # Agent Skills / State
 .agents/

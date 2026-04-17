@@ -6,7 +6,7 @@ import gzip
 import sys
 from collections import Counter
 from typing import List, Optional, Dict, Any, Tuple
-from .parser import parse_log_line, extract_log_metrics, is_system_query, heuristic_extract_ns, detect_op_and_ns, normalize_conn_id, induce_log_schema
+from .parser import parse_log_line, extract_log_metrics, is_system_query, heuristic_extract_ns, detect_op_and_ns, normalize_conn_id, induce_log_schema, get_nested_value
 from .specification import SYSTEM_EVENT_IDENTIFIERS, SIMPLIFIED_OPS, LIFECYCLE_EVENT_IDENTIFIERS, GOSSIP_EVENT_IDENTIFIERS, ERROR_CODE_MAP
 from .version import __version__
 
@@ -94,7 +94,10 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
             for entry in f:
                 total_parsed += 1
                 try:
-                    obj = json.loads(entry)
+                    # 🕵️ Surgical JSON Extraction (v4.1.3): Skip plaintext timestamp prefixes
+                    j_idx = entry.find('{')
+                    if j_idx == -1: continue
+                    obj = json.loads(entry[j_idx:])
                     if total_parsed % 500000 == 0: print(f"  ↳ {total_parsed:,} lines swept...")
                     
                     ctx = normalize_conn_id(obj.get("ctx", ""))
@@ -146,7 +149,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
             for entry in f:
                 total_parsed += 1
                 try:
-                    obj = json.loads(entry)
+                    # 🕵️ Surgical JSON Extraction (v4.1.3): Skip plaintext timestamp prefixes
+                    j_idx = entry.find('{')
+                    if j_idx == -1: continue
+                    obj = json.loads(entry[j_idx:])
                     
                     # 🧪 Unified Schema Induction (v3.2.12)
                     header = induce_log_schema(obj, last_known_ts)
@@ -241,7 +247,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                         else:
                             continue
 
-                    # 🕵️ Senior Failure Detection (v2.7.7): Promote command errors even if severity is 'I'
+                    # 🧬 Soundness Correction (v4.3.0): Unified Distinct Error Triage
+                    # Ensure each problematic log line is counted exactly once in the global error registry.
                     is_error_op = is_error_op_base or any(k in (attr or {}) or k in obj for k in ["error", "errCode", "code"]) or str((attr or {}).get("ok", obj.get("ok"))) == "0"
                     if "errorMessage" in obj or "errmsg" in obj: is_error_op = True
                     if header.get("msg") == "Infrastructure Failure": is_error_op = True
@@ -267,12 +274,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                         
                         # 🏮 High-Resolution Error Signature (v2.6.21)
                         # Aggressively prioritize 'MaxTimeMSExpired' and lethal error signatures.
+                        e_code = attr.get("errCode") or attr.get("code") or p_cmd.get("code")
                         if "maxtimemsexpired" in search_space or "exceeded time limit" in search_space:
                             display_err = "MaxTimeMSExpired: operation exceeded time limit"
+                            if not e_code: e_code = 50
                         else:
                             display_err = msg
                             # Extract error components from both attr and cmd_obj
-                            e_code = attr.get("errCode") or attr.get("code") or p_cmd.get("code")
                             e_name = attr.get("errName") or attr.get("errorName") or p_cmd.get("errName")
                             if not e_name and e_code in ERROR_CODE_MAP:
                                 e_name = ERROR_CODE_MAP[e_code]
@@ -287,6 +295,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                                 display_err = str(e_msg)
                         
                         key = (ns_guess, str(display_err[:100]))
+                        dur_ms = attr.get("durationMillis", 0) or 0
                         if key not in timeout_patterns:
                             preview = str((attr.get("command", {}) or {}).get("filter") or (attr.get("command", {}) or {}).get("pipeline") or "N/A")
                             if preview == "N/A": 
@@ -294,9 +303,15 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                             timeout_patterns[key] = {
                                 "count": 0, "ts": str(ts), "msg": str(display_err[:120]), "ns": ns_guess, "op": "unknown",
                                 "preview": preview,
-                                "remote": str(attr.get("remote", "-")), "ctx": str(obj.get("ctx", "-"))
+                                "remote": str(attr.get("remote", "-")), "ctx": str(obj.get("ctx", "-")),
+                                "error_code": e_code,
+                                "total_ms": 0, "max_ms": 0,
+                                "app_name": str(attr.get("appName") or conn_registry.get(ctx, {}).get("app") or "unknown")
                             }
                         timeout_patterns[key]["count"] += 1
+                        timeout_patterns[key]["total_ms"] += dur_ms
+                        timeout_patterns[key]["max_ms"] = max(timeout_patterns[key]["max_ms"], dur_ms)
+
                         error_namespace_stats[ns_guess] += 1
 
                     if not isinstance(attr, dict): continue
@@ -313,16 +328,21 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                     io_ms = waits.get("storage_wait", 0)
                     cpu_ms = waits.get("cpu_time", 0) or (duration - sum(waits.values()) if duration > sum(waits.values()) else 0)
                     
-                    # 📊 High-Fidelity Bottleneck Aggregation (v3.2.14)
-                    # Deduct Oplog from Storage to ensure disjoint categories for the visual Radar
+                    # 📊 High-Fidelity Bottleneck Aggregation (v3.3.3)
+                    # Distinguish between Tickets (Admission), Locks (Contention), and Repl (Throttling)
                     f_data = metrics.get("forensic", {})
-                    op_ms = f_data.get("totalOplogSlotDurationMicros", 0)
+                    op_ms = f_data.get("totalOplogSlotDurationMicros", 0) / 1000.0
+                    repl_ms = f_data.get("flowControlMillis", 0)
+                    q_ms = f_data.get("totalTimeQueuedMicros", 0) / 1000.0
+                    l_ms = waits.get("lock_wait", 0)
+                    
                     global_bottlenecks["storage_ms"] += max(0, io_ms - op_ms)
                     global_bottlenecks["cpu_ms"] += cpu_ms
                     global_bottlenecks["oplog_ms"] += op_ms
-                    global_bottlenecks["queue_ms"] += f_data.get("totalTimeQueuedMicros", 0)
+                    global_bottlenecks["queue_ms"] += q_ms
+                    global_bottlenecks["lock_ms"] += l_ms
+                    global_bottlenecks["repl_ms"] += repl_ms
                     global_bottlenecks["planning_ms"] += waits.get("planning", 0)
-                    global_bottlenecks["lock_ms"] += waits.get("lock_wait", 0)
                     
                     # 📊 Full Portfolio Instrumentation (v2.2.0)
                     op_registry[str(metrics.get("op", "unknown"))] += 1
@@ -457,17 +477,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                             ns = "N/A"
                             metrics["ns"] = "N/A"
                         
-                        h_b = str(metrics.get("query_shape_hash") or metrics.get("query_hash") or "")
-                        if not h_b:
-                            schema = metrics.get("query_schema", [])
-                            if schema:
-                                # 🧪 UI Density Protection (v2.6.17): Cap schema hash display to 5 fields
-                                if len(schema) > 5:
-                                    h_b = "SCHEMA-" + "-".join([str(x) for x in schema[:5]]) + f"-({len(schema)-5}_others)"
-                                else:
-                                    h_b = "SCHEMA-" + "-".join([str(x) for x in schema])
-                            else:
-                                h_b = "GENERIC"
+                        h_b = str(metrics.get("query_shape_hash") or "N/A")
                         
                         h = str(f"{op}-{ns}-{h_b}")
                         
@@ -507,7 +517,16 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                             ec_o["apps"][a_n] += 1
 
                         if h not in target_stats:
-                            target_stats[h] = {"count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), "ns":str(ns), "inferred_ns": is_inferred, "op":str(op), "query_shape_hash":h_b, "has_regex": False, "total_active_ms":0, "total_io_ms":0, "total_app_wait_ms":0, "total_oplog_wait_ms":0, "total_queue_wait_ms":0, "total_search_wait_ms":0, "timeout_count":0, "total_planning_ms":0, "total_yields":0, "total_write_conflicts":0, "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set()}
+                            target_stats[h] = {
+                                "count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), "ns":str(ns), "inferred_ns": is_inferred, "op":str(op), "query_shape_hash":h_b, "has_regex": False, 
+                                "is_system": is_system_op or is_noise,
+                                "total_active_ms":0, "total_io_ms":0, "total_app_wait_ms":0, "total_oplog_wait_ms":0, "total_queue_wait_ms":0, "total_lock_wait_ms":0, "total_replication_wait_ms":0, "total_search_wait_ms":0, "timeout_count":0, "total_planning_ms":0, "total_yields":0, "total_write_conflicts":0, 
+                                "total_keys_examined":0, "total_docs_examined":0, "total_nreturned":0,
+                                "total_ninserted":0, "total_nModified":0, "total_ndeleted":0, "total_nMatched":0, "total_upserted": 0,
+                                "total_keysInserted":0, "total_keysUpdated":0, "total_keysDeleted":0,
+                                "total_txn_bytes_dirty":0, "total_mongot_wait_ms":0, "total_storage_read_micros":0,
+                                "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set()
+                            }
                         
                         s_o = target_stats[h]; s_o["count"] += 1; s_o["total_ms"] += duration
                         
@@ -521,7 +540,29 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                         s_o["total_yields"] += f_data.get("numYields", 0)
                         s_o["total_write_conflicts"] += f_data.get("writeConflicts", 0)
                         s_o["total_oplog_wait_ms"] += f_data.get("totalOplogSlotDurationMicros", 0)
-                        s_o["total_queue_wait_ms"] += f_data.get("totalTimeQueuedMicros", 0)
+                        s_o["total_queue_wait_ms"] += f_data.get("totalTimeQueuedMicros", 0) / 1000.0
+                        s_o["total_lock_wait_ms"] += waits.get("lock_wait", 0)
+                        s_o["total_replication_wait_ms"] += f_data.get("flowControlMillis", 0)
+                        
+                        # 🧬 Clinical Insight Accumulation (v3.3.4)
+                        s_o["total_keys_examined"] += f_data.get("keysExamined", 0)
+                        s_o["total_docs_examined"] += f_data.get("docsExamined", 0)
+                        s_o["total_nreturned"] += f_data.get("nreturned", 0)
+                        
+                        s_o["total_ninserted"] += f_data.get("ninserted", 0)
+                        s_o["total_nModified"] += f_data.get("nModified", 0)
+                        s_o["total_ndeleted"] += f_data.get("ndeleted", 0)
+                        s_o["total_nMatched"] += f_data.get("nMatched", 0)
+                        s_o["total_upserted"] += f_data.get("upserted", 0)
+                        
+                        s_o["total_keysInserted"] += f_data.get("keysInserted", 0)
+                        s_o["total_keysUpdated"] += f_data.get("keysUpdated", 0)
+                        s_o["total_keysDeleted"] += f_data.get("keysDeleted", 0)
+                        
+                        # 🧬 Full-Stack Storage & Search Metrics (v4.0.0)
+                        s_o["total_txn_bytes_dirty"] += f_data.get("txnBytesDirty", 0)
+                        s_o["total_mongot_wait_ms"] += f_data.get("mongot_wait", 0)
+                        s_o["total_storage_read_micros"] += (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
                         
                         # 🧪 Search & Timeout Detection (v2.6.5)
                         is_search_op = "$search" in metrics.get("query_schema", [])
@@ -539,13 +580,19 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                         
                         s_o["app_names"].add(str(a_n))
                         
+                        # 🧪 Persistence: Maintain system bit across aggregation
+                        if is_system_op or is_noise:
+                            s_o["is_system"] = True
+                        
+                        # 🧬 Final Persistence: Save samples and fingerprints
                         for b in reversed(LATENCY_BUCKETS):
                             if duration >= b: 
                                 s_o["histogram"][b] += 1
                                 global_latency_dist[b] += 1
                                 break
+                        
                         if s_o["max_example_raw"] is None or duration > s_o["max_ms"]:
-                            s_o["max_ms"] = duration; s_o["max_example_raw"] = entry; s_o["max_peek_attr"] = attr
+                            s_o["max_ms"] = duration; s_o["max_example_raw"] = str(entry).strip(); s_o["max_peek_attr"] = attr
                             s_o["max_wait_metrics"] = {
                                 "Planning": waits.get("planning", 0), 
                                 "Storage": io_ms, 
@@ -555,7 +602,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                                 "Transactions": (f_data.get("timeActiveMicros", 0) / 1000.0) if f_data.get("timeActiveMicros") else 0
                             }
                         if s_o["min_example_raw"] is None or duration < s_o["min_ms"]:
-                            s_o["min_ms"] = duration; s_o["min_example_raw"] = entry; s_o["min_peek_attr"] = attr
+                            s_o["min_ms"] = duration; s_o["min_example_raw"] = str(entry).strip(); s_o["min_peek_attr"] = attr
 
                 except Exception as e:
                     if len(engine_errors) < 100: 
@@ -588,7 +635,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
         system_summary = finalize_forensic_summary(
             shape_stats=system_shape_stats,
             log_dur_sec=log_dur_sec,
-            rules=[], # No diagnostic rules for system ops yet
+            rules=rules, 
             global_total_active=global_active_ms
         )
         system_summary = [s for s in system_summary if s["total_ms"] > 0]
@@ -606,8 +653,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
         # (Note: Identity back-filling is now handled within the aggregator or pre-pass)
 
         avg_slow_ms = global_total_ms / total_slow_count if total_slow_count > 0 else 0
-        # 📈 Senior Stat Sync (v2.7.7): Count both severity errors and identified command failures
-        log_error_count = max(severity_stats.get('E', 0) + severity_stats.get('ERROR', 0), identified_error_count)
+        # 📈 Senior Stat Sync (v4.3.0): Use unified error count directly for soundness
+        log_error_count = identified_error_count
 
         res = {
             "stats": {
@@ -690,7 +737,8 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
                 "count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), 
                 "ns":ns, "op":op, "query_shape_hash":h_b, "total_active_ms":0, 
                 "total_io_ms":0, "total_app_wait_ms":0, "total_oplog_wait_ms":0,
-                "total_queue_wait_ms": 0, "total_cpu_ms": 0,
+                "total_queue_wait_ms": 0, "total_lock_wait_ms": 0, "total_replication_wait_ms": 0,
+                "total_cpu_ms": 0,
                 "app_names": set(), "max_example_raw": None, 
                 "histogram": {b:0 for b in LATENCY_BUCKETS}
             }
@@ -707,6 +755,8 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
         s["total_active_ms"] += max(0, duration - app_ms)
         s["total_oplog_wait_ms"] += (metrics.get("forensic", {}).get("totalOplogSlotDurationMicros", 0) / 1000.0)
         s["total_queue_wait_ms"] += waits.get("queued", 0)
+        s["total_lock_wait_ms"] += waits.get("lock_wait", 0)
+        s["total_replication_wait_ms"] += waits.get("replication_wait", 0)
         s["total_cpu_ms"] += (metrics.get("forensic", {}).get("cpuNanos", 0) / 1000000.0)
         
         app = metrics.get("app_name", "unknown")
@@ -736,24 +786,52 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
     for i, q in enumerate(top_shapes):
         tags = []
         # 🧪 High-Fidelity Extraction (Max & Min)
-        max_entry = q["max_example_raw"]
+        max_entry = q.get("max_example_raw")
         min_entry = q.get("min_example_raw") or max_entry
         
         def _get_metrics(entry):
             if not entry: return {}
-            if isinstance(entry, str):
-                try: return extract_log_metrics(json.loads(entry), include_full_command=True) or {}
-                except: return {}
-            return entry.get("metrics") or extract_log_metrics(entry, include_full_command=True) or {}
+            # 🧪 Precision Indirection (v4.1.2): Raw logs must be re-parsed. 
+            # Atlas logs often have plaintext prefixes (timestamps); find the '{' to extract the JSON block.
+            try:
+                raw_str = entry if isinstance(entry, str) else str(entry)
+                j_idx = raw_str.find('{')
+                if j_idx != -1:
+                    obj = json.loads(raw_str[j_idx:])
+                    return extract_log_metrics(obj, include_full_command=True) or {}
+            except: 
+                return {}
+            return {}
 
         max_d = _get_metrics(max_entry)
         min_d = _get_metrics(min_entry)
         
+        # 🧬 Lifecycle Causal Diagnosis (v3.3.3)
+        # Tickets -> Admission control delay
+        # Locks -> Resource contention
+        # Repl -> Replication backpressure
+        q_avg = q["total_queue_wait_ms"] / q["count"]
+        l_avg = q["total_lock_wait_ms"] / q["count"]
+        r_avg = q["total_replication_wait_ms"] / q["count"]
+        
+        if q_avg > l_avg and q_avg > 5:
+            tags.append({"label": "🎟️ TICKET_SATURATION", "severity": "error"})
+        elif l_avg > q_avg and l_avg > 5:
+            tags.append({"label": "🔥 LOCK_CONTENTION", "severity": "warning"})
+        
+        if r_avg > 0:
+            tags.append({"label": "🐌 REPL_THROTTLED", "severity": "warning"})
+
         # 🕒 Timestamp & Attribute Extraction
         def _get_ts_and_attr(entry):
             if not entry: return "unknown", {}
             if isinstance(entry, str):
-                try: obj = json.loads(entry)
+                try:
+                    j_idx = entry.find('{')
+                    if j_idx != -1:
+                        obj = json.loads(entry[j_idx:])
+                    else:
+                        obj = {}
                 except: return "unknown", {}
             else: obj = entry or {}
             
@@ -763,37 +841,59 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         max_ts, max_attr = _get_ts_and_attr(max_entry)
         min_ts, min_attr = _get_ts_and_attr(min_entry)
 
-        # 🧪 Clinical Insights (v3.3.1)
-        # Ratios that signal specific performance anti-patterns
-        n_returned = q.get("total_nreturned", 0)
-        docs_ex = q.get("total_docs_examined", 0)
-        keys_ex = q.get("total_keys_examined", 0)
+        # 🧪 Hybrid Clinical Insights (v3.3.7)
+        # Decision: Anchor Efficiency to the Worst-Case Sample, but Mutation to the Shape-wide Aggregate.
         
-        # 🖋️ Mutation Precision: Document changes vs Index changes
+        # 1. Sample Forensics (Worst Case)
+        sample_f = max_d.get("forensic", {})
+        s_nret = sample_f.get("nreturned", 0)
+        s_docs_ex = sample_f.get("docsExamined", 0)
+        s_keys_ex = sample_f.get("keysExamined", 0)
+        s_n_ins = sample_f.get("ninserted", 0)
+        s_n_match = sample_f.get("nMatched", 0)
+        s_n_del = sample_f.get("ndeleted", 0)
+        s_n_ups = sample_f.get("upserted", 0)
+        
+        s_impact = s_nret + s_n_match + s_n_ins + s_n_del + s_n_ups
+        s_denom = s_impact if s_impact > 0 else 1 # Per-operation normalization for single sample
+        
+        # 2. Shape Aggregates (Economic Overhead)
         n_ins = q.get("total_ninserted", 0)
         n_mod = q.get("total_nModified", 0)
         n_del = q.get("total_ndeleted", 0)
-        n_upsert = q.get("total_upserted_count", q.get("total_upserted", 0)) # handle both formats
-        doc_mut = n_ins + n_mod + n_del + (n_upsert if isinstance(n_upsert, int) else 0)
-
+        n_upsert = q.get("total_upserted", 0)
+        doc_mut = n_ins + n_mod + n_del + n_upsert
+        
         k_ins = q.get("total_keysInserted", 0)
         k_upd = q.get("total_keysUpdated", 0)
         k_del = q.get("total_keysDeleted", 0)
         key_mut = k_ins + k_upd + k_del
 
-        # 🦒 Clinical Ratio Logic with Division-by-Zero Safety
+        avg_ms = round(q["total_ms"] / q["count"], 2)
         stats = {
             "load_pct": round(q["total_active_ms"] / sum_total_active * 100, 1),
-            "avg_ms": round(q["total_ms"] / q["count"], 2),
+            "avg_ms": avg_ms,
             "aas": round(q["total_active_ms"] / (max(log_dur_sec, 1) * 1000), 3),
-            "scan_efficiency": round(docs_ex / n_returned, 1) if n_returned > 0 else (docs_ex if docs_ex > 0 else 0),
-            "index_selectivity": round(keys_ex / n_returned, 1) if n_returned > 0 else (keys_ex if keys_ex > 0 else 0),
-            "fetch_amplification": round(docs_ex / keys_ex, 1) if keys_ex > 0 else (docs_ex if docs_ex > 0 else 0),
-            "workload_amplification": round(key_mut / doc_mut, 1) if doc_mut > 0 else (key_mut if key_mut > 0 else 0),
-            # Grannular Splits (v3.3.1)
+            # Efficiency anchored to Worst-Case Sample (The Forensic Smoking Gun)
+            "scan_efficiency": round(s_docs_ex / s_denom, 1),
+            "index_selectivity": round(s_keys_ex / s_denom, 1),
+            "fetch_amplification": round(s_docs_ex / s_keys_ex, 1) if s_keys_ex > 0 else (s_docs_ex if s_docs_ex > 0 else 0),
+            # Workload Amplification anchored to Shape Aggregate (The Economic Tax)
+            "workload_amplification": round(key_mut / doc_mut, 1) if doc_mut > 0 else 0,
             "ins_amp": round(k_ins / n_ins, 1) if n_ins > 0 else 0,
             "upd_amp": round(k_upd / n_mod, 1) if n_mod > 0 else 0,
-            "del_amp": round(k_del / n_del, 1) if n_del > 0 else 0
+            "del_amp": round(k_del / n_del, 1) if n_del > 0 else 0,
+            # ✨ Advanced Clinical Suite v4.0.0 (The Full Stack)
+            "cache_pressure": round(max_d.get("forensic", {}).get("txnBytesDirty", 0) / (1024 * 1024), 1),
+            "replication_backpressure": max(max_d.get("forensic", {}).get("flowControlMillis", 0), max_d.get("max_peek_attr", {}).get("waitForWriteConcernDurationMillis", 0)),
+            "storage_intensity": min(100.0, round(((
+                max_d.get("forensic", {}).get("timeReadingMicros", 0) + 
+                max_d.get("forensic", {}).get("timeReadingMicros_index", 0) +
+                max_d.get("forensic", {}).get("timeWritingMicros", 0) +
+                max_d.get("forensic", {}).get("timeWaitingMicros_cache", 0) +
+                max_d.get("forensic", {}).get("totalOplogSlotDurationMicros", 0)
+            )) / (max(avg_ms, 1) * 10) , 1)),
+            "search_latency": max_d.get("forensic", {}).get("mongot_wait", 0)
         }
 
         eval_data = {
@@ -804,7 +904,14 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "plan_summary": max_d.get("plan_summary", "N/A"),
             "has_regex": 1 if q.get("has_regex") else 0,
             "error_code": max_d.get("forensic", {}).get("errCode") or max_d.get("forensic", {}).get("code"),
-            "error_name": max_d.get("forensic", {}).get("errName") or max_d.get("forensic", {}).get("codeName")
+            "error_name": max_d.get("forensic", {}).get("errName") or max_d.get("forensic", {}).get("codeName"),
+            "clinical_stats": stats,
+            "cache_pressure": stats["cache_pressure"],
+            "ins_amp": stats["ins_amp"],
+            "doc_mut": doc_mut,
+            "has_read_forensics": 1 if (s_docs_ex > 0 or s_keys_ex > 0) else 0,
+            "has_write_forensics": 1 if doc_mut > 0 else 0,
+            "is_system": q.get("is_system", 0)
         }
         
         for rule in rules:
@@ -829,6 +936,12 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "total_ms": q["total_ms"],
             "load_pct": stats["load_pct"],
             "aas_load": stats["aas"],
+            # Forensic Metadata for Reporter Visibility
+            "docsExamined": eval_data["docsExamined"],
+            "keysExamined": eval_data["keysExamined"],
+            "doc_mut": doc_mut,
+            "is_system": q.get("is_system", 0),
+            # Hybrid Clinical Ratios
             "scan_efficiency": stats["scan_efficiency"],
             "index_selectivity": stats["index_selectivity"],
             "fetch_amplification": stats["fetch_amplification"],
@@ -836,6 +949,10 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "ins_amp": stats["ins_amp"],
             "upd_amp": stats["upd_amp"],
             "del_amp": stats["del_amp"],
+            "cache_pressure": stats["cache_pressure"],
+            "replication_backpressure": stats["replication_backpressure"],
+            "storage_intensity": stats["storage_intensity"],
+            "search_latency": stats["search_latency"],
             "diagnostic_tags": tags if tags else [{"label": "BALANCED", "severity": "success"}],
             "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "unknown",
             "plan_summary": str(max_d.get("plan_summary", "N/A")),

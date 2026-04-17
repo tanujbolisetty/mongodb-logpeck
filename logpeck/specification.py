@@ -49,9 +49,15 @@ for m in METRIC_REGISTRY:
 # ==============================================================================
 # Registries used to filter internal MongoDB maintenance noise from performance reports.
 SYSTEM_COMPONENTS = {
-    "FTDC", "REPL_HB", "SHARD_HE", "NETWORK", "STORAGE", 
-    "REPL", "RECOVERY", "INDEX", "SHARDING",
-    "ACCESS", "CONTROL", "BALANCER", "JOURNAL", "ELECTION"
+    # Core Infrastructure
+    "FTDC", "NETWORK", "STORAGE", "ACCESS", "CONTROL", "SHARDING", "BALANCER", "SESSION",
+    # Storage Engine (WiredTiger v5.3+)
+    "WT", "WTBACKUP", "WTCHKPT", "WTCMPCT", "WTEVICT", "WTHS", "WTRECOV", 
+    "WTRTS", "WTSLVG", "WTTS", "WTTXN", "WTVRFY", "WTWRTLOG", "JOURNAL", "RECOVERY",
+    # Replication & Topology
+    "REPL", "REPL_HB", "ROLLBACK", "INITSYNC", "ELECTION", "HEARTBEAT",
+    # Query Lifecycle
+    "QUERYSTATS", "REJECTED", "PLANNER"
 }
 
 SYSTEM_NAMESPACES = {"admin.", "config.", "local.", "system."}
@@ -118,7 +124,8 @@ SYSTEM_EVENT_IDENTIFIERS = [
     "connection timed out",
     "not writable primary",
     "interrupted due to step down",
-    "interrupted at shutdown"
+    "interrupted at shutdown",
+    "infrastructure failure"
 ]
 
 # 🧬 6.5 Lifecycle & Gossip Diagnostics (v2.7.4)
@@ -246,6 +253,7 @@ ERROR_CODE_MAP = {
     48: 'NamespaceExists',
     49: 'InvalidRoleModification',
     50: 'MaxTimeMSExpired',
+    279: 'ClientDisconnect',
     51: 'ManualInterventionRequired',
     52: 'DollarPrefixedFieldName',
     53: 'InvalidIdField',

@@ -302,10 +302,13 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
             "queryHash", "queryShapeHash", "planCacheShapeHash", "target", "host",
             "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
             "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
-            "nreturned", "reslen", "ninserted", "nModified", "ndeleted"
+            "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
+            "storage", "locks", "queues", "mongot", "command", "originatingCommand",
+            "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl"
         ]
         for k in SEARCH_PROBES:
             if k in entry: attr[k] = entry[k]
+        entry["attr"] = attr
         
         # 🕵️ Nested Error Extraction (v3.2.6): Flatten 'error' dict if present
         err_obj = entry.get("error")
@@ -376,7 +379,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # 🕵️ Universal Discovery Harvester (v3.2.0): Breadth-First Search for markers
     def discovery_harvest(obj, marker_map, result=None, depth=0):
         if result is None: result = {}
-        if depth > 3 or not isinstance(obj, dict): return result
+        if depth > 10 or not isinstance(obj, dict): return result
         for k, v in obj.items():
             # If marker matched and not already harvested (prioritize top-level)
             if k in marker_map:
@@ -428,17 +431,22 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
     if mongot_wait: forensic["mongot_wait"] = mongot_wait
     
-    txn_bytes_dirty = get_nested_value(entry, "attr.storage.data.txnBytesDirty")
+    # 🧼 Cache Pressure Harvesting (v2.7.14)
+    # Prefer nested path, fallback to top-level or extracted forensic dict
+    txn_bytes_dirty = get_nested_value(entry, "attr.storage.data.txnBytesDirty") or attr.get("txnBytesDirty") or forensic.get("txnBytesDirty")
     if txn_bytes_dirty is not None: forensic["txnBytesDirty"] = txn_bytes_dirty
 
     waits_ms = {}
     lock_micros = 0
-    locks = attr.get("locks", {})
-    if isinstance(locks, dict):
-        for resource, counts in locks.items():
+    if "locks" in attr:
+        for res, counts in attr.get("locks", {}).items():
             if isinstance(counts, dict):
-                wait_obj = counts.get("timeAcquiringMicros", {})
-                if isinstance(wait_obj, dict): lock_micros += sum(wait_obj.values())
+                wait_obj = counts.get("timeAcquiringMicros", 0)
+                if isinstance(wait_obj, dict):
+                    lock_micros += sum(wait_obj.values())
+                elif isinstance(wait_obj, (int, float)):
+                    lock_micros += wait_obj
+    
     if lock_micros > 0:
         val = round(lock_micros / 1000.0, 2)
         waits_ms["lock_wait"] = min(val, ms) if ms > 0 else val
@@ -468,6 +476,11 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     if queue_micros > 0: 
         val = round(queue_micros / 1000.0, 2)
         waits_ms["queued"] = min(val, ms) if ms > 0 else val
+
+    # 🚦 Replication Backpressure (v3.3.3)
+    flow_control = attr.get("flowControlMillis") or 0
+    if flow_control > 0:
+        waits_ms["replication_wait"] = flow_control
 
     working_ms = attr.get("workingMillis")
     if working_ms is not None: waits_ms["execution"] = working_ms

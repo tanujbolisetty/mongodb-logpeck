@@ -42,7 +42,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         <div class="card"><div class="card-label">Log Errors</div><div class="card-value" style="color:{err_color}">{stats.get("log_error_count", 0)}</div></div>
     '''
     
-    # 🧬 Forensic Bottleneck Radar (v2.6.10)
+    # 🧬 Forensic Bottleneck Radar (v3.3.3)
     btl = stats.get("global_bottlenecks", {})
     t_wait = sum(btl.values()) or 1
     def _pct(k): return (btl.get(k, 0) / t_wait) * 100
@@ -57,17 +57,17 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 <div style="width:{_pct('io_ms') or 2}%; background:#3B82F6; height:100%" title="I/O Wait"></div>
                 <div style="width:{_pct('cpu_ms') or 2}%; background:#10B981; height:100%" title="CPU Time"></div>
                 <div style="width:{_pct('storage_ms') or 2}%; background:#F59E0B; height:100%" title="Storage Wait"></div>
-                <div style="width:{_pct('oplog_ms') or 2}%; background:#EF4444; height:100%" title="Oplog Slot Wait"></div>
-                <div style="width:{_pct('queue_ms') or 2}%; background:#EC4899; height:100%" title="Queue Wait"></div>
-                <div style="width:{_pct('lock_ms') or 2}%; background:#8B5CF6; height:100%" title="Lock Wait"></div>
+                <div style="width:{_pct('repl_ms') or 2}%; background:#EF4444; height:100%" title="Replication Throttling"></div>
+                <div style="width:{_pct('queue_ms') or 2}%; background:#EC4899; height:100%" title="Ticket Queue"></div>
+                <div style="width:{_pct('lock_ms') or 2}%; background:#8B5CF6; height:100%" title="Lock Contention"></div>
             </div>
             <div style="display:flex; gap:20px; flex-wrap:wrap">
                 <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> I/O Wait ({_pct('io_ms'):.1f}%)</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#10B981"></div> CPU Time ({_pct('cpu_ms'):.1f}%)</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> Storage Wait ({_pct('storage_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Oplog Slot Wait ({_pct('oplog_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#EC4899"></div> Queue Wait ({_pct('queue_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div> Lock Wait ({_pct('lock_ms'):.1f}%)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Replication Throttling ({_pct('repl_ms'):.1f}%)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#EC4899"></div> Ticket Queue ({_pct('queue_ms'):.1f}%)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div> Lock Contention ({_pct('lock_ms'):.1f}%)</div>
             </div>
         </div>
     '''
@@ -86,11 +86,16 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "unknown" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
     msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
-    timeout_table_html = "<table><thead><tr><th>Last Seen</th><th>Count</th><th>Namespace</th><th>Op Preview</th><th>Error Pattern</th><th>Context</th></tr></thead><tbody>"
+    timeout_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Count</th><th>Avg</th><th>Max</th><th>Namespace</th><th>Op Preview</th><th>Error Pattern</th><th>App</th><th>Context</th></tr></thead><tbody>"
     for t in stats.get("timeout_patterns", []):
         t_ts = str(t.get('ts', 'N/A'))[11:19]
         t_preview = str(t.get('preview', 'N/A'))[:60]
-        timeout_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{t_ts}</td><td><span class='tag-critical'>{t.get('count', 0)}</span></td><td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td><td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td><td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td><td style='font-size:0.7rem;color:var(--text-secondary)'>IP: {t.get('remote', 'N/A')}<br>Ctx: {t.get('ctx', 'N/A')}</td></tr>"
+        t_code = t.get('error_code', 'N/A') or 'N/A'
+        t_count = t.get('count', 0)
+        t_avg = format_duration(t.get('total_ms', 0) / max(t_count, 1))
+        t_max = format_duration(t.get('max_ms', 0))
+        t_app = t.get('app_name', 'unknown')
+        timeout_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{t_ts}</td><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td><td><span class='tag-critical'>{t_count}</span></td><td style='font-size:0.75rem'>{t_avg}</td><td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td><td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td><td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td><td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td><td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td><td style='font-size:0.7rem;color:var(--text-secondary)'>IP: {t.get('remote', 'N/A')}<br>Ctx: {t.get('ctx', 'N/A')}</td></tr>"
     timeout_table_html += "</tbody></table>"
     
     tier_buttons_html = '<button class="badge" style="cursor:pointer; border:1px solid var(--border); background:#1e293b" onclick="filterByTier(0)">ALL</button>'
@@ -151,39 +156,108 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             def render_clinical_insights(row_data):
                 insights = []
                 
-                # Formula thresholds per clinical feedback
-                # SE: docsExamined / nreturned (> 1000 is critical)
-                se = row_data.get("scan_efficiency", 0)
-                se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
-                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / RETURNED</div></div>')
-
-                # IS: keysExamined / nreturned (> 10 indicates poor selectivity)
-                is_sel = row_data.get("index_selectivity", 0)
-                is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
-                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / RETURNED</div></div>')
-
-                # FA: docsExamined / keysExamined (> 2 indicates document bloat vs index coverage)
-                fa = row_data.get("fetch_amplification", 0)
-                fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
-                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS</div></div>')
-
-                # WA: Mutated Keys / Total Doc Mutations (> 10 indicates index heavy workload)
-                wa = row_data.get("workload_amplification", 0)
-                wa_clr = "var(--tier1)" if wa < 5 else ("#fbbf24" if wa < 10 else "var(--error)")
-                ins_a, upd_a, del_a = row_data.get("ins_amp", 0), row_data.get("upd_amp", 0), row_data.get("del_amp", 0)
+                # Extract raw activity markers for relevance checks
+                docs_ex = row_data.get("docsExamined", 0)
+                keys_ex = row_data.get("keysExamined", 0)
+                doc_mut = row_data.get("doc_mut", 0)
                 
-                insights.append(f'''
-                <div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}">
-                    <div class="card-label" style="font-size:0.6rem; opacity:0.6">WORKLOAD AMPLIFICATION</div>
-                    <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
-                    <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
-                        <span>ins:{ins_a:,.1f}</span>
-                        <span>upd:{upd_a:,.1f}</span>
-                        <span>del:{del_a:,.1f}</span>
-                    </div>
-                </div>''')
+                # Formula thresholds per clinical feedback (v3.3.6 Workload-Adaptive)
+                
+                # 1. SCAN EFFICIENCY (Discovery Effort) - Show only if docs were examined
+                if docs_ex > 0:
+                    se = row_data.get("scan_efficiency", 0)
+                    se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT (Worst Sample)</div></div>')
 
-                return f'<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1rem; margin-top:2rem">{"".join(insights)}</div>'
+                # 2. INDEX SELECTIVITY (Specificity) - Show only if keys were examined
+                if keys_ex > 0:
+                    is_sel = row_data.get("index_selectivity", 0)
+                    is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT (Worst Sample)</div></div>')
+
+                # 3. FETCH AMPLIFICATION (Coverage) - Show if both keys and docs were involved
+                if docs_ex > 0 and keys_ex > 0:
+                    fa = row_data.get("fetch_amplification", 0)
+                    fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS (Worst Sample)</div></div>')
+
+                # 4. INDEX AMPLIFICATION (Mutation Effort) - Show only if mutations occurred
+                if doc_mut > 0:
+                    wa = row_data.get("workload_amplification", 0)
+                    wa_clr = "var(--tier1)" if wa < 5 else ("#fbbf24" if wa < 10 else "var(--error)")
+                    ins_a, upd_a, del_a = row_data.get("ins_amp", 0), row_data.get("upd_amp", 0), row_data.get("del_amp", 0)
+                    
+                    insights.append(f'''
+                    <div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}">
+                        <div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Ratio of Index Keys written/modified per single Document mutated.">INDEX AMPLIFICATION (Keys per Doc)</div>
+                        <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
+                        <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
+                            <span title="Average index keys inserted per document insertion.">ins_keys:{ins_a:,.1f}</span>
+                            <span title="Average index keys updated per document update.">upd_keys:{upd_a:,.1f}</span>
+                            <span title="Average index keys deleted per document deletion.">del_keys:{del_a:,.1f}</span>
+                        </div>
+                    </div>''')
+
+                # ✨ Advanced Clinical Suite v4.0.0 (The Full Stack)
+
+                # 5. CACHE PRESSURE (Memory Tax)
+                cp = row_data.get("cache_pressure", 0)
+                if cp > 0:
+                    cp_clr = "var(--tier1)" if cp < 100 else ("#fbbf24" if cp < 500 else "var(--error)")
+                    cp_disp = f"{cp:,.1f} MB" if cp < 1024 else f"{cp/1024.0:,.2f} GB"
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {cp_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">CACHE PRESSURE (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{cp_clr}; margin:0.3rem 0">{cp_disp}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DIRTY BYTES IN CACHE</div></div>')
+
+                # 6. REPLICATION BACKPRESSURE (Ack/Sync Lag)
+                rb = row_data.get("replication_backpressure", 0)
+                if rb > 0:
+                    rb_clr = "var(--tier1)" if rb < 50 else ("#fbbf24" if rb < 200 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {rb_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">REPLICATION BACKPRESSURE</div><div style="font-size:1.3rem; font-weight:800; color:{rb_clr}; margin:0.3rem 0">{rb:,.0f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">WRITE CONCERN / FLOW WAIT</div></div>')
+
+                # 7. STORAGE INTENSITY (I/O Dominance)
+                si = row_data.get("storage_intensity", 0)
+                if si > 0.1: # Surface all measurable storage activity for transparency
+                    si_clr = "var(--tier1)" if si < 30 else ("#fbbf24" if si < 70 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {si_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">STORAGE INTENSITY</div><div style="font-size:1.3rem; font-weight:800; color:{si_clr}; margin:0.3rem 0">{si:,.1f}%</div><div style="font-size:0.6rem; color:var(--text-secondary)">TIME SPENT ON DISK I/O</div></div>')
+
+                # 8. SEARCH LATENCY (Atlas Search Backend)
+                sl = row_data.get("search_latency", 0)
+                if sl > 0:
+                    sl_clr = "var(--tier1)" if sl < 100 else ("#fbbf24" if sl < 500 else "var(--error)")
+                    sl_fmt = f"{sl/1000:,.1f}s" if sl >= 1000 else f"{sl:,.0f}ms"
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend Process">SEARCH LATENCY</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT (Worst Case)</div></div>')
+
+                if not insights:
+                    # 🏥 Clinical Triage: Optimal vs. Unknown
+                    is_optimal = False
+                    if row_data.get("is_system") == 0 and row_data.get("count", 0) > 0:
+                        se = row_data.get("scan_efficiency", 0)
+                        isel = row_data.get("index_selectivity", 0)
+                        si = row_data.get("storage_intensity", 0)
+                        
+                        # A query is considered OPTIMAL if it is perfectly indexed and not storage bound
+                        if (se <= 1.1 and isel <= 1.1 and si < 10.0):
+                            is_optimal = True
+
+                    if is_optimal:
+                        return '''<div style="margin-top:2rem; padding:1rem; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:10px; display:flex; align-items:center; gap:10px">
+                                    <span style="color:#10B981; font-size:1.2rem">✔</span>
+                                    <div>
+                                        <div style="color:#10B981; font-weight:800; font-size:0.7rem">CLINICAL STATUS: OPTIMAL</div>
+                                        <div style="color:var(--text-secondary); font-size:0.6rem">The query shape is structurally perfect. Latency is likely due to environmental resource pressure (CPU/Network).</div>
+                                    </div>
+                                  </div>'''
+                    
+                    if row_data.get("is_system") == 0 and row_data.get("count", 0) > 0:
+                        return '''<div style="margin-top:2rem; padding:1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:10px; display:flex; align-items:center; gap:10px">
+                                    <span style="color:var(--text-secondary); font-size:1.2rem">⏳</span>
+                                    <div>
+                                        <div style="color:var(--text-secondary); font-weight:800; font-size:0.7rem">CLINICAL STATUS: N/A</div>
+                                        <div style="color:var(--text-secondary); font-size:0.6rem">No specific pathologies detected. This query may be a victim of external resource contention.</div>
+                                    </div>
+                                  </div>'''
+                    return ""
+
+                return f'<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-top:2rem">{"".join(insights)}</div>'
 
             insights_html = render_clinical_insights(row)
             
@@ -482,8 +556,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
 
     <div class="tabs">
         <div class="tab active" onclick="openTab('health', this)">🏥 Health Overview</div>
-        <div class="tab" onclick="openTab('system', this)">🛠️ System Query Forensics</div>
         <div class="tab" onclick="openTab('slow', this)">🐢 Business Workload Forensics</div>
+        <div class="tab" onclick="openTab('system', this)">🛠️ System Query Forensics</div>
         <div class="tab" onclick="openTab('timeouts', this)">🚨 Failure Forensics</div>
         <div class="tab" onclick="openTab('connections', this)">🔌 Connection Analytics</div>
         <div class="tab" onclick="openTab('reference', this)">📚 Reference</div>
@@ -556,11 +630,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             </div>
 
             <div class="card" style="margin-top:1.5rem">
-                <div class="card-label" style="color:var(--error)">⚠️ Critical Timeout & Execution Limit Patterns (Pass 1)</div>
+                <div class="card-label" style="color:var(--error)">⚡ Error Event Timeline (Client Context)</div>
                 {timeout_table_html}
             </div>
             <div class="card" style="margin-top:1.5rem">
-                <div class="card-label" style="color:var(--error)">🚨 Detailed Timeout Forensics (Pass 2 Analysis)</div>
+                <div class="card-label" style="color:var(--error)">🔬 Query Shape Failure Analysis</div>
                 <table id="timeoutTable">
                     <thead>
                         <tr>
@@ -632,6 +706,65 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         </div>
         
         <div id="referenceContent">
+            <div class="card" style="margin-bottom:2rem; border-left: 4px solid var(--accent)">
+                <div class="card-label" style="color:var(--accent)">🔬 Forensic Methodology: Diagnostics vs. Clinical Insights</div>
+                <div style="margin-top:1.2rem; display:grid; grid-template-columns: 1fr 1fr; gap:2rem">
+                    <div>
+                        <h4 style="color:var(--text-primary); margin-bottom:0.5rem">1. Clinical Insights (The Synthesis)</h4>
+                        <p style="color:var(--text-secondary); font-size:0.85rem">The holistic <strong>"Doctor's Assessment"</strong> of a query shape's health. It synthesizes wait-ratios, diagnostic tags, and plan metrics into a single judgment.</p>
+                        <ul style="color:var(--text-secondary); font-size:0.85rem; margin-top:0.8rem">
+                            <li><strong>POISONED / CRITICAL</strong>: Fundamentally broken logic or massive impact.</li>
+                            <li><strong>N/A</strong>: No specific pathologies detected (Healthy or Unknown).</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 style="color:var(--text-primary); margin-bottom:0.5rem">2. Diagnostic Tags (The Symptoms)</h4>
+                        <p style="color:var(--text-secondary); font-size:0.85rem">Individual <strong>"Lab Results"</strong> triggered by specific rules. They use prefixes to help identify the root of the problem:</p>
+                        <ul style="color:var(--text-secondary); font-size:0.85rem; margin-top:0.8rem">
+                            <li><strong><code>[TRACE]</code></strong>: Structural Pathogens (Code or Index issues). Focus for Developers.</li>
+                            <li><strong><code>[WORKLOAD]</code></strong>: Environmental Victims (Resource starvation). Focus for SREs.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div style="margin-top:1.5rem; padding:1rem; background:rgba(255,255,255,0.03); border-radius:8px">
+                    <h4 style="color:var(--text-primary); margin-bottom:0.5rem">🎨 The Forensic Color Philosophy</h4>
+                    <p style="color:var(--text-secondary); font-size:0.85rem">Colors in LogPeck have two distinct meanings depending on context:</p>
+                    <table style="width:100%; margin-top:0.8rem; font-size:0.8rem">
+                        <thead><tr><th>Context</th><th>Green (Good?)</th><th>Red (Bad?)</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td style="font-weight:700">Metric Cards</td>
+                                <td style="color:#10B981"><strong>YES</strong>. Values are optimal (e.g., Scan Efficiency = 1.0).</td>
+                                <td style="color:#EF4444"><strong>YES</strong>. Values indicate heavy structural waste (e.g., COLLSCAN).</td>
+                            </tr>
+                            <tr>
+                                <td style="font-weight:700">Latency Tiers</td>
+                                <td style="color:#00ED64"><strong>NO</strong>. It just means the query is the <em>"Fastest of the Slow"</em> (100ms - 500ms).</td>
+                                <td style="color:#EF4444"><strong>YES</strong>. This is a <em>"Latency Cliff"</em> (5s - 10s+).</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top:1.5rem; padding:1rem; background:rgba(255,194,11,0.05); border-radius:8px">
+                    <h4 style="color:#FEC20B; margin-bottom:0.5rem">🧪 Clinical Threshold Matrix (Reference)</h4>
+                    <p style="color:var(--text-secondary); font-size:0.85rem">When do metrics turn Red? The engine uses these forensic guardrails:</p>
+                    <table style="width:100%; margin-top:0.8rem; font-size:0.75rem">
+                        <thead><tr><th>Metric</th><th>🟢 Healthy</th><th>🟡 Warning</th><th>🔴 Critical</th></tr></thead>
+                        <tbody>
+                            <tr><td>Scan Efficiency</td><td>&lt; 20</td><td>20 - 500</td><td>&gt; 500</td></tr>
+                            <tr><td>Index Selectivity</td><td>&lt; 5</td><td>5 - 50</td><td>&gt; 50</td></tr>
+                            <tr><td>Fetch Amplif.</td><td>&le; 1.1</td><td>1.1 - 3.0</td><td>&gt; 3.0</td></tr>
+                            <tr><td>Storage Intensity</td><td>&lt; 30%</td><td>30% - 70%</td><td>&gt; 70%</td></tr>
+                            <tr><td>Index Amplif.</td><td>&lt; 5.0</td><td>5.0 - 10.0</td><td>&gt; 10.0</td></tr>
+                        </tbody>
+                    </table>
+                    <div style="margin-top:1rem; font-size:0.8rem; color:var(--text-primary)">
+                        💡 <strong>OPTIMAL Status</strong>: Only triggered if both <em>Scan</em> and <em>Selectivity</em> are &le; 1.1 AND <em>Storage Intensity</em> is &lt; 10%.
+                    </div>
+                </div>
+            </div>
+
             <div class="card" style="margin-bottom:2rem; border-left: 4px solid #00ED64">
                 <div class="card-label" style="color:#00ED64">🌐 External Documentation</div>
                 <div style="margin-top:1rem; font-size:0.9rem">
@@ -660,6 +793,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                         <tr><td style="font-weight:700">Impact<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(%)</span></td><td><strong style="color:var(--text-primary)">Global Cluster Impact.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Query Active Time / Global Cluster Active Time) * 100</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Provides a unified view of resource consumption. Higher % = the query is a dominant contributor to total cluster load across ALL tabs (Business + System + Failure).</span></td></tr>
                         <tr><td style="font-weight:700">Scan<br>Efficiency</td><td><strong style="color:var(--text-primary)">Inspection Ratio.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">docsExamined / nreturned</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Ideally close to 1.0. High ratios (> 1000) confirm the query is performing expensive collections scans rather than targeted index lookups.</span></td></tr>
                         <tr><td style="font-weight:700">Workload<br>Amplification</td><td><strong style="color:var(--text-primary)">Mutation Overhead.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Index Mutations) / (Document Mutations)</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Measures the I/O cost of each write. Calculated using (keysInserted+Deleted+Updated) vs (ninserted+Modified+deleted+upserted). Ratios > 10.0 signal the collection is over-indexed for the write workload.</span></td></tr>
+                        <tr><td style="font-weight:700">Storage<br>Effort</td><td><strong style="color:var(--text-primary)">Physical I/O Sum.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">read + write + cache/oplog stalls</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Summarizes total time spent in the physical storage layer. Signal: Peak disk bandwidth or IOPS saturation or cold-cache "fetch" storms.</span></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -673,19 +807,52 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             </div>
 
             <div class="card" style="margin-top:2rem">
-                <div class="card-label" style="color:var(--accent)">🧬 Forensic Bottleneck Radar Methodology (v2.6.12)</div>
+                <div class="card-label" style="color:var(--accent)">🧬 Forensic Bottleneck Radar Methodology (v3.3.4)</div>
                 <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem">The Radar provides a <strong>weighted distribution</strong> of cluster-wide wait times across all analyzed operations. It is designed to identify the primary resource bottleneck (e.g., are we CPU-bound or Concurrency-bound?).</p>
                 <table style="margin-top:1.5rem; width:100%; table-layout: auto">
                     <thead><tr><th style="width:160px">RADAR SEGMENT</th><th style="width:250px">RAW LOG FIELD(S)</th><th>TECHNICAL BOTTLENECK CONTEXT</th></tr></thead>
                     <tbody>
-                        <tr><td style="font-weight:700; color:#3B82F6">I/O Wait</td><td><code>attr.locks.StorageWait</code></td><td>Time spent waiting for the physical disk subsystem (paging, journal commits, or cold-cache reads).</td></tr>
-                        <tr><td style="font-weight:700; color:#10B981">CPU Time</td><td><code>Derived Delta</code></td><td>The <em>True Execution Time</em> where the thread was active. Calculated as <code style="font-size:0.75rem">Duration - (Sum of all wait components)</code>.</td></tr>
-                        <tr><td style="font-weight:700; color:#F59E0B">Storage Wait</td><td><code>Cumulative Storage wait</code></td><td>High-level storage engine throttling, flow control, or metadata synchronization delays.</td></tr>
-                        <tr><td style="font-weight:700; color:#EF4444">Oplog Slot Wait</td><td><code>totalOplogSlotDurationMicros</code></td><td>A <strong>write-concurrency bottleneck</strong>. Occurs during high-throughput writes as operations wait for a slot in the oplog.</td></tr>
-                        <tr><td style="font-weight:700; color:#EC4899">Queue Wait</td><td><code>totalTimeQueuedMicros</code></td><td><strong>Admission Control Bottleneck</strong>. Time spent in the global execution queue waiting for an available execution ticket.</td></tr>
-                        <tr><td style="font-weight:700; color:#8B5CF6">Lock Wait</td><td><code>timeAcquiringMicros</code></td><td>Contention for database, collection, or document-level locks.</td></tr>
+                        <tr><td style="font-weight:700; color:#EC4899">Queued</td><td><code>totalTimeQueuedMicros</code></td><td><strong>Admission Control Pressure</strong>. Thread pool exhaustion. The operation is waiting for an execution ticket/worker thread.</td></tr>
+                        <tr><td style="font-weight:700; color:#8B5CF6">Lock Wait</td><td><code>timeAcquiringMicros</code></td><td><strong>Resource Contention</strong>. Waiting inside execution for logical or physical locks (Database, Collection, or Document level).</td></tr>
+                        <tr><td style="font-weight:700; color:#F59E0B">Flow Control</td><td><code>flowControlMillis</code></td><td><strong>Replication Throttling</strong>. The primary is artificially slowing down writes because secondaries are falling behind (Replica Lag).</td></tr>
+                        <tr><td style="font-weight:700; color:#3B82F6">Storage Wait</td><td><code>Derived: sum(I/O)</code></td><td><strong>Physical I/O Bound</strong>. Time spent in the storage layer (reads, writes, or oplog sync). Defined as <code style="font-size:0.75rem">(read + write + oplog/cache)</code>.</td></tr>
+                        <tr><td style="font-weight:700; color:#EF4444">Oplog Slot</td><td><code>totalOplogSlotDurationMicros</code></td><td><strong>Write-Concurrency Bottleneck</strong>. High-throughput writes competing for a shared oplog serialization slot.</td></tr>
+                        <tr><td style="font-weight:700; color:#10B981">CPU Time</td><td><code>Derived Delta</code></td><td><strong>True Compute</strong>. The <em>Compute Portion</em> where the thread was active. Calculated as <code style="font-size:0.75rem">Duration - (Sum of all wait components)</code>.</td></tr>
                     </tbody>
                 </table>
+                <div class="card" style="border-left:4px solid var(--accent)">
+                    <div class="card-label">🧬 CLINICAL WAIT DIAGNOSIS GUIDE (v3.3.3)</div>
+                    <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:10px">The hierarchy of operation latency in MongoDB Atlas.</p>
+                    <table style="margin-top:15px; font-size:0.8rem">
+                        <thead><tr><th>Hierarchy</th><th>Metric</th><th>Diagnosis</th><th>Remediation</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td style="color:var(--accent)">1. Admission</td>
+                                <td>Tickets (Queued)</td>
+                                <td>Waiting for execution ticket.</td>
+                                <td>Scale tier or optimize slow baseline.</td>
+                            </tr>
+                            <tr>
+                                <td style="color:var(--warn)">2. Contention</td>
+                                <td>Contention (Locks)</td>
+                                <td>Waiting for logical locks.</td>
+                                <td>Check for schema design anti-patterns.</td>
+                            </tr>
+                            <tr>
+                                <td style="color:var(--error)">3. Flow</td>
+                                <td>Replication (Throttling)</td>
+                                <td>Primary-to-Secondary lag sync.</td>
+                                <td>Tune write throughput or secondary size.</td>
+                            </tr>
+                            <tr>
+                                <td style="color:var(--text-secondary)">4. Effort</td>
+                                <td>Storage Wait</td>
+                                <td>Cumulative I/O Effort (Derived)</td>
+                                <td>Storage = Read IO + Write IO + Cache Pressure.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
                 <div style="margin-top:1rem; padding:1rem; background:rgba(255,255,255,0.03); border-radius:8px; border-left:4px solid var(--accent)">
                     <div class="card-label" style="font-size:0.7rem; color:var(--text-secondary)">CALCULATION ENGINE</div>
                     <div style="font-size:0.85rem; color:var(--text-primary); margin-top:0.4rem">Percentage = <code>(Σ Component_Value / Σ Total_Cluster_Wait) * 100</code></div>

@@ -19,8 +19,9 @@ from rich import print as rprint
 console = Console(stderr=True)
 
 """
-logpeck: cli.py
+logpeck: cli.py (v3.3.4)
 The unified command-line interface for MongoDB log forensics.
+Featuring wait-hierarchy analysis and clinical mutation diagnostics.
 """
 
 def format_forensic_entry(entry):
@@ -168,7 +169,11 @@ def print_forensic_table(summary):
     console.print(table)
 
 def main():
-    parser = argparse.ArgumentParser(description=f"High-fidelity MongoDB Log Forensics (v{VERSION})")
+    parser = argparse.ArgumentParser(
+        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v3.3.4)\n"
+                    "Hardened observability with Ticket/Lock/Repl wait-hierarchy logic and Clinical Mutation diagnostics.",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--version", action="version", version=f"logpeck v{VERSION}")
     subparsers = parser.add_subparsers(dest="command", help="Pecker sub-commands")
 

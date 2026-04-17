@@ -4,6 +4,21 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 
 ---
 
+## [4.3.0] - 2026-04-17
+### Hardened
+- **Error Soundness**: Implemented Unified Error Triage in `analyzer.py` to provide a distinct union of system and application failures, preventing double-counting while capturing infrastructure anomalies.
+- **Clinical Intelligence**: Formalized the `OPTIMAL` status for healthy query shapes with peak performance metrics (Efficiency < 1.1, Storage < 10%).
+- **Taxonomy Refinement**: Optimized diagnostic labeling in `rules.json` by treating "Workload" as the implicit default and reserving `[TRACE]` for max-sample deep-dives.
+- **Documentation**: Integrated the Forensic Color Philosophy and Clinical Threshold Matrix into the dashboard Reference tab and design specification.
+
+## [4.2.0] - 2026-04-17
+### Hardened
+- **Forensic Storage Engine**: Implemented cumulative storage intensity calculation including Reads, Writes, Cache waits, and Oplog slot duration.
+- **Diagnostic Logic**: Resolved "False Optimal" reporting for highly I/O bound queries by ensuring full telemetry harvesting from modern logs.
+- **Standardized Prefixes**: Applied `[TRACE]` (Structural/Pathogen) and `[WORKLOAD]` (Environmental/Victim) prefixes to all diagnostic rules for cleaner forensic triage.
+- **Clinical Reporting**: Updated clinical status fallback from "OPTIMAL" to "N/A" to accurately reflect diagnostic coverage limits.
+- **Regression Suite**: Added `tests/io_bound_regression.log` and automated verification script to maintain diagnostic integrity.
+
 ## [2.7.0] - 2026-04-14
 
 ### 🚀 Major Milestone: Forensic Engine Stabilization

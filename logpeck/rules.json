@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "4.3.0",
   "description": "LogPeck Master Diagnostic Rules - Expert Forensic Edition",
   "rules": [
     {
@@ -9,7 +9,7 @@
       "technical_path": "attr.planSummary",
       "op": "contains",
       "value": "COLLSCAN",
-      "label": "🚨 COLLSCAN (Missing Index)",
+      "label": "🚨 [TRACE] COLLSCAN (Missing Index)",
       "severity": "critical",
       "description": "Targeted collection has no index for this query shape. MongoDB must scan every document to satisfy the result set, causing massive CPU and I/O overhead."
     },
@@ -19,7 +19,7 @@
       "field": "plan_summary",
       "technical_path": "attr.planSummary (SCAN + SORT check)",
       "condition": "SORT in plan_summary and IXSCAN not in plan_summary",
-      "label": "🚨 In-Memory Sort",
+      "label": "🚨 [TRACE] In-Memory Sort",
       "severity": "critical",
       "description": "Result set was sorted in memory without the help of an index. This is extremely slow for large datasets and carries a high risk of 'Sort exceeded memory limit' errors."
     },
@@ -53,8 +53,12 @@
       "technical_path": "attr.keysExamined / attr.nreturned",
       "threshold": 100,
       "min_numerator": 1000,
-      "exclude_ops": ["aggregate", "count", "distinct"],
-      "label": "⚠️ Inefficient Index (Ratio: {value:.0f}:1)",
+      "exclude_ops": [
+        "aggregate",
+        "count",
+        "distinct"
+      ],
+      "label": "⚠️ [TRACE] Inefficient Index (Ratio: {value:.0f}:1)",
       "severity": "warning",
       "description": "The index used for this query is not selective enough. MongoDB is scanning many index keys to return very few documents, indicating suboptimal index field ordering."
     },
@@ -111,8 +115,12 @@
       "technical_path": "attr.keysExamined / attr.nreturned",
       "threshold": 500,
       "min_numerator": 1000,
-      "include_ops": ["aggregate", "count", "distinct"],
-      "label": "📉 REDUCTION PIPELINE (Ratio: {value:.0f}:1)",
+      "include_ops": [
+        "aggregate",
+        "count",
+        "distinct"
+      ],
+      "label": "📉 [TRACE] REDUCTION PIPELINE (Ratio: {value:.0f}:1)",
       "severity": "info",
       "description": "Stage-heavy aggregation that examines many documents in early stages before collapsing into few results. Often indicates a missing or late $match stage."
     },
@@ -161,7 +169,6 @@
       "severity": "critical",
       "description": "Significant ticket queueing detected. The query spent most of its life waiting for an available execution slot, indicating the cluster has reached its concurrency limit."
     },
-
     {
       "id": "QUERY_TIMEOUT",
       "type": "threshold",
@@ -180,7 +187,9 @@
       "denominator": "total_ms",
       "technical_path": "attr.workingMillis / attr.durationMillis (Atlas Search mongot waiting)",
       "threshold": 0.7,
-      "include_ops": ["aggregate"],
+      "include_ops": [
+        "aggregate"
+      ],
       "label": "🚨 SEARCH BOTTLENECK ({value:.0f}%)",
       "severity": "critical",
       "description": "Atlas Search bottleneck. The database engine spent over 70% of its time waiting for results from the 'mongot' search process."
@@ -323,7 +332,10 @@
       "field": "error_code",
       "technical_path": "attr.errCode: 189 | 11602 | Stepdown",
       "op": "in",
-      "value": [189, 11602],
+      "value": [
+        189,
+        11602
+      ],
       "label": "🚨 PRIMARY STEPDOWN",
       "severity": "warning",
       "description": "Operation was interrupted because the primary node stepped down to a secondary state. Check for cluster elections or maintenance."
@@ -349,6 +361,28 @@
       "label": "🚨 TRANSACTION TIMEOUT",
       "severity": "warning",
       "description": "The transaction or operation exceeded the allotted time limit (maxTimeMS or transaction lifetime). Verify timeout settings."
+    },
+    {
+      "id": "CACHE_POISONING",
+      "type": "threshold",
+      "field": "cache_pressure",
+      "technical_path": "attr.storage.data.txnBytesDirty",
+      "op": "gt",
+      "value": 100,
+      "label": "🚨 [TRACE] CACHE POISONING (>100 MB)",
+      "severity": "critical",
+      "description": "The transaction dirtied a massive amount of WiredTiger cache memory. This can severely degrade global cluster performance by forcing aggressive evictions."
+    },
+    {
+      "id": "INDEX_AMPLIFICATION",
+      "type": "threshold",
+      "field": "ins_amp",
+      "technical_path": "attr.keysInserted / attr.ninserted",
+      "op": "gt",
+      "value": 1000,
+      "label": "🚨 INDEX AMPLIFICATION",
+      "severity": "warning",
+      "description": "Massive index amplification detected. A single document mutation generated over 1,000 index keys, usually indicating an uncontrolled Multikey (Array) Index."
     }
   ]
 }
