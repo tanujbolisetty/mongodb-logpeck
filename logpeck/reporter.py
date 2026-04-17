@@ -98,13 +98,18 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         timeout_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{t_ts}</td><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td><td><span class='tag-critical'>{t_count}</span></td><td style='font-size:0.75rem'>{t_avg}</td><td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td><td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td><td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td><td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td><td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td><td style='font-size:0.7rem;color:var(--text-secondary)'>IP: {t.get('remote', 'N/A')}<br>Ctx: {t.get('ctx', 'N/A')}</td></tr>"
     timeout_table_html += "</tbody></table>"
     
-    tier_buttons_html = '<button class="badge" style="cursor:pointer; border:1px solid var(--border); background:#1e293b" onclick="filterByTier(0)">ALL</button>'
-    active_tiers = stats.get("active_latency_tiers", [])
-    # Only show up to 3 most relevant tiers to avoid clutter
-    for t in active_tiers[-3:]:
-        label = format_duration(t) + "+"
-        color = "var(--warn)" if t < 1000 else ("#EA580C" if t < 5000 else "var(--error)")
-        tier_buttons_html += f'<button class="badge" style="cursor:pointer; border:1px solid {color}44; color:{color}" onclick="filterByTier({t})">{label}</button>'
+    def generate_tier_buttons(table_id):
+        buttons = f'<button class="badge" style="cursor:pointer; border:1px solid var(--border); background:#1e293b" onclick="filterByTier(0, \'{table_id}\')">ALL</button>'
+        active_tiers = stats.get("active_latency_tiers", [])
+        # Only show up to 3 most relevant tiers to avoid clutter
+        for t in active_tiers[-3:]:
+            label = format_duration(t) + "+"
+            color = "var(--warn)" if t < 1000 else ("#EA580C" if t < 5000 else "var(--error)")
+            buttons += f'<button class="badge" style="cursor:pointer; border:1px solid {color}44; color:{color}" onclick="filterByTier({t}, \'{table_id}\')">{label}</button>'
+        return buttons
+
+    slow_tier_buttons_html = generate_tier_buttons("slowTable")
+    system_tier_buttons_html = generate_tier_buttons("systemTable")
 
     conn_summary_html = f'''
         <div class="card"><div class="card-label">Total Connections</div><div class="card-value">{conn.get('total_connections', 0):,}</div></div>
@@ -383,10 +388,18 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 forensic_grid = f"""<div class="comparison-grid" style="margin-top:3rem; {grid_style}">{l_col}{r_col}</div>"""
 
             rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:2rem; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
                     <div style="flex:1">
                         <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
                         <div style="color:{'var(--text-secondary)' if row.get('query_shape_hash') == 'N/A' else 'var(--accent)'}; font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
+                    </div>
+                    <div style="width:100px">
+                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
+                        <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
+                    </div>
+                    <div style="width:120px">
+                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE KEY</div>
+                        <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
                     </div>
                     {schema_col}
                 </div>
@@ -589,6 +602,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     <div id="system" class="tab-content">
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
             <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Forensic search of background tasks, heartbeats, and admin commands..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
+            <div style="display:flex; gap:0.5rem">
+                {system_tier_buttons_html}
+            </div>
             <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
         </div>
         <div id="systemContent">
@@ -660,7 +676,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
             <input type="text" id="slowSearch" onkeyup="filterRows('slowSearch', 'slowTable')" placeholder="🔍 Search by namespace, op, app, or hash..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
             <div style="display:flex; gap:0.5rem">
-                {tier_buttons_html}
+                {slow_tier_buttons_html}
             </div>
             <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
         </div>
@@ -893,8 +909,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
             }}
         }}
-        function filterByTier(minMs) {{
-            document.querySelectorAll('#slowTable .row-main').forEach(row => {{
+        function filterByTier(minMs, tableId) {{
+            document.querySelectorAll('#' + tableId + ' .row-main').forEach(row => {{
                 const maxMsText = row.cells[3].textContent;
                 const ms = parseFloat(maxMsText) * (maxMsText.includes('s') && !maxMsText.includes('ms') ? 1000 : 1);
                 const matches = ms >= minMs;

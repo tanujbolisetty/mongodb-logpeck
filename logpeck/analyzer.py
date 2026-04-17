@@ -525,7 +525,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                                 "total_ninserted":0, "total_nModified":0, "total_ndeleted":0, "total_nMatched":0, "total_upserted": 0,
                                 "total_keysInserted":0, "total_keysUpdated":0, "total_keysDeleted":0,
                                 "total_txn_bytes_dirty":0, "total_mongot_wait_ms":0, "total_storage_read_micros":0,
-                                "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set()
+                                "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set(),
+                                "query_hash": "N/A", "plan_cache_key": "N/A"
                             }
                         
                         s_o = target_stats[h]; s_o["count"] += 1; s_o["total_ms"] += duration
@@ -593,6 +594,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int =
                         
                         if s_o["max_example_raw"] is None or duration > s_o["max_ms"]:
                             s_o["max_ms"] = duration; s_o["max_example_raw"] = str(entry).strip(); s_o["max_peek_attr"] = attr
+                            s_o["query_hash"] = metrics.get("query_hash", "N/A")
+                            s_o["plan_cache_key"] = metrics.get("plan_cache_key", "N/A")
                             s_o["max_wait_metrics"] = {
                                 "Planning": waits.get("planning", 0), 
                                 "Storage": io_ms, 
@@ -905,7 +908,9 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "doc_mut": doc_mut,
             "has_read_forensics": 1 if (s_docs_ex > 0 or s_keys_ex > 0) else 0,
             "has_write_forensics": 1 if doc_mut > 0 else 0,
-            "is_system": q.get("is_system", 0)
+            "is_system": q.get("is_system", 0),
+            "query_hash": q.get("query_hash", "N/A"),
+            "plan_cache_key": q.get("plan_cache_key", "N/A")
         }
         
         for rule in rules:
@@ -952,6 +957,8 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "plan_summary": str(max_d.get("plan_summary", "N/A")),
             # 🏺 Web Drill-Down Metadata (Mandatory Contract)
             "query_shape_hash": str(q.get("query_shape_hash", "N/A")),
+            "query_hash": str(q.get("query_hash", "N/A")),
+            "plan_cache_key": str(q.get("plan_cache_key", "N/A")),
             "query_schema": max_d.get("query_schema", []),
             "max_ts": max_ts,
             "min_ts": min_ts,

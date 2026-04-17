@@ -501,6 +501,8 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
     metrics = {
         "ms": ms, "ns": ns, "op": op, "query_shape_hash": q_hash,
+        "query_hash": attr.get("queryHash") or entry.get("queryHash") or "N/A",
+        "plan_cache_key": attr.get("planCacheKey") or entry.get("planCacheKey") or "N/A",
         "query_schema": extract_query_schema(schema_cmd, schema_op),
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
