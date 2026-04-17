@@ -157,3 +157,15 @@ The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation
 ## 📑 9. Documentation Lifecycle
 - **Authoritative Registry**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py)
 - **Synchronicity Gate**: All architectural modifications to the stitching, routing, or error resolution logic in `analyzer.py` **MUST** be reflected in this specification prior to version release.
+
+---
+
+## 🧪 10. Forensic Clinical Ratios (v3.3.0)
+The engine provides a "Derived Insight" layer to automate the identification of physical storage and indexing inefficiencies.
+
+| Metric | Formula | Forensic Significance |
+| :--- | :--- | :--- |
+| **Scan Efficiency** | `docsExamined / nreturned` | Measures document scan waste. Values > 1000 signal a critical collection scan or poor index filtering. |
+| **Index Selectivity** | `keysExamined / nreturned` | Measures index cardinality. High values suggest the index is too broad (e.g., boolean index) for the query workload. |
+| **Fetch Amplification** | `docsExamined / keysExamined` | Ratio of data scanning to index usage. Values > 2 indicate 'Document Bloat' where the engine fetches large documents that don't match the final criteria. |
+| **Write Amplification** | `Mutated Keys / Modified Docs` | Measures the secondary I/O cost of writes. High amplification suggests the collection is over-indexed, causing disk I/O pressure on every insert/update. |

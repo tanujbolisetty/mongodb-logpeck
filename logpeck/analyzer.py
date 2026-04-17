@@ -763,6 +763,23 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         max_ts, max_attr = _get_ts_and_attr(max_entry)
         min_ts, min_attr = _get_ts_and_attr(min_entry)
 
+        # 🧪 Clinical Insights (v3.3.0)
+        n_returned = q.get("total_nreturned", 0)
+        docs_ex = q.get("total_docs_examined", 0)
+        keys_ex = q.get("total_keys_examined", 0)
+        n_modified = q.get("total_nModified", 0)
+        keys_mut = q.get("total_keys_inserted", 0) + q.get("total_keys_deleted", 0) + q.get("total_keys_updated", 0)
+
+        stats = {
+            "load_pct": round(q["total_active_ms"] / sum_total_active * 100, 1),
+            "avg_ms": round(q["total_ms"] / q["count"], 2),
+            "aas": round(q["total_active_ms"] / (max(log_dur_sec, 1) * 1000), 3),
+            "scan_efficiency": round(docs_ex / n_returned, 1) if n_returned > 0 else (docs_ex if docs_ex > 0 else 0),
+            "index_selectivity": round(keys_ex / n_returned, 1) if n_returned > 0 else (keys_ex if keys_ex > 0 else 0),
+            "fetch_amplification": round(docs_ex / keys_ex, 1) if keys_ex > 0 else (docs_ex if docs_ex > 0 else 0),
+            "write_amplification": round(keys_mut / n_modified, 1) if n_modified > 0 else (keys_mut if keys_mut > 0 else 0),
+        }
+
         eval_data = {
             **q, "avg_ms": q["total_ms"]/q["count"], 
             "keysExamined": max_d.get("forensic", {}).get("keysExamined", 0),
@@ -794,8 +811,12 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "min_time": int(q["min_ms"]) if q["min_ms"] != float('inf') else 0,
             "count": q["count"], 
             "total_ms": q["total_ms"],
-            "load_pct": round((q["total_active_ms"]/sum_total_active)*100, 1),
-            "aas_load": round(q["total_active_ms"]/(max(log_dur_sec, 1)*1000), 2),
+            "load_pct": stats["load_pct"],
+            "aas_load": stats["aas"],
+            "scan_efficiency": stats["scan_efficiency"],
+            "index_selectivity": stats["index_selectivity"],
+            "fetch_amplification": stats["fetch_amplification"],
+            "write_amplification": stats["write_amplification"],
             "diagnostic_tags": tags if tags else [{"label": "BALANCED", "severity": "success"}],
             "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "unknown",
             "plan_summary": str(max_d.get("plan_summary", "N/A")),

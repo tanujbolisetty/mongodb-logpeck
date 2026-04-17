@@ -148,6 +148,34 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             wave_html = "".join([f'<div style="width:{(dist.get(t, 0)/total_d)*100}%; background:{t_colors[j]}; height:100%"></div>' for j, t in enumerate(tiers) if (dist.get(t, 0)/total_d)*100 > 0])
             legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+</div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
             
+            def render_clinical_insights(row_data):
+                insights = []
+                
+                # Formula thresholds per clinical feedback
+                # SE: docsExamined / nreturned (> 1000 is critical)
+                se = row_data.get("scan_efficiency", 0)
+                se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
+                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / RETURNED</div></div>')
+
+                # IS: keysExamined / nreturned (> 10 indicates poor selectivity)
+                is_sel = row_data.get("index_selectivity", 0)
+                is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
+                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / RETURNED</div></div>')
+
+                # FA: docsExamined / keysExamined (> 2 indicates document bloat vs index coverage)
+                fa = row_data.get("fetch_amplification", 0)
+                fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
+                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS</div></div>')
+
+                # WA: Mutated Keys / Modified Doc (> 10 indicates index heavy workload)
+                wa = row_data.get("write_amplification", 0)
+                wa_clr = "var(--tier1)" if wa < 8 else ("#fbbf24" if wa < 20 else "var(--error)")
+                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">WRITE AMPLIFICATION</div><div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">INDEX MUT / DOC MUT</div></div>')
+
+                return f'<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1rem; margin-top:2rem">{"".join(insights)}</div>'
+
+            insights_html = render_clinical_insights(row)
+            
             def render_f_row(k, d1, d2, force_show=False):
                 v1, v2 = d1.get(k, 0), d2.get(k, 0)
                 
@@ -279,6 +307,10 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
                 <div class="dist-bar" style="height:26px">{wave_html}</div>
                 <div class="legend-grid" style="margin-top:0.8rem">{legend_html}</div>
+                
+                <div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem; margin-top:3rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> 🧪 CLINICAL INSIGHTS</div>
+                {insights_html}
+
                 {forensic_grid}
                 <div class="comparison-grid" style="margin-top:3rem; grid-template-columns: 1fr 1fr;">
                     <div>
@@ -614,7 +646,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                     <thead><tr><th style="width:120px">METRIC</th><th>DEFINITION & DERIVATION</th></tr></thead>
                     <tbody>
                         <tr><td style="font-weight:700">Load<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(AAS)</span></td><td><strong style="color:var(--text-primary)">Average Active Sessions.</strong> Derived as <code style="font-family:'JetBrains Mono', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">Shape Latency / Wall-Clock Duration</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Describes the 'resource pressure'. A load of 1.0 means this query type occupies 1 full CPU core's capacity on average during the log window.</span></td></tr>
-                        <tr><td style="font-weight:700">Impact<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(%)</span></td><td><strong style="color:var(--text-primary)">Global Cluster Impact.</strong> Derived as <code style="font-family:'JetBrains Mono', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Query Active Time / Global Cluster Active Time) * 100</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Provides a unified view of resource consumption. Higher % = the query is a dominant contributor to total cluster load across ALL tabs (Business + System + Failure).</span></td></tr>
+                        <tr><td style="font-weight:700">Impact<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(%)</span></td><td><strong style="color:var(--text-primary)">Global Cluster Impact.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Query Active Time / Global Cluster Active Time) * 100</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Provides a unified view of resource consumption. Higher % = the query is a dominant contributor to total cluster load across ALL tabs (Business + System + Failure).</span></td></tr>
+                        <tr><td style="font-weight:700">Scan<br>Efficiency</td><td><strong style="color:var(--text-primary)">Inspection Ratio.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">docsExamined / nreturned</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Ideally close to 1.0. High ratios (> 1000) confirm the query is performing expensive collections scans rather than targeted index lookups.</span></td></tr>
+                        <tr><td style="font-weight:700">Write<br>Amplification</td><td><strong style="color:var(--text-primary)">Mutation Overhead.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(keysInserted + keysDeleted + keysUpdated) / nModified</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Measures the cost of each document update in terms of index maintenance. Use this to identify over-indexed collections.</span></td></tr>
                     </tbody>
                 </table>
             </div>

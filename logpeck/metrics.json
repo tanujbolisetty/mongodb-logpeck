@@ -131,9 +131,9 @@
       "label": "Unified Storage I/O (ms)",
       "category": "💾 STORAGE WAIT",
       "unit": "ms",
-      "source": "Cumulative I/O Effort",
+      "source": "Derived: read + write + oplog",
       "markers": ["storage_wait"],
-      "description": "Combined time spent on storage engine I/O tasks."
+      "description": "Total storage effort. Calculated as: (timeReadingMicros + timeWritingMicros + totalOplogSlotDurationMicros) / 1000."
     },
     {
       "id": "totalOplogSlotDurationMicros",
@@ -260,6 +260,42 @@
       "source": "attr.prepareReadConflictMillis",
       "markers": ["prepareReadConflictMillis"],
       "description": "Time spent waiting for a consistent snapshot of the data."
+    },
+    {
+      "id": "scan_efficiency",
+      "label": "Scan Efficiency",
+      "category": "🧪 CLINICAL INSIGHTS",
+      "unit": "ratio",
+      "source": "Derived: docsExamined / nreturned",
+      "markers": [],
+      "description": "Measures how many documents were scanned to find one result. > 1000 signals poor index usage."
+    },
+    {
+      "id": "index_selectivity",
+      "label": "Index Selectivity",
+      "category": "🧪 CLINICAL INSIGHTS",
+      "unit": "ratio",
+      "source": "Derived: keysExamined / nreturned",
+      "markers": [],
+      "description": "Measures index cardinality. High ratios indicate the index is not specific enough for the query."
+    },
+    {
+      "id": "fetch_amplification",
+      "label": "Fetch Amplification",
+      "category": "🧪 CLINICAL INSIGHTS",
+      "unit": "ratio",
+      "source": "Derived: docsExamined / keysExamined",
+      "markers": [],
+      "description": "Ratio of document scans to index scans. Higher values indicate 'Large Document' fetches vs index coverage."
+    },
+    {
+      "id": "write_amplification",
+      "label": "Write Amplification",
+      "category": "🧪 CLINICAL INSIGHTS",
+      "unit": "ratio",
+      "source": "Derived: (keysInserted + keysDeleted + keysUpdated) / nModified",
+      "markers": [],
+      "description": "Measures index mutation pressure. High values indicate many indexes are updated per document write."
     }
   ]
 }
