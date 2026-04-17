@@ -168,4 +168,4 @@ The engine provides a "Derived Insight" layer to automate the identification of 
 | **Scan Efficiency** | `docsExamined / nreturned` | Measures document scan waste. Values > 1000 signal a critical collection scan or poor index filtering. |
 | **Index Selectivity** | `keysExamined / nreturned` | Measures index cardinality. High values suggest the index is too broad (e.g., boolean index) for the query workload. |
 | **Fetch Amplification** | `docsExamined / keysExamined` | Ratio of data scanning to index usage. Values > 2 indicate 'Document Bloat' where the engine fetches large documents that don't match the final criteria. |
-| **Write Amplification** | `Mutated Keys / Modified Docs` | Measures the secondary I/O cost of writes. High amplification suggests the collection is over-indexed, causing disk I/O pressure on every insert/update. |
+| **Workload Amplification** | `keyMutations / docMutations` | Measures the secondary I/O cost of writes. Calculated as `(keysInserted+Deleted+Updated) / (ninserted+Modified+deleted+upserted)`. Ratios > 10.0 suggest the collection is over-indexed, causing disk I/O pressure on every insert/update. |

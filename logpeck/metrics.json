@@ -289,13 +289,13 @@
       "description": "Ratio of document scans to index scans. Higher values indicate 'Large Document' fetches vs index coverage."
     },
     {
-      "id": "write_amplification",
-      "label": "Write Amplification",
+      "id": "workload_amplification",
+      "label": "Workload Amplification",
       "category": "🧪 CLINICAL INSIGHTS",
       "unit": "ratio",
-      "source": "Derived: (keysInserted + keysDeleted + keysUpdated) / nModified",
+      "source": "Derived: (Index Mut) / (Doc Mut)",
       "markers": [],
-      "description": "Measures index mutation pressure. High values indicate many indexes are updated per document write."
+      "description": "Measures index maintenance cost. Calculated as: (keysInserted+Deleted+Updated) / (ninserted+Modified+deleted+upserted). > 10x signals over-indexing."
     }
   ]
 }

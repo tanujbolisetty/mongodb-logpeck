@@ -763,13 +763,25 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         max_ts, max_attr = _get_ts_and_attr(max_entry)
         min_ts, min_attr = _get_ts_and_attr(min_entry)
 
-        # 🧪 Clinical Insights (v3.3.0)
+        # 🧪 Clinical Insights (v3.3.1)
+        # Ratios that signal specific performance anti-patterns
         n_returned = q.get("total_nreturned", 0)
         docs_ex = q.get("total_docs_examined", 0)
         keys_ex = q.get("total_keys_examined", 0)
-        n_modified = q.get("total_nModified", 0)
-        keys_mut = q.get("total_keys_inserted", 0) + q.get("total_keys_deleted", 0) + q.get("total_keys_updated", 0)
+        
+        # 🖋️ Mutation Precision: Document changes vs Index changes
+        n_ins = q.get("total_ninserted", 0)
+        n_mod = q.get("total_nModified", 0)
+        n_del = q.get("total_ndeleted", 0)
+        n_upsert = q.get("total_upserted_count", q.get("total_upserted", 0)) # handle both formats
+        doc_mut = n_ins + n_mod + n_del + (n_upsert if isinstance(n_upsert, int) else 0)
 
+        k_ins = q.get("total_keysInserted", 0)
+        k_upd = q.get("total_keysUpdated", 0)
+        k_del = q.get("total_keysDeleted", 0)
+        key_mut = k_ins + k_upd + k_del
+
+        # 🦒 Clinical Ratio Logic with Division-by-Zero Safety
         stats = {
             "load_pct": round(q["total_active_ms"] / sum_total_active * 100, 1),
             "avg_ms": round(q["total_ms"] / q["count"], 2),
@@ -777,7 +789,11 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "scan_efficiency": round(docs_ex / n_returned, 1) if n_returned > 0 else (docs_ex if docs_ex > 0 else 0),
             "index_selectivity": round(keys_ex / n_returned, 1) if n_returned > 0 else (keys_ex if keys_ex > 0 else 0),
             "fetch_amplification": round(docs_ex / keys_ex, 1) if keys_ex > 0 else (docs_ex if docs_ex > 0 else 0),
-            "write_amplification": round(keys_mut / n_modified, 1) if n_modified > 0 else (keys_mut if keys_mut > 0 else 0),
+            "workload_amplification": round(key_mut / doc_mut, 1) if doc_mut > 0 else (key_mut if key_mut > 0 else 0),
+            # Grannular Splits (v3.3.1)
+            "ins_amp": round(k_ins / n_ins, 1) if n_ins > 0 else 0,
+            "upd_amp": round(k_upd / n_mod, 1) if n_mod > 0 else 0,
+            "del_amp": round(k_del / n_del, 1) if n_del > 0 else 0
         }
 
         eval_data = {
@@ -816,7 +832,10 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "scan_efficiency": stats["scan_efficiency"],
             "index_selectivity": stats["index_selectivity"],
             "fetch_amplification": stats["fetch_amplification"],
-            "write_amplification": stats["write_amplification"],
+            "workload_amplification": stats["workload_amplification"],
+            "ins_amp": stats["ins_amp"],
+            "upd_amp": stats["upd_amp"],
+            "del_amp": stats["del_amp"],
             "diagnostic_tags": tags if tags else [{"label": "BALANCED", "severity": "success"}],
             "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "unknown",
             "plan_summary": str(max_d.get("plan_summary", "N/A")),

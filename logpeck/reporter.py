@@ -165,12 +165,23 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 # FA: docsExamined / keysExamined (> 2 indicates document bloat vs index coverage)
                 fa = row_data.get("fetch_amplification", 0)
                 fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
-                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS</div></div>')
+                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS</div></div>')
 
-                # WA: Mutated Keys / Modified Doc (> 10 indicates index heavy workload)
-                wa = row_data.get("write_amplification", 0)
-                wa_clr = "var(--tier1)" if wa < 8 else ("#fbbf24" if wa < 20 else "var(--error)")
-                insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">WRITE AMPLIFICATION</div><div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">INDEX MUT / DOC MUT</div></div>')
+                # WA: Mutated Keys / Total Doc Mutations (> 10 indicates index heavy workload)
+                wa = row_data.get("workload_amplification", 0)
+                wa_clr = "var(--tier1)" if wa < 5 else ("#fbbf24" if wa < 10 else "var(--error)")
+                ins_a, upd_a, del_a = row_data.get("ins_amp", 0), row_data.get("upd_amp", 0), row_data.get("del_amp", 0)
+                
+                insights.append(f'''
+                <div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}">
+                    <div class="card-label" style="font-size:0.6rem; opacity:0.6">WORKLOAD AMPLIFICATION</div>
+                    <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
+                    <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
+                        <span>ins:{ins_a:,.1f}</span>
+                        <span>upd:{upd_a:,.1f}</span>
+                        <span>del:{del_a:,.1f}</span>
+                    </div>
+                </div>''')
 
                 return f'<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1rem; margin-top:2rem">{"".join(insights)}</div>'
 
@@ -648,7 +659,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                         <tr><td style="font-weight:700">Load<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(AAS)</span></td><td><strong style="color:var(--text-primary)">Average Active Sessions.</strong> Derived as <code style="font-family:'JetBrains Mono', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">Shape Latency / Wall-Clock Duration</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Describes the 'resource pressure'. A load of 1.0 means this query type occupies 1 full CPU core's capacity on average during the log window.</span></td></tr>
                         <tr><td style="font-weight:700">Impact<br><span style="color:var(--text-secondary);font-weight:normal;font-size:0.85rem">(%)</span></td><td><strong style="color:var(--text-primary)">Global Cluster Impact.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Query Active Time / Global Cluster Active Time) * 100</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Provides a unified view of resource consumption. Higher % = the query is a dominant contributor to total cluster load across ALL tabs (Business + System + Failure).</span></td></tr>
                         <tr><td style="font-weight:700">Scan<br>Efficiency</td><td><strong style="color:var(--text-primary)">Inspection Ratio.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">docsExamined / nreturned</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Ideally close to 1.0. High ratios (> 1000) confirm the query is performing expensive collections scans rather than targeted index lookups.</span></td></tr>
-                        <tr><td style="font-weight:700">Write<br>Amplification</td><td><strong style="color:var(--text-primary)">Mutation Overhead.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(keysInserted + keysDeleted + keysUpdated) / nModified</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Measures the cost of each document update in terms of index maintenance. Use this to identify over-indexed collections.</span></td></tr>
+                        <tr><td style="font-weight:700">Workload<br>Amplification</td><td><strong style="color:var(--text-primary)">Mutation Overhead.</strong> Derived as <code style="font-family:\'JetBrains Mono\', monospace;background:rgba(0,0,0,0.2);padding:0.2rem 0.4rem;border-radius:4px">(Index Mutations) / (Document Mutations)</code>.<br><span style="color:var(--text-secondary);font-size:0.85rem;display:block;margin-top:0.6rem">Measures the I/O cost of each write. Calculated using (keysInserted+Deleted+Updated) vs (ninserted+Modified+deleted+upserted). Ratios > 10.0 signal the collection is over-indexed for the write workload.</span></td></tr>
                     </tbody>
                 </table>
             </div>
