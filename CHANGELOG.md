@@ -4,6 +4,10 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 
 ---
 
+## [4.3.1] - 2026-04-17
+### Fixed
+- **Forensic Honesty**: Restricted the `OPTIMAL` clinical status to only apply when measurable forensic data (Read/Write metrics) is present, preventing false positives for indeterminate or sparse query shapes.
+
 ## [4.3.0] - 2026-04-17
 ### Hardened
 - **Error Soundness**: Implemented Unified Error Triage in `analyzer.py` to provide a distinct union of system and application failures, preventing double-counting while capturing infrastructure anomalies.

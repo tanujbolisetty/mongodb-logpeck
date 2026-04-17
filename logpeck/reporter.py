@@ -234,8 +234,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                         isel = row_data.get("index_selectivity", 0)
                         si = row_data.get("storage_intensity", 0)
                         
-                        # A query is considered OPTIMAL if it is perfectly indexed and not storage bound
-                        if (se <= 1.1 and isel <= 1.1 and si < 10.0):
+                        # A query is considered OPTIMAL only if we have forensic data AND it is perfectly indexed
+                        has_forensics = row_data.get("has_read_forensics") or row_data.get("has_write_forensics")
+                        if has_forensics and (se <= 1.1 and isel <= 1.1 and si < 10.0):
                             is_optimal = True
 
                     if is_optimal:
