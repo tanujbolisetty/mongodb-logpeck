@@ -458,17 +458,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         op = str(metrics.get("op", "unknown"))
                         
                         # 🏷️ Apply Simplified Op/App Names for System Events
-                        if is_system_op:
-                            # Search for the exact pattern to find the simplified name
-                            for pattern, simple_name in SIMPLIFIED_OPS.items():
-                                if pattern in search_space:
-                                    op = simple_name
-                                    metrics["op"] = simple_name
-                                    # Request: Simplify TTL index app name too
-                                    if simple_name == "TTL Index":
-                                        metrics["app_name"] = "TTL Index"
-                                        a_n = "TTL Index" # Ensure aggregated shape uses the same label
-                                    break
+                        if is_system_op and op == "TTL Index":
+                            # Request: Simplify TTL index app name
+                            metrics["app_name"] = "TTL Index"
+                            a_n = "TTL Index" # Ensure aggregated shape uses the same label
                         
                         # 🏷️ Namespace Normalization (v2.7.6)
                         # We only use "N/A" for truly anonymous platform events.

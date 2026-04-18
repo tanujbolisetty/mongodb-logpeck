@@ -217,15 +217,16 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     from .specification import SIMPLIFIED_OPS
     op = str(raw_op).lower() # Default to raw op
 
-    # 🕵️ TTL Index Discovery (v1.3.18)
-    # Identify new-style structural TTL deletions by index metadata and deletion counters.
-    # Refined: Name need not have 'ttl'. Background deletion (no lsid) is the key indicator.
-    if ("numDeleted" in attr or "ndeleted" in attr) and "index" in attr and "lsid" not in attr:
-        raw_op = "TTL Index"
-
     for pattern, simple_name in SIMPLIFIED_OPS.items():
         if pattern.lower() in str(raw_op).lower() or (msg and pattern.lower() in msg.lower()):
             op = simple_name # Preserve case from specification
+
+    # 🕵️ TTL Index Discovery (v1.3.18)
+    # Refined: Move override after loop to ensure background deletions aren't masked by 'delete' pattern.
+    if ("numDeleted" in attr or "ndeleted" in attr) and "index" in attr and "lsid" not in attr:
+        op = "TTL Index"
+
+    # Final Normalization and Transaction Enrichment
     # Final Normalization and Transaction Enrichment
     if is_tx and op.lower() in ["update", "insert", "delete", "findandmodify", "find"]:
         if not op.lower().startswith("tx-"):
