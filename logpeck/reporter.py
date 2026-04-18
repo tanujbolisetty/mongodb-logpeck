@@ -172,19 +172,19 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if docs_ex > 0:
                     se = row_data.get("scan_efficiency", 0)
                     se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT (Worst Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT (Slowest Sample)</div></div>')
 
                 # 2. INDEX SELECTIVITY (Specificity) - Show only if keys were examined
                 if keys_ex > 0:
                     is_sel = row_data.get("index_selectivity", 0)
                     is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT (Worst Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT (Slowest Sample)</div></div>')
 
                 # 3. FETCH AMPLIFICATION (Coverage) - Show if both keys and docs were involved
                 if docs_ex > 0 and keys_ex > 0:
                     fa = row_data.get("fetch_amplification", 0)
                     fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS (Worst Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS (Slowest Sample)</div></div>')
 
                 # 4. INDEX AMPLIFICATION (Mutation Effort) - Show only if mutations occurred
                 if doc_mut > 0:
@@ -210,26 +210,26 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if cp > 0:
                     cp_clr = "var(--tier1)" if cp < 100 else ("#fbbf24" if cp < 500 else "var(--error)")
                     cp_disp = f"{cp:,.1f} MB" if cp < 1024 else f"{cp/1024.0:,.2f} GB"
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {cp_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">CACHE PRESSURE (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{cp_clr}; margin:0.3rem 0">{cp_disp}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DIRTY BYTES IN CACHE</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {cp_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">CACHE PRESSURE (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{cp_clr}; margin:0.3rem 0">{cp_disp}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DIRTY BYTES IN CACHE</div></div>')
 
                 # 6. REPLICATION BACKPRESSURE (Ack/Sync Lag)
                 rb = row_data.get("replication_backpressure", 0)
                 if rb > 0:
                     rb_clr = "var(--tier1)" if rb < 50 else ("#fbbf24" if rb < 200 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {rb_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">REPLICATION BACKPRESSURE (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{rb_clr}; margin:0.3rem 0">{rb:,.0f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">WRITE CONCERN / FLOW WAIT</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {rb_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">REPLICATION BACKPRESSURE (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{rb_clr}; margin:0.3rem 0">{rb:,.0f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">WRITE CONCERN / FLOW WAIT</div></div>')
 
                 # 7. STORAGE INTENSITY (I/O Dominance)
                 si = row_data.get("storage_intensity", 0)
                 if si > 0.1: # Surface all measurable storage activity for transparency
                     si_clr = "var(--tier1)" if si < 30 else ("#fbbf24" if si < 70 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {si_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">STORAGE INTENSITY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{si_clr}; margin:0.3rem 0">{si:,.1f}%</div><div style="font-size:0.6rem; color:var(--text-secondary)">TIME SPENT ON DISK I/O</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {si_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">STORAGE INTENSITY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{si_clr}; margin:0.3rem 0">{si:,.1f}%</div><div style="font-size:0.6rem; color:var(--text-secondary)">TIME SPENT ON DISK I/O</div></div>')
 
                 # 8. SEARCH LATENCY (Atlas Search Backend)
                 sl = row_data.get("search_latency", 0)
                 if sl > 0:
                     sl_clr = "var(--tier1)" if sl < 100 else ("#fbbf24" if sl < 500 else "var(--error)")
                     sl_fmt = f"{sl/1000:,.1f}s" if sl >= 1000 else f"{sl:,.0f}ms"
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend process.">SEARCH LATENCY (Worst Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend process.">SEARCH LATENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT</div></div>')
 
                 if not insights:
                     # 🏥 Clinical Triage: Optimal vs. Unknown
@@ -365,9 +365,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if t_cnt > 0: desc_html = f'🚨 {desc_html}'
                 elif e_cnt > 0: desc_html = f'☢️ {desc_html}'
 
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {row.get('query_hash', 'N/A')} {row.get('plan_cache_key', 'N/A')}</span></td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
             else:
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}</td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {row.get('query_hash', 'N/A')} {row.get('plan_cache_key', 'N/A')}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
             
             schema_col = ""
             if schema_tags:

@@ -186,7 +186,6 @@ def main():
     search_parser = subparsers.add_parser("search", help="Keyword forensic search")
     search_parser.add_argument("--file", required=True, help="Path to mongod.log")
     search_parser.add_argument("--keyword", required=True, help="Search term")
-    search_parser.add_argument("--limit", type=int, default=10)
     search_parser.add_argument("--full", action="store_true", help="Show full query fingerprint")
     search_parser.add_argument("--cards", action="store_true", help="Show individual log cards instead of summary table")
     search_parser.add_argument("--json", action="store_true", help="Output time card in JSON format")
@@ -195,7 +194,6 @@ def main():
     filter_parser = subparsers.add_parser("filter", help="Multidimension forensic filter")
     filter_parser.add_argument("--file", required=True, help="Path to mongod.log")
     filter_parser.add_argument("--filters", required=True, help="JSON filter e.g. '{\"ms\": {\"gt\": 500}}'")
-    filter_parser.add_argument("--limit", type=int, default=10)
     filter_parser.add_argument("--full", action="store_true", help="Show full query fingerprint")
     filter_parser.add_argument("--cards", action="store_true", help="Show individual log cards instead of summary table")
     filter_parser.add_argument("--json", action="store_true", help="Output time card in JSON format")
@@ -204,7 +202,6 @@ def main():
     workload_parser = subparsers.add_parser("workload", help="Analyze business workload hotspots and latency cliffs (excludes system noise)")
     workload_parser.add_argument("--file", required=True, help="Path to mongod.log")
     workload_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
-    workload_parser.add_argument("--limit", type=int, default=10, help="Number of shapes to analyze")
     workload_parser.add_argument("--rules", default=None, help="Path to custom rules.json")
     workload_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
@@ -212,7 +209,6 @@ def main():
     system_workload_parser = subparsers.add_parser("system-workload", help="Analyze system infrastructure forensics (TTL, Oplog, Admin, Indices)")
     system_workload_parser.add_argument("--file", required=True, help="Path to mongod.log")
     system_workload_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
-    system_workload_parser.add_argument("--limit", type=int, default=10, help="Number of shapes to analyze")
     system_workload_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # Command: connections
@@ -226,7 +222,6 @@ def main():
     dashboard_parser.add_argument("--folder", help="Path directory for batch processing")
     dashboard_parser.add_argument("--html", default="output/logpeck_report.html", help="Dashboard output path")
     dashboard_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
-    dashboard_parser.add_argument("--limit", type=int, default=50, help="Max hotspots per tab")
     dashboard_parser.add_argument("--rules", default=None)
 
     args = parser.parse_args()
@@ -370,7 +365,7 @@ def main():
             console.print(f"[dim]Audit completed in {s['analysis_duration']}s. System Health Parity: 100%.[/dim]\n")
 
         elif args.command == "search":
-            results = search_logs(args.file, args.keyword, limit=args.limit)
+            results = search_logs(args.file, args.keyword, limit=500)
             if args.json:
                 forensic_json = [format_forensic_entry(r) for r in results]
                 print(json.dumps(forensic_json, indent=2))
@@ -396,7 +391,7 @@ def main():
             except:
                 raise ValueError("Filters must be a valid JSON string. Example: '{\"ms\": {\"gt\": 500}}'")
             
-            results = filter_logs(args.file, f_obj, limit=args.limit)
+            results = filter_logs(args.file, f_obj, limit=500)
             if args.json:
                 forensic_json = [format_forensic_entry(r) for r in results]
                 print(json.dumps(forensic_json, indent=2))
@@ -417,14 +412,14 @@ def main():
                 print_forensic_table(summary)
 
         elif args.command == "workload":
-            result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, limit=args.limit, rules_path=args.rules)
+            result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, rules_path=args.rules)
             if args.json: print(json.dumps(result["summary"], indent=2)); return
 
             console.print(f"\n[bold yellow]🐢 Business Workload Forensics (v{VERSION})[/bold yellow]")
             print_forensic_table(result["summary"])
 
         elif args.command == "system-workload":
-            result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, limit=args.limit)
+            result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency)
             if args.json: print(json.dumps(result["system_summary"], indent=2)); return
 
             console.print(f"\n[bold cyan]🛠️ System Query Forensics (v{VERSION})[/bold cyan]")
@@ -491,12 +486,12 @@ def main():
                 for f in files:
                     out_html = os.path.join(out_dir, os.path.basename(f) + "_report.html")
                     print(f"🐦 Forensic Sweep: {os.path.basename(f)} ↳ {out_html}", file=sys.stderr)
-                    result = analyze_slow_queries(log_file_path=f, threshold_ms=args.latency, limit=args.limit, rules_path=args.rules)
+                    result = analyze_slow_queries(log_file_path=f, threshold_ms=args.latency, rules_path=args.rules)
                     generate_html_report(result, out_html)
                 print("✅ Batch Forensic Cycle Complete.", file=sys.stderr)
             else:
                 dest = args.html if (os.path.dirname(args.html) or args.html.startswith("/")) else f"output/{args.html}"
-                result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, limit=args.limit, rules_path=args.rules)
+                result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency, rules_path=args.rules)
                 print(f"🐦 Forensic Sweep: {args.file} ↳ {dest}", file=sys.stderr)
                 generate_html_report(result, dest)
                 print("✅ Dashboard Complete.", file=sys.stderr)

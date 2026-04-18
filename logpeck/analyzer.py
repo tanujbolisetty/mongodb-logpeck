@@ -115,7 +115,7 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
     
     return last_ns_cache
 
-def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, limit: int = 20, rules_path: Optional[str] = None) -> Dict[str, Any]:
+def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: Optional[str] = None) -> Dict[str, Any]:
     start_time = time.time(); rules = load_diagnostic_rules(rules_path)
     severity_stats = Counter(); component_stats = Counter(); namespace_stats = Counter(); message_registry = {}
     conn_registry = {}; auth_fail_count = 0; timeout_count = 0; identified_error_count = 0; timeout_patterns = {}
@@ -845,9 +845,9 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         min_ts, min_attr = _get_ts_and_attr(min_entry)
 
         # 🧪 Hybrid Clinical Insights (v3.3.7)
-        # Decision: Anchor Efficiency to the Worst-Case Sample, but Mutation to the Shape-wide Aggregate.
+        # Decision: Anchor Efficiency to the Slowest-Case Sample, but Mutation to the Shape-wide Aggregate.
         
-        # 1. Sample Forensics (Worst Case)
+        # 1. Sample Forensics (Slowest Case)
         sample_f = max_d.get("forensic", {})
         s_nret = sample_f.get("nreturned", 0)
         s_docs_ex = sample_f.get("docsExamined", 0)
@@ -877,7 +877,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "load_pct": round(q["total_active_ms"] / sum_total_active * 100, 1),
             "avg_ms": avg_ms,
             "aas": round(q["total_active_ms"] / (max(log_dur_sec, 1) * 1000), 3),
-            # Efficiency anchored to Worst-Case Sample (The Forensic Smoking Gun)
+            # Efficiency anchored to Slowest-Case Sample (The Forensic Smoking Gun)
             "scan_efficiency": round(s_docs_ex / s_denom, 1),
             "index_selectivity": round(s_keys_ex / s_denom, 1),
             "fetch_amplification": round(s_docs_ex / s_keys_ex, 1) if s_keys_ex > 0 else (s_docs_ex if s_docs_ex > 0 else 0),

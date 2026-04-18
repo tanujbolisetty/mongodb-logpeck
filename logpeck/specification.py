@@ -169,6 +169,7 @@ SIMPLIFIED_OPS = {
     "getmore": "getmore",
     "findandmodify": "findAndModify",
     "deleted expired documents using index": "TTL Index",
+    "TTL Index": "TTL Index",
     "wiredtiger record store oplog processing finished": "Oplog Processing",
     "wiredtiger record store oplog truncation finished": "Oplog Truncation",
     "replica set primary server change detected": "Replica Set Change",
