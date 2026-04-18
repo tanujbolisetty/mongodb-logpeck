@@ -1,3 +1,13 @@
+# ==============================================================================
+# logpeck: finder.py
+# The Discovery & Forensic Backfilling Engine.
+# ==============================================================================
+# This module provides surgery-grade search and filtering for MongoDB logs.
+# It implements a Two-Pass architecture:
+# 1. Sweep: Build a global context cache (IPs, Namespaces).
+# 2. Backfill: Find matches and reconstruct their full state using the cache.
+# ==============================================================================
+
 import sys
 import logging
 from typing import List, Optional, Dict, Any, Union
@@ -14,11 +24,15 @@ def search_logs(
 ) -> Union[List[Dict[str, Any]], int]:
     """
     High-fidelity stateful keyword search across JSON logs.
-    Implements 2-pass forensic reconstruction for absolute accuracy.
+    
+    Unlike a simple grep, this function:
+    1. Builds a connection registry from the entire trace first.
+    2. Backfills missing info (like namespace) into results, even if 
+       the matching log line is lean (e.g., a timeout or connection end).
     """
     # 🕵️ Forensic Pass 1: Global Multi-Context Sweep (MCS)
     # Builds the high-speed connection registry and namespace cache for the entire trace.
-    # Essential for attributing collections to lean timeout events in v2.0.0.
+    # Essential for attributing collections to lean timeout events.
     context_cache = build_forensic_context(log_file_path)
     
     results = []
@@ -77,7 +91,9 @@ def filter_logs(
 ) -> Union[List[Dict[str, Any]], int]:
     """
     Complex multidimensional filtering (Duration, Namespace, Severity).
-    Implements 2-pass forensic reconstruction for absolute accuracy.
+    
+    Allows for targeted discovery such as 'Find all queries > 500ms on 
+    the orders collection that triggered an I/O warning'.
     """
     # 🕵️ Forensic Pass 1: Global Multi-Context Sweep (MCS)
     context_cache = build_forensic_context(log_file_path)

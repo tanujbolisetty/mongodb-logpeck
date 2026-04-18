@@ -4,6 +4,17 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 
 ---
 
+## [4.3.4] - 2026-04-18
+### Hardened
+- **System Normalization (TTL Index)**: Implemented surgical heuristic for background maintenance detections. Deletions containing `numDeleted` metrics without session context are now correctly categorized as `TTL Index`.
+- **CLI Streamlining**: Removed the redundant `--limit` field from all CLI sub-commands to simplify parameter passing and improve forensic discovery defaults.
+- **Terminology Update**: Rebalanced "Worst Sample" to "Slowest Sample" in Clinical Insights for improved forensic clarity.
+
+## [4.3.3] - 2026-04-17
+### Added
+- **Searchable Metadata**: Injected `QUERY HASH` and `PLAN CACHE KEY` as hidden searchable elements in the forensic dashboard to enable direct UI-based filtering.
+
+
 ## [4.3.2] - 2026-04-17
 ### Fixed
 - **Forensic Unit Alignment**: Resolved a 1000x discrepancy in 'Storage Intensity' by unifying wait-time normalization and correcting the MS-to-MS percentage ratio.

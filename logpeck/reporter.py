@@ -5,19 +5,33 @@ from .version import __version__ as VERSION
 from .specification import FIELD_DISPLAY, METRIC_TYPE, METRIC_SOURCES, ERROR_CODE_MAP, METRIC_REGISTRY, METRIC_CATEGORIES
 from .utils import format_duration, format_bytes
 
-"""
-logpeck: reporter.py
-Engine for generating high-fidelity forensic HTML reports.
-"""
+# ==============================================================================
+# logpeck: reporter.py
+# The Executive Visualization & Reporting Engine.
+# ==============================================================================
+# This module is responsible for synthesizing the analyzed forensic data into 
+# high-impact HTML dashboards. It manages:
+# 1. Clinical Insight Generation (Efficiency, Amplification, Pressure).
+# 2. Forensic Bottleneck Visualization (Radar, Distribution Waves).
+# 3. Dynamic Rule Injection (Syncing explanations from rules.json).
+# ==============================================================================
 
 # 🧠 Diagnostic Documentation Loader (v3.1.0)
-# Pulls forensic explanations directly from rules.json to ensure the dashboard remains a live 'Truth Engine'.
+# Pulls forensic explanations directly from rules.json to ensure the dashboard remains a live 'Truth Engine'
 def load_glossary_rules() -> List[Dict[str, Any]]:
+    """
+    Synchronizes the Dashboard Reference Tab with rules.json.
+    
+    This ensures that the explanations found in the HTML report match the 
+    current diagnostic logic of the engine.
+    """
     default_path = os.path.join(os.path.dirname(__file__), "rules.json")
     if os.path.exists(default_path):
         try:
-            with open(default_path, 'r') as f: return json.load(f).get("rules", [])
-        except: pass
+            with open(path := default_path, 'r') as f: 
+                return json.load(f).get("rules", [])
+        except Exception: 
+            pass
     return []
 
 def generate_html_report(results: Dict[str, Any], output_path: str):
@@ -43,6 +57,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     '''
     
     # 🧬 Forensic Bottleneck Radar (v3.3.3)
+    # --------------------------------------------------------------------------
+    # This visualization maps global wait time across 6 critical dimensions.
+    # It identifies whether the cluster is bound by CPU, I/O, or Locking.
     btl = stats.get("global_bottlenecks", {})
     t_wait = sum(btl.values()) or 1
     def _pct(k): return (btl.get(k, 0) / t_wait) * 100
@@ -159,6 +176,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+</div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
             
             def render_clinical_insights(row_data):
+                """
+                Generates high-density diagnostic cards for individual query shapes.
+                These insights highlight inefficiencies that a generic slow-query log 
+                obscures.
+                """
                 insights = []
                 
                 # Extract raw activity markers for relevance checks
@@ -168,25 +190,33 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 
                 # Formula thresholds per clinical feedback (v3.3.6 Workload-Adaptive)
                 
-                # 1. SCAN EFFICIENCY (Discovery Effort) - Show only if docs were examined
+                # 1. SCAN EFFICIENCY (Discovery Effort)
+                # Measures how many documents were scanned to return 1 result. 
+                # (Lower is better. High values suggest poor index coverage.)
                 if docs_ex > 0:
                     se = row_data.get("scan_efficiency", 0)
                     se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
                     insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT (Slowest Sample)</div></div>')
 
-                # 2. INDEX SELECTIVITY (Specificity) - Show only if keys were examined
+                # 2. INDEX SELECTIVITY (Specificity)
+                # Measures how many index entries were scanned to return 1 result.
+                # (Lower is better. High values suggest ineffective field indexing.)
                 if keys_ex > 0:
                     is_sel = row_data.get("index_selectivity", 0)
                     is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
                     insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT (Slowest Sample)</div></div>')
 
-                # 3. FETCH AMPLIFICATION (Coverage) - Show if both keys and docs were involved
+                # 3. FETCH AMPLIFICATION (Coverage)
+                # Measures the ratio of Documents Loaded vs Keys Scanned.
+                # (Ideal is 1.0. Higher values suggest unnecessary document fetches due to non-covered indexes.)
                 if docs_ex > 0 and keys_ex > 0:
                     fa = row_data.get("fetch_amplification", 0)
                     fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
                     insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS (Slowest Sample)</div></div>')
 
-                # 4. INDEX AMPLIFICATION (Mutation Effort) - Show only if mutations occurred
+                # 4. INDEX AMPLIFICATION (Mutation Effort)
+                # Measures how many index modifications resulted from a single document change.
+                # (High values explain why Write Latency is high.)
                 if doc_mut > 0:
                     wa = row_data.get("workload_amplification", 0)
                     wa_clr = "var(--tier1)" if wa < 5 else ("#fbbf24" if wa < 10 else "var(--error)")
@@ -198,10 +228,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                         <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
                         <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
                             <span title="Average index keys inserted per document insertion.">ins_keys:{ins_a:,.1f}</span>
-                            <span title="Average index keys updated per document update.">upd_keys:{upd_a:,.1f}</span>
-                            <span title="Average index keys deleted per document deletion.">del_keys:{del_a:,.1f}</span>
+                            <span title="Average index keys updated/removed per document update.">upd_keys:{upd_a:,.1f}</span>
+                            <span title="Average index keys removed per document deletion.">del_keys:{del_a:,.1f}</span>
                         </div>
-                    </div>''')
+                    </div>
+                    ''')
 
                 # ✨ Advanced Clinical Suite v4.0.0 (The Full Stack)
 

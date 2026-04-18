@@ -1,3 +1,23 @@
+# ==============================================================================
+# logpeck: analyzer.py
+# The High-Performance Forensic Engine for MongoDB Atlas logs.
+# ==============================================================================
+# This module implements a distributed-aware, two-pass analysis architecture
+# designed to synthesize high-resolution forensic insights from massive log datasets.
+#
+# ARCHITECTURE OVERVIEW:
+# ----------------------
+# 1. Pass 1 (Sweep): 
+#    - Purpose: High-speed linear scan to build "Identity Registries".
+#    - Tasks: Stitch Connection-to-App mappings, recover Primary node identity, 
+#      and capture slow query "Witness" objects for deep inspection.
+#
+# 2. Pass 2 (Synthesis):
+#    - Purpose: Hierarchical Aggregation & Diagnostic Evaluation.
+#    - Tasks: Hash queries into "Shapes", elevate background noise (Gossip), 
+#      attribute bottlenecks (I/O, CPU, Queue), and run the Diagnostic Rule Engine.
+# ==============================================================================
+
 import os
 import re
 import json
@@ -6,19 +26,15 @@ import gzip
 import sys
 from collections import Counter
 from typing import List, Optional, Dict, Any, Tuple
-from .parser import parse_log_line, extract_log_metrics, is_system_query, heuristic_extract_ns, detect_op_and_ns, normalize_conn_id, induce_log_schema, get_nested_value
-from .specification import SYSTEM_EVENT_IDENTIFIERS, SIMPLIFIED_OPS, LIFECYCLE_EVENT_IDENTIFIERS, GOSSIP_EVENT_IDENTIFIERS, ERROR_CODE_MAP
+from .parser import (
+    parse_log_line, extract_log_metrics, is_system_query, heuristic_extract_ns, 
+    detect_op_and_ns, normalize_conn_id, induce_log_schema, get_nested_value
+)
+from .specification import (
+    SYSTEM_EVENT_IDENTIFIERS, SIMPLIFIED_OPS, LIFECYCLE_EVENT_IDENTIFIERS, 
+    GOSSIP_EVENT_IDENTIFIERS, ERROR_CODE_MAP
+)
 from .version import __version__
-
-"""
-logpeck: analyzer.py
-The core analytical engine for LogPeck.
-
-Architecture:
-1. Pass 1 (Sweep): High-speed linear scan of logs to build metadata registries
-   (connections, sessions, cursor hashes) and capture slow query samples.
-2. Pass 2 (Synthesis): Aggregation of shapes, rule evaluation, and bottleneck attribution.
-"""
 
 EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801"}
 
@@ -29,6 +45,12 @@ SEVERITY_MAP = {"I": "INFO", "W": "WARN", "E": "ERROR", "F": "FATAL", "D": "DEBU
 LATENCY_BUCKETS = [100, 250, 500, 1000, 2000, 5000, 10000]
 
 def load_diagnostic_rules(custom_path: Optional[str] = None) -> List[dict]:
+    """
+    Loads forensic audit rules from JSON. 
+    
+    Rules define how LogPeck identifies bottlenecks (e.g., 'Unindexed Sort', 
+    'Heavy Scanning', or 'I/O Saturation').
+    """
     default_path = os.path.join(os.path.dirname(__file__), "rules.json")
     path = custom_path if custom_path and os.path.exists(custom_path) else default_path
     if os.path.exists(path):
@@ -80,8 +102,14 @@ def read_logs_chunked(file_path: str):
 
 def build_forensic_context(log_file_path: str) -> Dict[str, str]:
     """
-    Performs a high-speed context sweep of the log file to build a connection-to-namespace map.
-    This is used by discovery tools (Search/Filter) to attribute namespaces to lean error logs.
+    The Pre-Scan Discovery Layer.
+    
+    Performs a high-speed context sweep of the log file to build a map 
+    of Connection ID -> Namespace.
+    
+    WHY: In many failure logs (e.g., Timeouts or SocketExceptions), the 
+    namespace is missing. By pre-sweeping the log, we can look up what 
+    collection 'conn123' was last using to correctly attribute the failure.
     """
     last_ns_cache = {}
     total_parsed = 0
@@ -94,7 +122,8 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
             for entry in f:
                 total_parsed += 1
                 try:
-                    # 🕵️ Surgical JSON Extraction (v4.1.3): Skip plaintext timestamp prefixes
+                    # 🕵️ Surgical JSON Extraction (v4.1.3): 
+                    # Many logs have a plaintext timestamp prefix before the '{' JSON block.
                     j_idx = entry.find('{')
                     if j_idx == -1: continue
                     obj = json.loads(entry[j_idx:])
@@ -104,6 +133,7 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
                     attr = obj.get("attr", {})
                     if not isinstance(attr, dict): continue
                     
+                    # Identify the namespace (db.collection) active on this context
                     p_cmd = attr.get("command") or attr.get("originatingCommand") or attr.get("doc", {}).get("q")
                     raw_ns = attr.get("ns")
                     if raw_ns and raw_ns != "unknown":
@@ -116,29 +146,48 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
     return last_ns_cache
 
 def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    The Orchestration Hub for Forensic Analysis.
+    
+    This function coordinates the Two-Pass analysis workflow:
+    1. Pass 1 (Sweep): Linear scan to capture raw telemetry, stitch sessions, 
+       and filter noise.
+    2. Pass 2 (Synthesis): Semantic aggregation into shapes and rule-based 
+       bottleneck attribution.
+    
+    Returns: A nested dictionary containing global stats, connection metadata, 
+             and synthesized shape summaries (Workload, System, Timeouts).
+    """
     start_time = time.time(); rules = load_diagnostic_rules(rules_path)
-    severity_stats = Counter(); component_stats = Counter(); namespace_stats = Counter(); message_registry = {}
-    conn_registry = {}; auth_fail_count = 0; timeout_count = 0; identified_error_count = 0; timeout_patterns = {}
+    
+    # 📑 Core Analytics Registries
+    severity_stats = Counter(); component_stats = Counter(); namespace_stats = Counter()
+    message_registry = {} # Unique log message snippets
+    conn_registry = {}    # Connection state (IP, User, App)
+    auth_fail_count = 0; timeout_count = 0; identified_error_count = 0; timeout_patterns = {}
     error_namespace_stats = Counter(); error_code_agg = {}
     global_latency_dist = Counter()
-    session_ns_map = {}; session_app_map = {}; shape_stats = {}; gh_counts = Counter(); global_bottlenecks = Counter()
+    
+    # 📑 Shape & Clinical Registries
+    session_ns_map = {}; session_app_map = {}; shape_stats = {}
+    gh_counts = Counter(); global_bottlenecks = Counter()
     system_shape_stats = {} # 🏥 System-level events (Replica Set, TTL, etc.)
     timeout_shape_stats = {} # 🚨 Critical Timeouts (Wait, ExceededLimit)
-    last_op_cache = {} # 🔄 Stateful Operation Correlation: {ctx: last_known_op_preview}
-    last_ns_cache = {} # 🔄 Stateful Namespace Tracking: {ctx: last_known_ns}
-    app_registry = Counter() 
-    user_registry = Counter() 
-    ip_registry = Counter() 
-    op_registry = Counter() 
-    global_forensic_sums = Counter() # 📑 Global Efficiency: {marker: sum}
+    last_op_cache = {}      # 🔄 Stateful Operation Correlation
+    last_ns_cache = {}      # 🔄 Stateful Namespace Tracking
+    
+    # 📑 Identity Registries (MSH Matrix)
+    app_registry = Counter(); user_registry = Counter(); ip_registry = Counter(); op_registry = Counter()
+    global_forensic_sums = Counter() # Sum of all forensic markers (keysExamined, etc.)
     global_app_driver_map = {}
     conn_metadata = {}  # 🔑 MSH Matrix: {ctx: {"app": str, "user": str, "ip": str, "driver": str}}
     engine_errors = [] 
     cursor_hash_map = {}
+    
     total_parsed = 0; total_filtered = 0; total_slow_count = 0; total_accepted = 0; total_closed = 0
     start_ts = None; end_ts = None
 
-    # 🕵️ Pass 1: Light-Speed Forensic Sweep
+    # 🕵️ PASS 1: Light-Speed Forensic Sweep
     # Purpose: Capture every slow query, stitch sessions/ips, and map cursors.
     print(f"\n🔬 Pass 1: Light-Speed Forensic Sweep (v{__version__})...", file=sys.stderr)
 
@@ -625,14 +674,18 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
             try: log_dur_sec = max((dp.isoparse(end_ts) - dp.isoparse(start_ts)).total_seconds(), 1)
             except: pass
 
-        # 🧠 Pass 2: Expert Synthesis (Unified v2.6.0)
+        # 🧠 PASS 2: Expert Synthesis (Unified v2.6.0)
+        # Purpose: Aggregate raw Pass 1 data into logical shapes and identify bottlenecks.
+        
         # Calculate global denominator for cross-tab AAS synchronization (v3.2.14)
+        # This ensures that 'Load %' in the report is relative to the entire server workload.
         global_active_ms = (
             sum(s["total_active_ms"] for s in shape_stats.values()) +
             sum(s["total_active_ms"] for s in system_shape_stats.values()) +
             sum(s["total_active_ms"] for s in timeout_shape_stats.values())
         )
 
+        # 🧬 Synthesize Business Workload Tab
         final_results = finalize_forensic_summary(
             shape_stats=shape_stats,
             log_dur_sec=log_dur_sec,
@@ -640,6 +693,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
             global_total_active=global_active_ms
         )
         
+        # 🧬 Synthesize System Health Tab
         system_summary = finalize_forensic_summary(
             shape_stats=system_shape_stats,
             log_dur_sec=log_dur_sec,
@@ -648,6 +702,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
         )
         system_summary = [s for s in system_summary if s["total_ms"] > 0]
         
+        # 🧬 Synthesize Failure Forensics Tab
         timeout_summary = finalize_forensic_summary(
             shape_stats=timeout_shape_stats,
             log_dur_sec=log_dur_sec,
@@ -780,8 +835,13 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
 
 def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float = 1.0, rules: List = None, global_total_active: float = None) -> List[Dict]:
     """
-    Synthesizes the Complete Forensic Data Contract (v2.6.2).
-    This function is the Single Source of Truth for both CLI and Web views.
+    The Post-Synthesis Aggregator.
+    
+    This function takes raw shape data and calculates the full Clinical Insight 
+    Suite (Latency Cliff, AAS, Storage Intensity). 
+    
+    It serves as the Single Source of Truth for both the CLI output and 
+    the final HTML dashboard.
     """
     from .parser import extract_log_metrics
     final_results = []

@@ -18,14 +18,24 @@ from rich import print as rprint
 
 console = Console(stderr=True)
 
-"""
-logpeck: cli.py (v3.3.4)
-The unified command-line interface for MongoDB log forensics.
-Featuring wait-hierarchy analysis and clinical mutation diagnostics.
-"""
+# ==============================================================================
+# logpeck: cli.py (v3.3.4)
+# The Unified Command-Line Interface for MongoDB Log Forensics.
+# ==============================================================================
+# This module provides the user-facing entry point for both interactive and 
+# automated log analysis. It manages:
+# 1. Professional Terminal Visualization (via Rich).
+# 2. Command Routing (Health, Search, Filter, Analyze).
+# 3. Output Serialization (Flashing JSON for downstream pipelines).
+# ==============================================================================
 
 def format_forensic_entry(entry):
-    """Generates a high-fidelity, flattened forensic JSON object."""
+    """
+    Generates a high-fidelity, flattened forensic JSON object.
+    
+    This is used by the --json flag across search/filter commands to provide 
+    a deterministic, easy-to-parse structure for other automation tools.
+    """
     from .parser import extract_log_metrics
     metrics = extract_log_metrics(entry) or {}
     attr = entry.get("attr", {})
@@ -49,6 +59,9 @@ def format_forensic_entry(entry):
 def print_log_card(entry, full=False):
     """
     Prints a professional, structured log entry card to the terminal.
+    
+    This visualizes a single log line with its identified operation, namespace, 
+    latency, and wait breakdown.
     """
     if not isinstance(entry, dict):
         console.print(f"  [dim](Non-Structural Log: {str(entry)[:100]})[/dim]")
@@ -169,8 +182,14 @@ def print_forensic_table(summary):
     console.print(table)
 
 def main():
+    """
+    The Command Router for LogPeck.
+    
+    This is the primary gateway into the engine's capabilities. 
+    It parses sys.argv and dispatches to the appropriate analytical module.
+    """
     parser = argparse.ArgumentParser(
-        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v3.3.4)\n"
+        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v4.3.6)\n"
                     "Hardened observability with Ticket/Lock/Repl wait-hierarchy logic and Clinical Mutation diagnostics.",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )

@@ -1,19 +1,24 @@
-"""
-logpeck: specification.py
-The centralized 'Truth Engine' for MongoDB forensic mapping.
-
-This module serves as the authoritative source of truth for the entire LogPeck pipeline.
-It defines the deterministic conversion of raw BSON/JSON attributes into standardized 
-forensic metrics, ensuring parity between the CLI and the HTML Dashboard.
-"""
+# ==============================================================================
+# logpeck: specification.py
+# The Centralized 'Truth Registry' for MongoDB Forensic Mapping.
+# ==============================================================================
+# This module serves as the authoritative source of truth for the entire 
+# LogPeck pipeline. It manages:
+# 1. Metric Display Contracts (labels, units, sources).
+# 2. System Governance (Denoising & Exclusion rules).
+# 3. Query Hygiene (Structural vs Business field isolation).
+# 4. Diagnostic Event Routing (System Health vs Workload).
+# ==============================================================================
 
 import os
 import json
 
 # 🏛️ 1. Metric Display & Naming Contract
-# ==============================================================================
-# The human-readable labels and metadata are now loaded from metrics.json.
+# ------------------------------------------------------------------------------
+# The human-readable labels and metadata are defined in metrics.json to allow 
+# for dynamic UI updates without code changes. This function loads that registry.
 def load_metrics():
+    """Returns the list of forensic metrics defined in metrics.json."""
     path = os.path.join(os.path.dirname(__file__), "metrics.json")
     try:
         with open(path, 'r') as f:
@@ -24,8 +29,14 @@ def load_metrics():
         return []
 
 # 🧪 Type-Safe Error resolution (v4.3.5)
-# Ensure string-based error codes map to human-readable names
+# ------------------------------------------------------------------------------
+# In Atlas logs, 'errCode' often arrives as a string ("50"). This function
+# ensures it is cast to an integer to match the keys in ERROR_CODE_MAP.
 def resolve_error_code(harvested_error):
+    """
+    Surgically resolves numeric error codes into human-readable names.
+    e.g., Code 50 -> MaxTimeMSExpired
+    """
     try:
         # 🧪 Type-Safe Error resolution (v4.3.5)
         # Ensure string-based error codes map to human-readable names
@@ -33,11 +44,12 @@ def resolve_error_code(harvested_error):
             code = int(harvested_error["errCode"])
             if code in ERROR_CODE_MAP:
                 harvested_error["errName"] = ERROR_CODE_MAP[code]
+                # Synthesize a clear message if missing
                 if not harvested_error.get("errMsg"):
                     harvested_error["errMsg"] = f"{ERROR_CODE_MAP[code]} (Code: {code})"
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, KeyError):
             pass
-    except (ValueError, TypeError):
+    except Exception:
         pass
 
 METRIC_REGISTRY = load_metrics()
@@ -63,22 +75,28 @@ for m in METRIC_REGISTRY:
 
 
 # 🏺 4. System Governance (Exclusions & Denoising)
-# ==============================================================================
-# Registries used to filter internal MongoDB maintenance noise from performance reports.
+# ------------------------------------------------------------------------------
+# These registries define the "Noise Floor" of the server. Events matching 
+# these criteria are either excluded completely or flagged as 'System' 
+# to ensure the 'Business Workload' tab remains signal-heavy.
+
+# Components that represent background infrastructure tasks.
 SYSTEM_COMPONENTS = {
     # Core Infrastructure
     "FTDC", "NETWORK", "STORAGE", "ACCESS", "CONTROL", "SHARDING", "BALANCER", "SESSION",
-    # Storage Engine (WiredTiger v5.3+)
+    # WiredTiger Storage Engine (Internal maintenance)
     "WT", "WTBACKUP", "WTCHKPT", "WTCMPCT", "WTEVICT", "WTHS", "WTRECOV", 
     "WTRTS", "WTSLVG", "WTTS", "WTTXN", "WTVRFY", "WTWRTLOG", "JOURNAL", "RECOVERY",
-    # Replication & Topology
+    # Replication & Topology (Gossip)
     "REPL", "REPL_HB", "ROLLBACK", "INITSYNC", "ELECTION", "HEARTBEAT",
-    # Query Lifecycle
+    # Planner & Statistics
     "QUERYSTATS", "REJECTED", "PLANNER"
 }
 
+# Namespaces reserved for internal MongoDB management.
 SYSTEM_NAMESPACES = {"admin.", "config.", "local.", "system."}
 
+# Application names used by Atlas agents and internal drivers.
 SYSTEM_APP_NAMES = {
     "Automation Agent", "Monitoring Agent", "CPS Module", "MongoDB CPS Module",
     "MongoDB Internal", "mongotune", "OplogFetcher",
@@ -90,8 +108,11 @@ SYSTEM_APP_NAMES = {
 }
 
 # ✂️ 5. Query Hygiene (Structural Pruning)
-# ==============================================================================
-# Fields removed during query normalization to isolate unique business logic patterns.
+# ------------------------------------------------------------------------------
+# These fields are removed during the "Normalization" phase.
+# The goal is to isolate the unique business-level query shape (e.g., 'find by orderId')
+# by stripping away transient or infrastructure keys ($clusterTime, txnNumber, etc.).
+
 EXCLUDED_SYSTEM_FIELDS = {
     "lsid", "clusterTime", "signature", "txnNumber", "stmtId", "readConcern", 
     "writeConcern", "dbName", "config", "ordered", "autocommit", "$clusterTime",
@@ -100,7 +121,8 @@ EXCLUDED_SYSTEM_FIELDS = {
     "os", "platform", "compression"
 }
 
-# Atlas Search keywords to prune to isolate business-level field names (e.g., 'orderId').
+# Atlas Search structural keywords. 
+# We prune these to isolate the actual business fields being queried (e.g., 'productDescription').
 SEARCH_STRUCTURAL_FIELDS = {
     "must", "should", "filter", "mustNot", "range", "compound", "text", "query", "path", 
     "wildcard", "exists", "near", "geoWithin", "geoIntersects", "equals", "in", 

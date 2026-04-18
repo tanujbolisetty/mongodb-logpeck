@@ -1,3 +1,14 @@
+# ==============================================================================
+# logpeck: parser.py
+# The surgical extraction layer for MongoDB forensic telemetry.
+# ==============================================================================
+# This module is responsible for the 'Pass 1' ingestion phase:
+# 1. JSON Parsing & Line-by-Line Attribute Recovery.
+# 2. Heuristic Namespace Recovery (for obscured or truncated logs).
+# 3. Recursive Query Parameter Harvesting (Schema Induction).
+# 4. Operation Identity Detection (Find vs Update vs TTL Index).
+# ==============================================================================
+
 import json
 import re
 import hashlib
@@ -5,6 +16,9 @@ from typing import Dict, Any, List, Optional, Set
 from .specification import ERROR_CODE_MAP, FIELD_DISPLAY, METRIC_MARKERS
 
 # 🕵️ Heuristic Forensic Patterns (v1.3.5)
+# ------------------------------------------------------------------------------
+# These patterns are used when the standard 'attr.ns' field is missing or generic
+# (e.g. '$cmd'). They scan 'attr.msg' or failing error strings for db.coll signatures.
 RE_HEURISTIC_NS = [
     re.compile(r'on ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
     re.compile(r'ns: ["\']?([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
@@ -15,13 +29,19 @@ RE_HEURISTIC_NS = [
 ]
 
 def heuristic_extract_ns(text: str) -> Optional[str]:
-    """Scans raw message text for db.collection patterns using heuristic regex."""
+    """
+    Scans raw message text for db.collection patterns using heuristic regex.
+    
+    This is critical for Atlas logs where the namespace might be buried in a 
+    text message rather than a structured field (e.g., secondary elections).
+    """
     if not text: return None
     for pattern in RE_HEURISTIC_NS:
         match = pattern.search(text)
         if match: return match.group(1)
     return None
 
+# Import Governance: Centralized configuration registries
 from .specification import (
     SYSTEM_COMPONENTS, SYSTEM_NAMESPACES, SYSTEM_APP_NAMES,
     EXCLUDED_SYSTEM_FIELDS, SEARCH_STRUCTURAL_FIELDS
@@ -36,25 +56,34 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
     1. If a key is 'path', its value is treated as a schema field.
     2. If a key is in SEARCH_STRUCTURAL_FIELDS, we recurse into its value.
     3. All other keys are treated as business-level fields and harvested.
+    
+    Logic Note: We prioritize "Rich Values" (dicts/lists) over simple booleans 
+    to ensure we capture actually meaningful filter samples for the forensic report.
     """
-    if depth > 32 or not obj: return  # 🧪 Depth Boost (v2.7.10): For complex Atlas Search
+    # 🧪 Depth Boost (v2.7.10): Standard MongoDB is 8-10, but complex 
+    # Atlas Search / $facet pipelines can exceed 20 levels.
+    if depth > 32 or not obj: return  
+    
     if isinstance(obj, dict):
         # 🧪 Atlas Search Path Extraction (v1.1.50)
-        # If we find a "path" field, its value is the actual business field name we want to harvest.
+        # Search pipelines often use { "path": "myField" } inside operators.
         if "path" in obj and isinstance(obj["path"], (str, list)):
             paths = [obj["path"]] if isinstance(obj["path"], str) else obj["path"]
             for field_name in paths:
                 if not isinstance(field_name, str): continue
+                # Ignore structural fields like 'analyzer' or 'score'
                 if field_name not in SEARCH_STRUCTURAL_FIELDS:
                     # 🧪 Intelligent Value Harvesting (v1.1.53)
+                    # Try to capture a sample value to show in the "Sample Values" tooltip.
                     val = obj.get("query") or obj.get("value")
                     if val is None:
-                        # Look for range bounds or common operator keys
+                        # Look for range bounds for numeric fields
                         val_keys = ["gte", "lte", "gt", "lt", "origin", "pivot"]
                         found_vals = {vk: obj[vk] for vk in val_keys if vk in obj}
                         val = found_vals if found_vals else True
                     
-                    # Overwrite protection: Don't let meta-values (like sorts) overwrite sample values
+                    # Overwrite protection: If we already have a dict (complex filter),
+                    # don't overwrite it with a simple 'True' marker.
                     if field_name in params_found:
                         old_v = params_found[field_name]
                         if isinstance(old_v, (dict, list)) and not isinstance(val, (dict, list)):
@@ -64,19 +93,21 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
                     else:
                         params_found[field_name] = val
              
+        # Standard Key-Value Harvesting
         for k, v in obj.items():
             if k.startswith("$"):
+                # Always recurse into operators (e.g. $match, $and, $elemMatch)
                 _harvest_params(v, params_found, depth + 1)
             elif k not in EXCLUDED_SYSTEM_FIELDS:
-                # Always recurse to find nested paths or predicates
+                # Recurse into potential object payloads (e.g. sub-documents)
                 _harvest_params(v, params_found, depth + 1)
                 
-                # Only harvest 'k' as a parameter if it's NOT a structural/system key
+                # Only harvest the key 'k' as a parameter if it's NOT system noise
                 if k not in SEARCH_STRUCTURAL_FIELDS:
-                    # Overwrite protection
                     can_assign = True
                     if k in params_found:
                         old_v = params_found[k]
+                        # Don't overwrite complex logic (e.g. {$gt: 5}) with plain values (e.g. 5)
                         if isinstance(old_v, (dict, list)) and not isinstance(v, (dict, list)):
                             can_assign = False
                     
@@ -87,12 +118,20 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
                             # Preserve MongoDB value objects (e.g. {$date: ...}, {$oid: ...})
                             params_found[k] = v
     elif isinstance(obj, list):
+        # Recurse through all elements in an array (e.g. $in: [1, 2, 3])
         for item in obj: _harvest_params(item, params_found, depth + 1)
 
 
 def extract_query_schema(cmd_obj: dict, op: str) -> List[str]:
+    """
+    Induces the business-level schema from a query command.
+    
+    🛡️ Dual-Layer Hygiene: 
+    1. The recursive harvester collects everything non-system.
+    2. This wrapper ensures that structural keywords (like 'analyzer', 'search', 'index') 
+       never leak into the final 'Schema' column of the dashboard.
+    """
     params = extract_query_params(cmd_obj, op)
-    # 🛡️ Dual-Layer Hygiene: Ensure NO structural keywords leak into the schema display
     schema = [k for k in params.keys() if k not in SEARCH_STRUCTURAL_FIELDS]
     return sorted(list(set(schema)))
 
@@ -138,8 +177,15 @@ def parse_log_line(line: str) -> Optional[Dict[str, Any]]:
 
 def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     """
-    Surgically identifies the operation type and namespace, even for obscured 
-    commands (e.g. timeouts, transactions, or generic $cmd calls).
+    The Forensic Identity Probe.
+    
+    Surgically identifies the operation type and namespace, even when 
+    the log is obscured due to:
+    - Timeouts (where only the error message remains)
+    - Transactions (where the namespace is hidden in a '$cmd' command)
+    - Background Maintenance (TTL Index, Shard Balancing)
+    
+    Returns: (op_name, namespace)
     """
     msg = msg or ""
     attr_type = attr.get("type")
@@ -241,7 +287,13 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     return op, ns
 
 def normalize_conn_id(ctx: str) -> str:
-    """Standardizes connection IDs for stateful reconstruction (v2.0.0)."""
+    """
+    Standardizes connection IDs for stateful reconstruction (v2.0.0).
+    
+    MongoDB uses varying formats like '[conn123]', 'conn123', or just '123'. 
+    This normalizes everything to 'conn123' to allow consistent lookup 
+    across different log entries in the same session.
+    """
     if not ctx: return "unknown"
     # Clean brackets and prefix
     raw = str(ctx).strip("[]").replace("conn", "").strip()
@@ -249,18 +301,27 @@ def normalize_conn_id(ctx: str) -> str:
 
 def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> Dict[str, Any]:
     """
-    Standardizes varied log formats (Standard, Flat, Lean) into a canonical header view.
-    Utilizes Ghost Timestamping to anchor lean logs to the previous known event.
+    The Universal JSON Adaptor.
+    
+    Standardizes varied log formats (Standard, Flat, Lean) into a canonical 
+    header view used for initial triage. 
+    
+    Features:
+    - Ghost Timestamping: Anchors lean logs (missing 't' field) to the 
+      last known event timestamp to maintain chronological integrity.
+    - Severity Mapping: Infers severity from presence of error fields if missing.
     """
     canonical = {}
     
     # 1. Timestamp Induction (Ghost Stitching v3.2.7)
+    # Extracts the date from MongoDB's ISODate object or raw string.
     ts = entry.get("t", {}).get("$date") if isinstance(entry.get("t"), dict) else entry.get("t")
     canonical["t"] = ts or entry.get("time") or entry.get("ts") or last_ts
     
-    # 2. Severity Induction
+    # 2. Severity Induction (I=Info, D=Debug, E=Error, W=Warning)
     s = entry.get("s") or entry.get("severity") or entry.get("level")
     if not s:
+        # Infer severity if the engine finds a surgical error block
         s = "E" if "error" in entry or "errorMessage" in entry else "I"
     canonical["s"] = str(s)
     
@@ -272,11 +333,11 @@ def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> D
         else: msg = "unknown"
     canonical["msg"] = msg
     
-    # 4. Context Induction
+    # 4. Context Induction (Connection / Thread / Host)
     ctx = entry.get("ctx") or entry.get("host") or entry.get("target") or entry.get("connectionId") or "unknown"
     canonical["ctx"] = normalize_conn_id(str(ctx))
     
-    # 5. Component/Category Induction
+    # 5. Component/Category Induction (COMMAND, ACCESS, NETWORK, etc.)
     canonical["c"] = entry.get("c") or entry.get("component") or entry.get("category") or "unknown"
     
     return canonical
@@ -389,7 +450,14 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         except (ValueError, TypeError):
             pass
 
-    # 🕵️ Universal Discovery Harvester (v3.2.0): Breadth-First Search for markers
+    # 🕵️ Universal Discovery Harvester (v3.2.0)
+    # --------------------------------------------------------------------------
+    # This is the "Safety Net" for forensic metrics.
+    # Instead of traversing fixed paths (which change between MongoDB versions), 
+    # it performs a Breadth-First Search (BFS) for keys listed in METRIC_MARKERS.
+    # This ensures that even if 'timeReadingMicros' moves from 'storage.data' 
+    # to a new block, the forensic engine will find it.
+    # --------------------------------------------------------------------------
     def discovery_harvest(obj, marker_map, result=None, depth=0):
         if result is None: result = {}
         if depth > 10 or not isinstance(obj, dict): return result
@@ -399,6 +467,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
                 std_id = marker_map[k]
                 if std_id not in result:
                     # 🧬 Inline Normalization (v3.2.2)
+                    # Standardize microseconds and nanoseconds into milliseconds
                     if isinstance(v, (int, float)):
                         if k.endswith("Micros") or k in ["timeAcquiringMicros", "planningTimeMicros"]:
                             v = round(v / 1000.0, 3)
