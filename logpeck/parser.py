@@ -377,11 +377,17 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         
     # 🧬 Dynamic Error Name Resolution (v3.2.11)
     if harvested_error.get("errCode") and not harvested_error.get("errName"):
-        code = harvested_error["errCode"]
-        if code in ERROR_CODE_MAP:
-            harvested_error["errName"] = ERROR_CODE_MAP[code]
-            if not harvested_error.get("errMsg"):
-                harvested_error["errMsg"] = f"{ERROR_CODE_MAP[code]} (Code: {code})"
+        # 🧪 Type-Safe Error resolution (v4.3.5)
+        # Ensure string-based error codes map to human-readable names
+        try:
+            # 💡 High-Resolution Error Signature (v4.3.5)
+            try:
+                code = int(harvested_error.get("errCode", 0))
+                e_name = harvested_error.get("errName") or ERROR_CODE_MAP.get(code, f"Code {code}")
+            except:
+                e_name = "Unknown Error"
+        except (ValueError, TypeError):
+            pass
 
     # 🕵️ Universal Discovery Harvester (v3.2.0): Breadth-First Search for markers
     def discovery_harvest(obj, marker_map, result=None, depth=0):

@@ -272,12 +272,11 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                             ns_guess = str(ns_guess)
 
                         
-                        # 🏮 High-Resolution Error Signature (v2.6.21)
-                        # Aggressively prioritize 'MaxTimeMSExpired' and lethal error signatures.
+                        # 🏮 High-Resolution Error Signature (v4.3.5)
+                        # Identify timeout signatures without forcing a default error code.
                         e_code = attr.get("errCode") or attr.get("code") or p_cmd.get("code")
                         if "maxtimemsexpired" in search_space or "exceeded time limit" in search_space:
                             display_err = "MaxTimeMSExpired: operation exceeded time limit"
-                            if not e_code: e_code = 50
                         else:
                             display_err = msg
                             # Extract error components from both attr and cmd_obj
@@ -458,10 +457,17 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         op = str(metrics.get("op", "unknown"))
                         
                         # 🏷️ Apply Simplified Op/App Names for System Events
-                        if is_system_op and op == "TTL Index":
-                            # Request: Simplify TTL index app name
-                            metrics["app_name"] = "TTL Index"
-                            a_n = "TTL Index" # Ensure aggregated shape uses the same label
+                        if is_system_op:
+                            # Search for the exact pattern to find the simplified name
+                            for pattern, simple_name in SIMPLIFIED_OPS.items():
+                                if pattern in search_space:
+                                    op = simple_name
+                                    metrics["op"] = simple_name
+                                    # Request: Simplify TTL index app name too
+                                    if simple_name == "TTL Index":
+                                        metrics["app_name"] = "TTL Index"
+                                        a_n = "TTL Index" # Ensure aggregated shape uses the same label
+                                    break
                         
                         # 🏷️ Namespace Normalization (v2.7.6)
                         # We only use "N/A" for truly anonymous platform events.
@@ -477,6 +483,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         # Route to appropriate bucket (v3.2.1 Failure Primacy)
                         # Priority: 🚨 Failure Forensics (Error/Timeout) > 🛠️ System Health > 🐢 Business Workload
                         if is_timeout_op or is_error_op:
+                            # 🧪 Type-Safe Error resolution (v4.3.5)
+                            h_err = metrics.get("harvested_error", {})
+                            if h_err:
+                                from .specification import resolve_error_code
+                                resolve_error_code(h_err)
+                                
                             # 🧪 FAILURES ALWAYS WIN: Even network interrupts belong in the Failure tab
                             target_stats = timeout_shape_stats 
                         elif is_system_op:

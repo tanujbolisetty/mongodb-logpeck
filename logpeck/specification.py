@@ -23,6 +23,23 @@ def load_metrics():
         print(f"⚠️ Warning: Could not load metrics.json: {e}")
         return []
 
+# 🧪 Type-Safe Error resolution (v4.3.5)
+# Ensure string-based error codes map to human-readable names
+def resolve_error_code(harvested_error):
+    try:
+        # 🧪 Type-Safe Error resolution (v4.3.5)
+        # Ensure string-based error codes map to human-readable names
+        try:
+            code = int(harvested_error["errCode"])
+            if code in ERROR_CODE_MAP:
+                harvested_error["errName"] = ERROR_CODE_MAP[code]
+                if not harvested_error.get("errMsg"):
+                    harvested_error["errMsg"] = f"{ERROR_CODE_MAP[code]} (Code: {code})"
+        except (ValueError, TypeError):
+            pass
+    except (ValueError, TypeError):
+        pass
+
 METRIC_REGISTRY = load_metrics()
 
 # Derived mapping constants for backward compatibility
@@ -161,13 +178,6 @@ GOSSIP_EVENT_IDENTIFIERS = [
 # ==============================================================================
 # Normalizes verbose system logs into clean, diagnostic categories.
 SIMPLIFIED_OPS = {
-    "find": "find",
-    "update": "update",
-    "delete": "delete",
-    "insert": "insert",
-    "aggregate": "aggregate",
-    "getmore": "getmore",
-    "findandmodify": "findAndModify",
     "deleted expired documents using index": "TTL Index",
     "TTL Index": "TTL Index",
     "wiredtiger record store oplog processing finished": "Oplog Processing",
@@ -175,6 +185,13 @@ SIMPLIFIED_OPS = {
     "replica set primary server change detected": "Replica Set Change",
     "Updated wire specification": "Wire Spec Update",
     "OplogFetcher": "OplogFetcher",
+    "find": "find",
+    "update": "update",
+    "delete": "delete",
+    "insert": "insert",
+    "aggregate": "aggregate",
+    "getmore": "getmore",
+    "findandmodify": "findAndModify",
     "dns resolution while connecting to peer was slow": "DNS Delay",
     "ingress tls handshake complete": "TLS Handshake",
     "operation timed out while waiting to acquire connection": "Conn Wait Timeout",
