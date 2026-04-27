@@ -32,7 +32,7 @@ git clone https://github.com/tanujbolisetty/mongodb-logpeck.git
 cd mongodb-logpeck
 
 # Install logpeck in editable mode
-pip install -e .
+pip3 install -e .
 ```
 
 ---

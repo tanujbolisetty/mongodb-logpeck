@@ -58,12 +58,26 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     
     # 🧬 Forensic Bottleneck Radar (v3.3.3)
     # --------------------------------------------------------------------------
-    # This visualization maps global wait time across 6 critical dimensions.
+    # This visualization maps global wait time across critical dimensions.
     # It identifies whether the cluster is bound by CPU, I/O, or Locking.
     btl = stats.get("global_bottlenecks", {})
     t_wait = sum(btl.values()) or 1
     def _pct(k): return (btl.get(k, 0) / t_wait) * 100
     
+    # Surgical Mapping: Match keys with analyzer.py
+    radar_segments = [
+        ("cpu_ms", "#10B981", "CPU Time"),
+        ("storage_ms", "#F59E0B", "Storage Wait"),
+        ("oplog_ms", "#3B82F6", "Oplog Slot"),
+        ("repl_ms", "#EF4444", "Replication Wait"),
+        ("queue_ms", "#EC4899", "Ticket Queue"),
+        ("lock_ms", "#8B5CF6", "Lock Contention"),
+        ("planning_ms", "#6366F1", "Planning")
+    ]
+    
+    radar_bars = "".join([f'<div style="width:{_pct(k)}%; background:{color}; height:100%" title="{label}"></div>' for k, color, label in radar_segments if _pct(k) > 0])
+    radar_legend = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{color}"></div> {label} ({_pct(k):.1f}%)</div>' for k, color, label in radar_segments if _pct(k) > 0.05 or k in ["cpu_ms", "storage_ms"]])
+
     bottleneck_radar_html = f'''
         <div class="card" style="border-left: 4px solid var(--accent)">
             <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
@@ -71,20 +85,10 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 <span style="font-size:0.6rem; color:var(--text-secondary)">TOTAL AUDIT WAIT: {format_duration(t_wait)}</span>
             </div>
             <div style="display:flex; height:24px; border-radius:6px; overflow:hidden; margin:1.2rem 0; background:rgba(255,255,255,0.05)">
-                <div style="width:{_pct('io_ms') or 2}%; background:#3B82F6; height:100%" title="I/O Wait"></div>
-                <div style="width:{_pct('cpu_ms') or 2}%; background:#10B981; height:100%" title="CPU Time"></div>
-                <div style="width:{_pct('storage_ms') or 2}%; background:#F59E0B; height:100%" title="Storage Wait"></div>
-                <div style="width:{_pct('repl_ms') or 2}%; background:#EF4444; height:100%" title="Replication Throttling"></div>
-                <div style="width:{_pct('queue_ms') or 2}%; background:#EC4899; height:100%" title="Ticket Queue"></div>
-                <div style="width:{_pct('lock_ms') or 2}%; background:#8B5CF6; height:100%" title="Lock Contention"></div>
+                {radar_bars}
             </div>
             <div style="display:flex; gap:20px; flex-wrap:wrap">
-                <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> I/O Wait ({_pct('io_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#10B981"></div> CPU Time ({_pct('cpu_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> Storage Wait ({_pct('storage_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div> Replication Throttling ({_pct('repl_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#EC4899"></div> Ticket Queue ({_pct('queue_ms'):.1f}%)</div>
-                <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div> Lock Contention ({_pct('lock_ms'):.1f}%)</div>
+                {radar_legend}
             </div>
         </div>
     '''
