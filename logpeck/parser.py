@@ -273,7 +273,6 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         op = "TTL Index"
 
     # Final Normalization and Transaction Enrichment
-    # Final Normalization and Transaction Enrichment
     if is_tx and op.lower() in ["update", "insert", "delete", "findandmodify", "find"]:
         if not op.lower().startswith("tx-"):
             op = f"tx-{op}"
@@ -284,7 +283,11 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
             h_ns = heuristic_extract_ns(str(attr["error"]))
         if h_ns: ns = h_ns
         
-    return op, ns
+    # 🧬 Recovery Anchor (v4.4.0)
+    # Signal if this entry has high-confidence data blocks (CRUD)
+    has_crud = isinstance(attr.get("CRUD"), dict)
+    
+    return op, ns, has_crud
 
 def normalize_conn_id(ctx: str) -> str:
     """
@@ -367,7 +370,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         SEARCH_PROBES = [
             "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
             "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
-            "queryHash", "queryShapeHash", "planCacheShapeHash", "target", "host",
+            "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
             "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
             "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
             "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
@@ -391,7 +394,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     msg = header["msg"]
     ns_raw = attr.get("ns") or entry.get("ns") or "unknown"
     
-    op, ns = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
+    op, ns, has_crud = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
     
     # Deep Identity Harvesting (v1.3.16)
     # Prefer top-level attr, but fallback to entry (flat) or originatingCommand
@@ -543,7 +546,10 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # 🧪 Write Bottleneck Unification (v2.7.13)
     # Include Oplog Slot Duration in storage wait for mutation ops (update, findAndModify, delete, insert)
     # This aligns the 'I/O Bound' diagnostic with realistic write-path concurrency pressure.
-    oplog_wait = (attr.get("totalOplogSlotDurationMicros") or 0)
+    # BUG FIX (v4.4.0): MongoDB 5.0+ WiredTiger already accounts for oplog concurrency in some metrics.
+    # We only add it here if it's significant and duration is high enough to avoid double-counting noise.
+    oplog_micros = (attr.get("totalOplogSlotDurationMicros") or 0)
+    oplog_wait = oplog_micros if (oplog_micros > 1000 and ms > 100) else 0
     
     if s_read > 0 or s_write > 0 or oplog_wait > 0: 
         val = round((s_read + s_write + oplog_wait) / 1000.0, 2)
@@ -588,22 +594,25 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         "query_schema": extract_query_schema(schema_cmd, schema_op),
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
+        "has_crud": has_crud,
         "plan_summary": attr.get("planSummary", "N/A"), "app_name": app_name,
         "user": user_id,
         "client_ip": client_ip,  # 🏺 Recovered from the current line
+        "op_id": attr.get("opId") or entry.get("opId") or "N/A",
         "forensic": forensic, "waits_ms": waits_ms
     }
     if include_full_command: metrics["attr"] = attr
     return metrics
 
-def is_system_query(ns: str, app: str = "", component: str = "", op: str = "") -> bool:
+def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", has_crud: bool = False) -> bool:
     """
     Surgically identifies if an event is internal system noise (v2.0.1 Refinement).
     Filters by Namespace, App Name, OR Component.
     """
     # 0. Transaction & Management Immunity (v2.7.4 Fix)
     # Never filter transactions or destructive admin commands as noise.
-    if op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
+    # v4.4.0: Explicitly protect CRUD operations and tx-prefixed commands.
+    if has_crud or str(op).startswith("tx-") or op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
         return False
 
     # 1. Explicit System Namespace check (Priority 1)

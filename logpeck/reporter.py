@@ -298,7 +298,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
 
             insights_html = render_clinical_insights(row)
             
-            def render_f_row(k, d1, d2, force_show=False):
+            def render_f_row(k, d1, d2, force_show=False, show_raw_key=False):
                 v1, v2 = d1.get(k, 0), d2.get(k, 0)
                 
                 # 🧪 Zero-Value Suppression (v3.2.0)
@@ -325,14 +325,21 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 c1, c2 = ("f-val-fast", "") if str(v1) != str(v2) else ("", "f-val-slow")
                 label = FIELD_DISPLAY.get(k, k)
                 source = METRIC_SOURCES.get(k, k)
-                return f'<tr><td class="f-label" title="Source: {source}">{label}</td><td class="f-val {c1}">{f1}</td><td class="f-val {c2}">{f2}</td></tr>'
+                
+                # 🧪 Dual-Labeling (v4.5.2): Show raw log key only if it differs from the label
+                raw_tag = ""
+                if show_raw_key and label != k:
+                    raw_tag = f'<div style="font-family:\'JetBrains Mono\'; font-size:0.6rem; opacity:0.4; margin-top:2px">{k}</div>'
+                
+                return f'<tr><td class="f-label" title="Source: {source}">{label}{raw_tag}</td><td class="f-val {c1}">{f1}</td><td class="f-val {c2}">{f2}</td></tr>'
 
             def render_category(label, fields, row_data):
                 content = f'<tr class="cat-header"><td colspan="3">{label}</td></tr>'
                 count = 0
                 for k in fields:
-                    line = render_f_row(k, row_data.get('min_forensic', {}), row_data.get('max_forensic', {}))
-                    if not line: line = render_f_row(k, row_data.get('min_waits', {}), row_data.get('max_waits', {}))
+                    # 🧪 Dual-Labeling enabled only for Execution Metrics categories
+                    line = render_f_row(k, row_data.get('min_forensic', {}), row_data.get('max_forensic', {}), show_raw_key=True)
+                    if not line: line = render_f_row(k, row_data.get('min_waits', {}), row_data.get('max_waits', {}), show_raw_key=True)
                     if line: content += line; count += 1
                 return content if count > 0 else ""
 

@@ -2,6 +2,14 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [4.5.2] - 2026-04-27
+### Hardened
+- **Dual-Labeling (Forensic UX)**: Implemented technical sub-labels for the Forensic Execution Metrics table, showing the raw MongoDB log key (e.g., `nreturned`) beneath business-friendly names to bridge the gap between Executive and DBA views.
+- **Hash Discovery (Flat Logs)**: Added `planCacheKey` to the search probes to resolve "N/A" reporting in Business Workload forensics for non-Atlas-Search queries.
+- **Granular Failure Forensics**: Updated the grouping logic in `analyzer.py` to include `err_c` (Error Code) in the hash key, ensuring unique query shapes with different failure modes (e.g., Timeout vs. Network) appear as distinct actionable rows.
+- **Forensic Honesty (Filtering)**: Implemented a strict pre-synthesis filter to hide anonymous or network-level failures (those lacking a `query_hash`) from the Query Shape Failure Analysis table, keeping the view focused on structural code issues.
+- **Executive Standardization**: Standardized "N/A" labeling across all failure summaries, replacing inconsistent "unknown" markers for improved professional reporting.
+
 ---
 
 ## [4.3.4] - 2026-04-18

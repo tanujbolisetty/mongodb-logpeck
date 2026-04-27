@@ -137,7 +137,7 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
                     p_cmd = attr.get("command") or attr.get("originatingCommand") or attr.get("doc", {}).get("q")
                     raw_ns = attr.get("ns")
                     if raw_ns and raw_ns != "unknown":
-                        _, res_ns = detect_op_and_ns(attr, p_cmd or {}, str(obj.get("msg", "")), raw_ns)
+                        _, res_ns, _ = detect_op_and_ns(attr, p_cmd or {}, str(obj.get("msg", "")), raw_ns)
                         last_ns_cache[ctx] = str(res_ns)
                 except: continue
     except Exception as e:
@@ -183,6 +183,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
     conn_metadata = {}  # 🔑 MSH Matrix: {ctx: {"app": str, "user": str, "ip": str, "driver": str}}
     engine_errors = [] 
     cursor_hash_map = {}
+    op_id_hash_map = {}  # 🔄 Stateful Operation Mapping
     
     total_parsed = 0; total_filtered = 0; total_slow_count = 0; total_accepted = 0; total_closed = 0
     start_ts = None; end_ts = None
@@ -311,7 +312,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         ns_guess = attr.get("ns")
                         if not ns_guess or str(ns_guess).endswith(".$cmd"):
                             p_cmd = attr.get("command") or attr.get("originatingCommand") or {}
-                            _, res_ns = detect_op_and_ns(attr, p_cmd, msg, ns_guess or "unknown")
+                            _, res_ns, _ = detect_op_and_ns(attr, p_cmd, msg, ns_guess or "unknown")
                             ns_guess = res_ns
                         
                         # 🧪 Heuristic Fallback (v2.7.11): Try to extract NS from the message text if still missing
@@ -324,17 +325,27 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         # 🏮 High-Resolution Error Signature (v4.3.5)
                         # Identify timeout signatures without forcing a default error code.
                         e_code = attr.get("errCode") or attr.get("code") or p_cmd.get("code")
-                        if "maxtimemsexpired" in search_space or "exceeded time limit" in search_space:
+                        
+                        # 🧪 Deep Error Extraction (v4.5.4): Support nested asio/system error objects
+                        if not e_code and isinstance(attr.get("error"), dict):
+                            e_code = attr["error"].get("value") or attr["error"].get("code")
+                        
+                        e_name = attr.get("errName") or attr.get("errorName") or p_cmd.get("errName")
+                        if not e_name and e_code in ERROR_CODE_MAP:
+                            e_name = ERROR_CODE_MAP[e_code]
+                        
+                        e_msg = attr.get("errMsg") or attr.get("errorMsg") or attr.get("error") or p_cmd.get("error")
+                        if isinstance(e_msg, dict):
+                            e_msg = e_msg.get("message") or e_msg.get("what") or str(e_msg)
+
+                        # 🧪 Context-Aware Labeling (v4.5.4)
+                        if "asio.system" in search_space or "set_option" in search_space:
+                            display_err = f"System: {e_msg or msg}"
+                        elif "maxtimemsexpired" in search_space or "exceeded time limit" in search_space or e_code == 50:
                             display_err = "MaxTimeMSExpired: operation exceeded time limit"
                         else:
                             display_err = msg
                             # Extract error components from both attr and cmd_obj
-                            e_name = attr.get("errName") or attr.get("errorName") or p_cmd.get("errName")
-                            if not e_name and e_code in ERROR_CODE_MAP:
-                                e_name = ERROR_CODE_MAP[e_code]
-                                
-                            e_msg = attr.get("errMsg") or attr.get("errorMsg") or attr.get("error") or p_cmd.get("error")
-                            
                             if e_name and e_msg:
                                 display_err = f"{e_name}: {e_msg}"
                             elif e_name:
@@ -429,6 +440,15 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         if (str(metrics.get("ns", "unknown")) == "unknown" or str(metrics.get("ns", "")).endswith(".$cmd")) and lsid in session_ns_map:
                             metrics["ns"] = session_ns_map[lsid]; is_inferred = True
                         
+                        # 🔗 Stateful Operation Reconstruction (v4.5.2)
+                        op_id = metrics.get("op_id")
+                        if op_id and op_id != "N/A":
+                            q_hash = metrics.get("query_shape_hash")
+                            if q_hash and q_hash != "N/A":
+                                op_id_hash_map[str(op_id)] = q_hash
+                            elif str(op_id) in op_id_hash_map:
+                                metrics["query_shape_hash"] = op_id_hash_map[str(op_id)]
+                        
                         # 🏮 Identity Propagation (v2.7.3): Fallback to Session Map -> Then Connection Metadata
                         if str(metrics.get("app_name", "unknown")) == "unknown":
                             if lsid in session_app_map:
@@ -466,6 +486,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                             metrics["client_ip"] = msh["ip"]
 
                     ns = str(metrics.get("ns", "unknown"))
+                    
+                    # 🧬 Forensic Context Back-filling (v4.4.0)
+                    # Cache the most recent valid namespace for this connection to help 
+                    # attribute anonymous failure events later in the trace.
+                    if ns != "unknown" and not ns.endswith(".$cmd"):
+                        last_ns_cache[ctx] = ns
+                        
                     namespace_stats[ns] += 1
                     a_n = str(metrics.get("app_name", "unknown"))
                     app_registry[a_n] += 1
@@ -489,7 +516,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                     
                     # 🧬 Diagnostic Routing (v2.7.5): 
                     # 1. Identify noise (System namespaces, components, or internal apps)
-                    is_noise = is_system_query(ns, app=a_n, component=c, op=curr_op)
+                    # Recovery: In v4.4.0, we pass 'has_crud' to prevent misclassification of transactions as noise.
+                    is_noise = is_system_query(ns, app=a_n, component=c, op=curr_op, has_crud=metrics.get("has_crud", False))
                     
                     # 2. Hard Suppression check: 0ms Noise is Silenced
                     if is_noise and duration == 0 and not is_error_op and not is_timeout_op:
@@ -527,7 +555,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         
                         h_b = str(metrics.get("query_shape_hash") or "N/A")
                         
-                        h = str(f"{op}-{ns}-{h_b}")
+                        # 🧪 Failure Granularity (v4.5.2): Split failures by Error Code
+                        err_c = None
+                        if is_timeout_op or is_error_op:
+                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "unknown")
+                            h = str(f"{op}-{ns}-{h_b}-{err_c}")
+                        else:
+                            h = str(f"{op}-{ns}-{h_b}")
                         
                         # Route to appropriate bucket (v3.2.1 Failure Primacy)
                         # Priority: 🚨 Failure Forensics (Error/Timeout) > 🛠️ System Health > 🐢 Business Workload
@@ -554,11 +588,11 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         if is_error_op or is_timeout_op:
                             # 🧪 Executive Failure Aggregation (v2.7.16)
                             # Pull code and name, and track hotspots by error code
-                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "unknown")
-                            err_n = attr.get("errName") or (ERROR_CODE_MAP.get(err_c) if isinstance(err_c, int) else "unknown")
+                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "N/A")
+                            err_n = attr.get("errName") or (ERROR_CODE_MAP.get(err_c) if isinstance(err_c, int) else "N/A")
                             
                             # Standardize description: if we have a name, use it.
-                            err_desc = str(err_n) if err_n != "unknown" else str(err_c)
+                            err_desc = str(err_n) if err_n != "N/A" else str(err_c)
                             
                             if err_c not in error_code_agg:
                                 error_code_agg[err_c] = {
@@ -579,7 +613,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                                 "total_ninserted":0, "total_nModified":0, "total_ndeleted":0, "total_nMatched":0, "total_upserted": 0,
                                 "total_keysInserted":0, "total_keysUpdated":0, "total_keysDeleted":0,
                                 "total_txn_bytes_dirty":0, "total_mongot_wait_ms":0, "total_storage_read_micros":0,
-                                "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set(),
+                                "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, 
+                                "max_metrics": None, "min_metrics": None,
+                                "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set(),
                                 "query_hash": "N/A", "plan_cache_key": "N/A"
                             }
                         
@@ -646,8 +682,15 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                                 global_latency_dist[b] += 1
                                 break
                         
+                        # 🧬 Metric Peak Caching (v4.4.0)
+                        # We cache the full forensic metrics for the peak (max) and valley (min) 
+                        # examples during Pass 1. This eliminates the redundant JSON parsing 
+                        # loop in finalize_forensic_summary.
                         if s_o["max_example_raw"] is None or duration > s_o["max_ms"]:
-                            s_o["max_ms"] = duration; s_o["max_example_raw"] = str(entry).strip(); s_o["max_peek_attr"] = attr
+                            s_o["max_ms"] = duration
+                            s_o["max_example_raw"] = str(entry).strip()
+                            s_o["max_metrics"] = metrics
+                            s_o["max_peek_attr"] = attr
                             s_o["query_hash"] = metrics.get("query_hash", "N/A")
                             s_o["plan_cache_key"] = metrics.get("plan_cache_key", "N/A")
                             s_o["max_wait_metrics"] = {
@@ -658,8 +701,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                                 "Execution": waits.get("execution", 0),
                                 "Transactions": (f_data.get("timeActiveMicros", 0) / 1000.0) if f_data.get("timeActiveMicros") else 0
                             }
+                        
                         if s_o["min_example_raw"] is None or duration < s_o["min_ms"]:
-                            s_o["min_ms"] = duration; s_o["min_example_raw"] = str(entry).strip(); s_o["min_peek_attr"] = attr
+                            s_o["min_ms"] = duration
+                            s_o["min_example_raw"] = str(entry).strip()
+                            s_o["min_metrics"] = metrics
+                            s_o["min_peek_attr"] = attr
 
                 except Exception as e:
                     if len(engine_errors) < 100: 
@@ -703,8 +750,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
         system_summary = [s for s in system_summary if s["total_ms"] > 0]
         
         # 🧬 Synthesize Failure Forensics Tab
+        # 🧪 STRICT FILTERING (v4.5.1): Only show failures tied to identified query shapes
+        filtered_timeout_stats = {
+            h: s for h, s in timeout_shape_stats.items() 
+            if s.get("query_shape_hash") not in ["N/A", "unknown", "N/D"]
+        }
         timeout_summary = finalize_forensic_summary(
-            shape_stats=timeout_shape_stats,
+            shape_stats=filtered_timeout_stats,
             log_dur_sec=log_dur_sec,
             rules=rules,
             global_total_active=global_active_ms
@@ -857,22 +909,10 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         max_entry = q.get("max_example_raw")
         min_entry = q.get("min_example_raw") or max_entry
         
-        def _get_metrics(entry):
-            if not entry: return {}
-            # 🧪 Precision Indirection (v4.1.2): Raw logs must be re-parsed. 
-            # Atlas logs often have plaintext prefixes (timestamps); find the '{' to extract the JSON block.
-            try:
-                raw_str = entry if isinstance(entry, str) else str(entry)
-                j_idx = raw_str.find('{')
-                if j_idx != -1:
-                    obj = json.loads(raw_str[j_idx:])
-                    return extract_log_metrics(obj, include_full_command=True) or {}
-            except: 
-                return {}
-            return {}
-
-        max_d = _get_metrics(max_entry)
-        min_d = _get_metrics(min_entry)
+        # 🧬 Cached Metric Retrieval (v4.4.0)
+        # We use the metrics extracted during Pass 1 to avoid redundant JSON parsing.
+        max_d = q.get("max_metrics") or {}
+        min_d = q.get("min_metrics") or max_d
         
         # 🧬 Lifecycle Causal Diagnosis (v3.3.3)
         # Tickets -> Admission control delay
@@ -891,23 +931,26 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             tags.append({"label": "🐌 REPL_THROTTLED", "severity": "warning"})
 
         # 🕒 Timestamp & Attribute Extraction
-        def _get_ts_and_attr(entry):
-            if not entry: return "unknown", {}
-            if isinstance(entry, str):
-                try:
-                    j_idx = entry.find('{')
-                    if j_idx != -1:
-                        obj = json.loads(entry[j_idx:])
-                    else:
-                        obj = {}
-                except: return "unknown", {}
-            else: obj = entry or {}
-            
-            t = obj.get("t", {}).get("$date") if isinstance(obj.get("t"), dict) else obj.get("t")
-            return (str(t) if t else "unknown"), obj.get("attr", {})
+        # 🕒 Timestamp & Attribute Retrieval
+        # Recovery: In v4.4.0, we use the cached attributes from Pass 1.
+        max_attr = q.get("max_peek_attr", {})
+        min_attr = q.get("min_peek_attr", {})
+        
+        # Extract timestamps from raw logs if possible, otherwise use unknown
+        def _extract_ts(entry_raw):
+            if not entry_raw: return "unknown"
+            try:
+                raw_str = str(entry_raw)
+                j_idx = raw_str.find('{')
+                if j_idx != -1:
+                    obj = json.loads(raw_str[j_idx:])
+                    t = obj.get("t", {}).get("$date") if isinstance(obj.get("t"), dict) else obj.get("t")
+                    return str(t) if t else "unknown"
+            except: pass
+            return "unknown"
 
-        max_ts, max_attr = _get_ts_and_attr(max_entry)
-        min_ts, min_attr = _get_ts_and_attr(min_entry)
+        max_ts = _extract_ts(max_entry)
+        min_ts = _extract_ts(min_entry)
 
         # 🧪 Hybrid Clinical Insights (v3.3.7)
         # Decision: Anchor Efficiency to the Slowest-Case Sample, but Mutation to the Shape-wide Aggregate.
