@@ -35,6 +35,7 @@ from .specification import (
     GOSSIP_EVENT_IDENTIFIERS, ERROR_CODE_MAP
 )
 from .version import __version__
+from .utils import format_duration
 
 EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801"}
 
@@ -44,15 +45,11 @@ RE_TIMESTAMP = re.compile(r'\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\s]*')
 SEVERITY_MAP = {"I": "INFO", "W": "WARN", "E": "ERROR", "F": "FATAL", "D": "DEBUG", "D1": "DEBUG", "D2": "DEBUG"}
 LATENCY_BUCKETS = [100, 250, 500, 1000, 2000, 5000, 10000]
 
-def load_diagnostic_rules(custom_path: Optional[str] = None) -> List[dict]:
+def load_diagnostic_rules() -> List[dict]:
     """
-    Loads forensic audit rules from JSON. 
-    
-    Rules define how LogPeck identifies bottlenecks (e.g., 'Unindexed Sort', 
-    'Heavy Scanning', or 'I/O Saturation').
+    Loads the authoritative forensic audit rules from the internal rules.json.
     """
-    default_path = os.path.join(os.path.dirname(__file__), "rules.json")
-    path = custom_path if custom_path and os.path.exists(custom_path) else default_path
+    path = os.path.join(os.path.dirname(__file__), "rules.json")
     if os.path.exists(path):
         try:
             with open(path, 'r') as f: return json.load(f).get("rules", [])
@@ -145,7 +142,7 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
     
     return last_ns_cache
 
-def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: Optional[str] = None) -> Dict[str, Any]:
+def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str, Any]:
     """
     The Orchestration Hub for Forensic Analysis.
     
@@ -158,7 +155,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
     Returns: A nested dictionary containing global stats, connection metadata, 
              and synthesized shape summaries (Workload, System, Timeouts).
     """
-    start_time = time.time(); rules = load_diagnostic_rules(rules_path)
+    start_time = time.time(); rules = load_diagnostic_rules()
     
     # 📑 Core Analytics Registries
     severity_stats = Counter(); component_stats = Counter(); namespace_stats = Counter()
@@ -374,23 +371,32 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
 
                         error_namespace_stats[ns_guess] += 1
                     
-                    if is_error_op and not is_timeout_op:
-                        e_cat = attr.get("category") or "system.error"
-                        e_msg = attr.get("what") or attr.get("message") or attr.get("errmsg") or attr.get("error") or msg
+                    if is_error_op and not is_timeout_op and msg != "Slow query":
+                        # 🧬 High-Resolution Systemic Error Extraction (v4.6.3)
+                        # Extract the most meaningful label for the summary, but keep the payload raw.
+                        e_cat = attr.get("category") or header.get("c") or "SYSTEM"
+                        
+                        # Preferred extraction order for the "Summary" column
+                        raw_err = attr.get("error") or attr.get("errmsg") or attr.get("message") or msg
+                        if isinstance(raw_err, dict):
+                            e_msg = raw_err.get("errmsg") or raw_err.get("message") or raw_err.get("codeName") or str(raw_err)
+                        else:
+                            e_msg = str(raw_err)
+                            
                         e_note = attr.get("note", "N/A")
                         
-                        # To keep the payload concise, extract just the error-related fields
-                        err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note"]}
+                        # 🧪 Technical Forensic Payload: Preserve the depth you like
+                        err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason"]}
                         
                         key = (str(e_cat), str(e_msg)[:100], str(e_note)[:50])
                         if key not in system_error_patterns:
                             system_error_patterns[key] = {
                                 "count": 0,
                                 "ts": str(ts),
-                                "category": str(e_cat),
+                                "category": str(e_cat).upper(),
                                 "msg": str(e_msg)[:120],
                                 "note": str(e_note)[:120],
-                                "payload": json.dumps(err_payload, indent=2)[:300] if err_payload else "N/A"
+                                "payload": json.dumps(err_payload, indent=2) if err_payload else "N/A"
                             }
                         system_error_patterns[key]["count"] += 1
 
@@ -651,10 +657,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         s_o["total_planning_ms"] += waits.get("planning", 0)
                         s_o["total_yields"] += f_data.get("numYields", 0)
                         s_o["total_write_conflicts"] += f_data.get("writeConflicts", 0)
-                        s_o["total_oplog_wait_ms"] += f_data.get("totalOplogSlotDurationMicros", 0)
-                        s_o["total_queue_wait_ms"] += f_data.get("totalTimeQueuedMicros", 0) / 1000.0
+                        s_o["total_oplog_wait_ms"] += f_data.get("totalOplogSlotDurationMicros", 0) / 1000.0
+                        s_o["total_queue_wait_ms"] += waits.get("queued", 0)
                         s_o["total_lock_wait_ms"] += waits.get("lock_wait", 0)
-                        s_o["total_replication_wait_ms"] += f_data.get("flowControlMillis", 0)
+                        s_o["total_replication_wait_ms"] += waits.get("replication_wait", 0)
                         
                         # 🧬 Clinical Insight Accumulation (v3.3.4)
                         s_o["total_keys_examined"] += f_data.get("keysExamined", 0)
@@ -824,6 +830,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                     }
                     for k, v in sorted(error_code_agg.items(), key=lambda x: x[1]["count"], reverse=True)
                 ],
+                "system_error_patterns": sorted(system_error_patterns.values(), key=lambda x: x["count"], reverse=True)[:10],
                 "active_latency_tiers": sorted([int(k) for k, v in global_latency_dist.items() if v > 0]),
             }, 
             "connections": {
@@ -841,7 +848,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
             },
             "summary": final_results,
             "system_summary": system_summary,
-            "timeout_summary": timeout_summary
+            "timeout_summary": timeout_summary,
+            "threshold": threshold_ms
         }
         return res
 
@@ -936,22 +944,6 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         max_d = q.get("max_metrics") or {}
         min_d = q.get("min_metrics") or max_d
         
-        # 🧬 Lifecycle Causal Diagnosis (v3.3.3)
-        # Tickets -> Admission control delay
-        # Locks -> Resource contention
-        # Repl -> Replication backpressure
-        q_avg = q["total_queue_wait_ms"] / q["count"]
-        l_avg = q["total_lock_wait_ms"] / q["count"]
-        r_avg = q["total_replication_wait_ms"] / q["count"]
-        
-        if q_avg > l_avg and q_avg > 5:
-            tags.append({"label": "🎟️ TICKET_SATURATION", "severity": "error"})
-        elif l_avg > q_avg and l_avg > 5:
-            tags.append({"label": "🔥 LOCK_CONTENTION", "severity": "warning"})
-        
-        if r_avg > 0:
-            tags.append({"label": "🐌 REPL_THROTTLED", "severity": "warning"})
-
         # 🕒 Timestamp & Attribute Extraction
         # 🕒 Timestamp & Attribute Retrieval
         # Recovery: In v4.4.0, we use the cached attributes from Pass 1.
@@ -1020,7 +1012,8 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "cache_pressure": round(max_d.get("forensic", {}).get("txnBytesDirty", 0) / (1024 * 1024), 1),
             "replication_backpressure": max(max_d.get("forensic", {}).get("flowControlMillis", 0), max_d.get("max_peek_attr", {}).get("waitForWriteConcernDurationMillis", 0)),
             "storage_intensity": min(100.0, round((max_d.get("waits_ms", {}).get("storage_wait", 0) / max(max_d.get("ms", 1), 1)) * 100, 1)),
-            "search_latency": max_d.get("forensic", {}).get("mongot_wait", 0)
+            "search_latency": max_d.get("forensic", {}).get("mongot_wait", 0),
+            "cache_stall": round(max_d.get("forensic", {}).get("timeWaitingMicros_cache", 0) / 1000.0, 1)
         }
 
         eval_data = {
@@ -1034,6 +1027,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "error_name": max_d.get("forensic", {}).get("errName") or max_d.get("forensic", {}).get("codeName"),
             "clinical_stats": stats,
             "cache_pressure": stats["cache_pressure"],
+            "cache_stall": stats["cache_stall"],
             "ins_amp": stats["ins_amp"],
             "doc_mut": doc_mut,
             "has_read_forensics": 1 if (s_docs_ex > 0 or s_keys_ex > 0) else 0,
@@ -1048,9 +1042,12 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
                 triggered, val = evaluate_rule(rule, eval_data)
                 if triggered: 
                     label = str(rule["label"])
-                    if "{value" in label and val is not None:
+                    if "{" in label and val is not None:
                         display_val = val * 100 if "%" in label else val
-                        label = label.format(value=display_val)
+                        if "{value_duration}" in label:
+                            label = label.format(value=display_val, value_duration=format_duration(val))
+                        else:
+                            label = label.format(value=display_val)
                     tags.append({"label": label, "severity": rule.get("severity", "warning")})
             except: continue
             

@@ -107,8 +107,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
     ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "unknown" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
     msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
-    timeout_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Count</th><th>Avg</th><th>Max</th><th>Namespace</th><th>Op Preview</th><th>Error Pattern</th><th>App</th><th>Context</th></tr></thead><tbody>"
-    for t in stats.get("timeout_patterns", []):
+    timeout_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Count</th><th>Avg</th><th>Max</th><th>Shape Hash</th><th>Namespace</th><th>Op Preview</th><th>Error Pattern</th><th>App</th></tr></thead><tbody>"
+    for i, t in enumerate(stats.get("timeout_patterns", [])):
+        did = f"timeout-{i}"
         t_ts = str(t.get('ts', 'N/A'))[11:19]
         t_preview = str(t.get('preview', 'N/A'))[:60]
         t_code = t.get('error_code', 'N/A') or 'N/A'
@@ -116,17 +117,61 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         t_avg = format_duration(t.get('total_ms', 0) / max(t_count, 1))
         t_max = format_duration(t.get('max_ms', 0))
         t_app = t.get('app_name', 'unknown')
-        timeout_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{t_ts}</td><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td><td><span class='tag-critical'>{t_count}</span></td><td style='font-size:0.75rem'>{t_avg}</td><td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td><td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td><td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td><td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td><td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td><td style='font-size:0.7rem;color:var(--text-secondary)'>IP: {t.get('remote', 'N/A')}<br>Ctx: {t.get('ctx', 'N/A')}</td></tr>"
+        t_hash = t.get('shape_hash', 'N/A')
+        
+        # Main Row: Searchable & Toggleable
+        timeout_table_html += f"""<tr class="row-main" onclick="toggleDetails('{did}')">
+            <td style='font-size:0.75rem;font-family:monospace'>{t_ts}<span style="display:none"> {t.get('remote', 'N/A')} {t.get('ctx', 'N/A')}</span></td>
+            <td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td>
+            <td><span class='tag-critical'>{t_count}</span></td>
+            <td style='font-size:0.75rem'>{t_avg}</td>
+            <td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td>
+            <td style='font-family:monospace;font-size:0.7rem;color:var(--text-secondary)'>{t_hash}</td>
+            <td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td>
+            <td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td>
+            <td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td>
+            <td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td>
+        </tr>"""
+        
+        # Details Row: Forensic Context
+        timeout_table_html += f'''<tr id="{did}" class="details-row"><td colspan="10"><div class="details-content">
+            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">FORENSIC CONTEXT</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem">
+                <div>
+                    <div class="card-label">Remote Client</div>
+                    <div class="f-val" style="color:var(--text-primary)">IP: {t.get('remote', 'N/A')}</div>
+                    <div class="f-val" style="color:var(--text-secondary); font-size:0.75rem; margin-top:0.4rem">Context: {t.get('ctx', 'N/A')}</div>
+                </div>
+                <div>
+                    <div class="card-label">Query Shape Hash</div>
+                    <div class="f-val" style="color:var(--accent)">{t_hash}</div>
+                </div>
+            </div>
+        </div></td></tr>'''
     timeout_table_html += "</tbody></table>"
     
     system_error_table_html = "<table><thead><tr><th>Last Seen</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th></tr></thead><tbody>"
-    for err in stats.get("system_error_patterns", []):
+    for i, err in enumerate(stats.get("system_error_patterns", [])):
+        did = f"syserr-{i}"
         err_ts = str(err.get('ts', 'N/A'))[11:19]
-        system_error_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{err_ts}</td><td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td><td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td><td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td><td><span class='tag-critical'>{err.get('count', 0)}</span></td></tr>"
+        # Main Row: Toggleable
+        system_error_table_html += f"""<tr class="row-main" onclick="toggleDetails('{did}')">
+            <td style='font-size:0.75rem;font-family:monospace'>{err_ts}</td>
+            <td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td>
+            <td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td>
+            <td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td>
+            <td><span class='tag-critical'>{err.get('count', 0)}</span></td>
+        </tr>"""
+        
+        # Details Row: Hidden by default
+        payload_html = "N/A"
         if err.get('payload') and err.get('payload') != 'N/A':
-            system_error_table_html += f"<tr><td colspan='5' style='padding:0 1rem 1rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05)'><div style='background:#0f172a;padding:0.8rem;border-radius:6px;font-family:monospace;font-size:0.7rem;color:var(--text-secondary);white-space:pre-wrap;border-left:2px solid var(--warn)'>{err.get('payload')}</div></td></tr>"
-        else:
-            system_error_table_html += f"<tr><td colspan='5' style='padding:0; border-bottom: 1px solid rgba(255,255,255,0.05)'></td></tr>"
+            payload_html = f"<div style='background:#000;padding:1.5rem;border-radius:12px;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;border:1px solid var(--border);border-left:4px solid var(--warn)'>{err.get('payload')}</div>"
+            
+        system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="5"><div class="details-content">
+            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">TECHNICAL FORENSIC PAYLOAD</div>
+            {payload_html}
+        </div></td></tr>'''
     system_error_table_html += "</tbody></table>"
     
     def generate_tier_buttons(table_id):
@@ -276,6 +321,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                     sl_fmt = f"{sl/1000:,.1f}s" if sl >= 1000 else f"{sl:,.0f}ms"
                     insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend process.">SEARCH LATENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT</div></div>')
 
+                # 9. WT CACHE STALL (Eviction Pressure) — v4.6.4
+                cs = row_data.get("cache_stall", 0)
+                if cs > 0:
+                    cs_clr = "var(--tier1)" if cs < 1 else ("#fbbf24" if cs < 10 else "var(--error)")
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {cs_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Time spent waiting for WiredTiger cache eviction before proceeding.">WT CACHE STALL (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{cs_clr}; margin:0.3rem 0">{cs:,.1f}ms</div><div style="font-size:0.6rem; color:var(--text-secondary)">EVICTION WAIT</div></div>')
+
                 if not insights:
                     # 🏥 Clinical Triage: Optimal vs. Unknown
                     is_optimal = False
@@ -388,8 +439,17 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
             slow_json = json.dumps(row.get('max_peek_attr') or {}, indent=2)
 
             # Build optional columns based on view type
+            # 🔍 Plan Badge System (v4.6.4): Visual tagging for Search/Vector operations
+            plan_raw = row.get('plan_summary', 'N/A')
+            plan_html = plan_raw
+            if "SEARCH" in str(plan_raw):
+                p_clr = "var(--accent)" if "SEARCH [" in str(plan_raw) and "VECTOR" not in str(plan_raw) else "#a855f7"
+                plan_html = f'<span style="background:rgba(255,255,255,0.05);border:1px solid {p_clr};color:{p_clr};padding:2px 8px;border-radius:12px;font-size:0.65rem;font-weight:800;white-space:nowrap">{plan_raw}</span>'
+            elif "VECTOR" in str(plan_raw):
+                plan_html = f'<span style="background:rgba(255,255,255,0.05);border:1px solid #a855f7;color:#a855f7;padding:2px 8px;border-radius:12px;font-size:0.65rem;font-weight:800;white-space:nowrap">{plan_raw}</span>'
+
             if is_system_view:
-                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{row.get('plan_summary', 'N/A')}</td>"""
+                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
             elif is_timeout_view:
@@ -399,7 +459,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 colspan_val = "7"
                 aas_load_col = ""
             else:
-                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{row.get('plan_summary', 'N/A')}</td>"""
+                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
 
@@ -574,9 +634,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         .legend-item {{ display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }}
         .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; }}
 
-        .forensic-table {{ background: transparent; border: none; width: 100%; margin-top: 1rem; table-layout: auto; }}
-        .forensic-table th {{ background: transparent; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 0.8rem 0; font-size:0.6rem; color:var(--text-secondary); letter-spacing:0.05em; }}
-        .forensic-table td {{ border: none; padding: 0.8rem 0; font-size: 0.82rem; }}
+        .forensic-table {{ background: transparent; border: none; width: 100%; margin-top: 1rem; table-layout: fixed; }}
+        .forensic-table th {{ background: transparent; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 0.8rem 0; font-size:0.6rem; color:var(--text-secondary); letter-spacing:0.05em; text-align: left; }}
+        .forensic-table td {{ border: none; padding: 0.8rem 0; font-size: 0.82rem; word-break: break-all; overflow-wrap: break-word; white-space: normal; }}
         .f-label {{ color: var(--text-secondary); font-weight: 600; }}
         .f-val {{ font-family: 'JetBrains Mono'; }}
         .f-val-fast {{ font-weight: 700; color: var(--accent); }}
@@ -585,8 +645,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
 
         .impact-container {{ width: 100px; display: flex; flex-direction: column; }}
         .comparison-grid {{ display: grid; grid-template-columns: 1.2fr 1fr; gap: 4rem; }}
-        .comparison-grid > div {{ min-width: 0; }}
-        .payload-pre {{ white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }}
+        .comparison-grid > div {{ min-width: 0; max-width: 100%; }}
+        .payload-pre {{ white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; width: 100%; box-sizing: border-box; }}
         .tag-info {{ background: #1e293b; color: var(--accent); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; border: 1px solid var(--border); }}
         .btn-copy {{ 
             cursor: pointer; 

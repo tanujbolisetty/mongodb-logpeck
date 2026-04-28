@@ -2,6 +2,29 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.0] - 2026-04-28
+### Added
+- **Truth Engine**: Surgical identification and aggregation of systemic/infrastructure errors (Tab 1 & Tab 4).
+- **Forensic Search Index**: Universal full-text search parity across all tabs including hidden metadata (IPs, Hashes, Drivers).
+- **Unified Expansion UI**: Standardized "Click-to-Expand" drill-down logic across Business, System, and Failure tabs.
+- **Searchable Hashes**: Enabled forensic fingerprint search in Failure Forensics.
+- **Diagnostics Matrix**: New technical specification for searchable fields.
+
+## [4.6.1] - 2026-04-28
+### Added
+- **Standardized Volumetrics**: Re-introduced the `--limit` flag with an absolute default of **10** results across all `search` and `filter` operations. This ensures a consistent, lightweight experience while still allowing for high-volume overrides (e.g., `--limit 500` or `--limit 0` for unlimited).
+
+## [4.6.0] - 2026-04-28
+### Added
+- **Failure Workload CLI**: Introduced the `failure-workload` command to the CLI, providing terminal-based parity with the HTML "Failure Forensics" tab for systemic timeout and error analysis.
+- **Surgical Match Counting**: Added the `--count` flag to `search` and `filter` commands, enabling rapid identification of matching log volume without generating full reports.
+- **Forensic Pipeline Orchestrator**: Created `scripts/forensic_log_analysis_pipeline.py` to automate end-to-end Atlas log downloads, lifecycle management (retention), and automated email notifications.
+- **Scenario Runner Coverage**: Expanded `tests/scenario_runner.py` to include systemic failure validation and CLI parity tests.
+
+### Hardened
+- **Pipeline Safety Guards**: Implemented a `run_` prefix validation in the lifecycle purge engine to prevent accidental deletion of manual or unrelated directories.
+- **Node Filtering**: Added support for `--role PRIMARY` in the forensic pipeline to allow targeted analysis of primary cluster nodes.
+
 ## [4.5.9] - 2026-04-27
 ### Fixed
 - **Forensic Scaling**: Corrected unit conversion in the Storage Intensity engine to ensure sub-millisecond metrics are accurately represented in the dashboard.

@@ -161,8 +161,8 @@ def extract_query_params(cmd_obj: dict, op: str) -> Dict[str, Any]:
             val = cmd_obj.get(field)
             if val: _harvest_params(val, params)
     elif op in ["insert", "tx-insert", "i"]:
-        # 🧬 CRUD Coarsening (v2.6.16): Inserts have no query shape, using fixed _id anchor
-        params = {"_id": True}
+        # Inserts have no query filter — return empty (no schema to extract)
+        pass
     elif op in ["count", "distinct", "findAndModify", "tx-findandmodify"]:
         _harvest_params(cmd_obj.get("query") or cmd_obj.get("filter"), params)
     elif op == "search": _harvest_params(cmd_obj, params)
@@ -369,33 +369,8 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     attr = entry.get("attr")
     
     if not isinstance(attr, dict):
-        # 🧪 Flat-Block Hybrid Induction (v3.2.5)
-        # If the 'attr' block is missing, the log is likely 'flat'.
-        # We synthesize a temporary attr block from top-level fields.
-        attr = {}
-        # Registry of top-level keys that may carry forensic metadata in flat/lean logs.
-        # We also look into 'error' and 'outcome' blocks for secondary discovery.
-        SEARCH_PROBES = [
-            "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
-            "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
-            "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
-            "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
-            "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
-            "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
-            "storage", "locks", "queues", "mongot", "command", "originatingCommand",
-            "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
-        ]
-        for k in SEARCH_PROBES:
-            if k in entry: attr[k] = entry[k]
+        attr = synthesize_flat_attr(entry)
         entry["attr"] = attr
-        
-        # 🕵️ Nested Error Extraction (v3.2.6): Flatten 'error' dict if present
-        err_obj = entry.get("error")
-        if isinstance(err_obj, dict):
-            for k, v in err_obj.items():
-                if k not in attr: attr[k] = v
-        elif isinstance(err_obj, str) and "error" not in attr:
-            attr["error"] = err_obj
             
     # Handle both standard command logs and transactional CRUD blocks (v2.3.5)
     cmd_obj = attr.get("command") or attr.get("CRUD") or entry.get("command") or {}
@@ -404,203 +379,30 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     
     op, ns, has_crud = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
     
-    # Deep Identity Harvesting (v1.3.16)
-    # Prefer top-level attr, but fallback to entry (flat) or originatingCommand
-    orig_cmd = attr.get("originatingCommand", {})
-    app_name = str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or "unknown")
-    user_id = str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "unknown")
+    # 🆔 Identity Extraction (v4.6.3)
+    identity = extract_identity(attr, entry, op)
 
-    # Shape Hash Hardening (v1.1.49)
-    # Prefer MongoDB 8.0 queryShapeHash > planCacheShapeHash > queryHash
-    shape_hash = attr.get("queryShapeHash") or attr.get("planCacheShapeHash") or attr.get("queryHash")
-    if not shape_hash:
-        shape_hash = entry.get("queryShapeHash") or entry.get("planCacheShapeHash") or entry.get("queryHash")
+    # 🧬 Shape & Hash Extraction (v4.6.3)
+    q_hash = extract_query_hash(attr, entry, op)
     
-    if not shape_hash and op == "getmore" and "originatingCommand" in attr:
-        orig = attr["originatingCommand"]
-        shape_hash = orig.get("queryShapeHash") or orig.get("planCacheShapeHash") or orig.get("queryHash")
-    
-    q_hash = shape_hash or "N/A"
-    
-    # Hybrid Duration Discovery
+    # ⏱️ Duration Discovery
     ms = attr.get("durationMillis") or attr.get("durationMS") or entry.get("durationMillis") or entry.get("durationMS") or 0
     if not ms and "parameters" in attr: ms = attr["parameters"].get("durationMillis", 0)
 
-    # 🕵️ Senior Forensic Error Harvesting (v3.2.9)
-    # Recursively harvest error metadata with Dynamic Name Resolution from ERROR_CODE_MAP.
-    forensic = {}
-    harvested_error = {}
-    err_obj = attr.get("error") or entry.get("error")
-    if isinstance(err_obj, dict):
-        harvested_error["errCode"] = err_obj.get("code") or err_obj.get("errCode")
-        harvested_error["errName"] = err_obj.get("codeName") or err_obj.get("errName")
-        harvested_error["errMsg"] = err_obj.get("errmsg") or err_obj.get("errMsg")
-    elif isinstance(err_obj, str):
-        # 🧪 String-Format Extract (v3.2.10): NotYetInitialized: Replication...
-        if ":" in err_obj:
-            p_name = err_obj.split(":")[0].strip()
-            # If the prefix looks like a primary code name, harvest it
-            for code, name in ERROR_CODE_MAP.items():
-                if p_name == name:
-                    harvested_error["errCode"] = code
-                    harvested_error["errName"] = name
-                    break
-        harvested_error["errMsg"] = err_obj
-        
-    # 🧬 Dynamic Error Name Resolution (v3.2.11)
-    if harvested_error.get("errCode") and not harvested_error.get("errName"):
-        # 🧪 Type-Safe Error resolution (v4.3.5)
-        # Ensure string-based error codes map to human-readable names
-        try:
-            # 💡 High-Resolution Error Signature (v4.3.5)
-            try:
-                code = int(harvested_error.get("errCode", 0))
-                e_name = harvested_error.get("errName") or ERROR_CODE_MAP.get(code, f"Code {code}")
-            except:
-                e_name = "Unknown Error"
-        except (ValueError, TypeError):
-            pass
-
-    # 🕵️ Universal Discovery Harvester (v3.2.0)
-    # --------------------------------------------------------------------------
-    # This is the "Safety Net" for forensic metrics.
-    # Instead of traversing fixed paths (which change between MongoDB versions), 
-    # it performs a Breadth-First Search (BFS) for keys listed in METRIC_MARKERS.
-    # This ensures that even if 'timeReadingMicros' moves from 'storage.data' 
-    # to a new block, the forensic engine will find it.
-    # --------------------------------------------------------------------------
-    def discovery_harvest(obj, marker_map, result=None, depth=0):
-        if result is None: result = {}
-        if depth > 10 or not isinstance(obj, dict): return result
-        for k, v in obj.items():
-            # If marker matched and not already harvested (prioritize top-level)
-            if k in marker_map:
-                std_id = marker_map[k]
-                if std_id not in result:
-                    # 🧬 Inline Normalization (v3.2.2)
-                    # Standardize microseconds and nanoseconds into milliseconds
-                    if isinstance(v, (int, float)):
-                        # Maintain raw units for forensic dict to avoid naming confusion (v4.5.9)
-                        pass
-                    result[std_id] = v
-            if isinstance(v, dict):
-                discovery_harvest(v, marker_map, result, depth + 1)
-        return result
-
-    # Perform discovery on 'attr' and 'harvested_error'
-    forensic = discovery_harvest(attr, METRIC_MARKERS)
+    # 🕵️ Forensic Stats Extraction (v4.6.3)
+    forensic = extract_forensic_stats(attr, entry)
     
-    # Check harvested_error as well (flattened)
-    for k, v in harvested_error.items():
-        if k in METRIC_MARKERS:
-            std_id = METRIC_MARKERS[k]
-            if std_id not in forensic:
-                # Normalization for error fields
-                if isinstance(v, (int, float)):
-                    if k.endswith("Micros"): v = round(v / 1000.0, 3)
-                    elif k.endswith("Nanos"): v = round(v / 1000000.0, 3)
-                forensic[std_id] = v
-    
-    # 🧪 Metadata Promotion (v3.2.5): Ensure critical metadata is always in forensic dict
-    for meta_key in ["errCode", "errName", "errMsg", "ok"]:
-        if meta_key in harvested_error and meta_key not in forensic:
-            forensic[meta_key] = harvested_error[meta_key]
-        elif meta_key in attr and meta_key not in forensic:
-            forensic[meta_key] = attr[meta_key]
-
-    # Validation Fallback (v2.7.0): If we have a failure but no errName, use ERROR_CODE_MAP or errMsg
-    if ("errCode" in forensic or "errMsg" in forensic) and "errName" not in forensic:
-        code = forensic.get("errCode")
-        if code and code in ERROR_CODE_MAP:
-            forensic["errName"] = ERROR_CODE_MAP[code]
-        else:
-            forensic["errName"] = str(code or forensic.get("errMsg", "DirectError"))
-
-
-    if "shardNames" in attr: forensic["shards"] = len(attr["shardNames"])
-    mongot_wait = get_nested_value(entry, "attr.mongot.timeWaitingMillis")
-
-    if mongot_wait: forensic["mongot_wait"] = mongot_wait
-    
-    # 🧼 Cache Pressure Harvesting (v2.7.14)
-    # Prefer nested path, fallback to top-level or extracted forensic dict
-    txn_bytes_dirty = get_nested_value(entry, "attr.storage.data.txnBytesDirty") or attr.get("txnBytesDirty") or forensic.get("txnBytesDirty")
-    if txn_bytes_dirty is not None: forensic["txnBytesDirty"] = txn_bytes_dirty
-    
-    cache_micros = get_nested_value(entry, "attr.storage.timeWaitingMicros.cache") or 0
-    if cache_micros > 0:
-        forensic["timeWaitingMicros_cache"] = cache_micros
-
-    waits_ms = {}
-    lock_micros = 0
-    if "locks" in attr:
-        for res, counts in attr.get("locks", {}).items():
-            if isinstance(counts, dict):
-                wait_obj = counts.get("timeAcquiringMicros", 0)
-                if isinstance(wait_obj, dict):
-                    lock_micros += sum(wait_obj.values())
-                elif isinstance(wait_obj, (int, float)):
-                    lock_micros += wait_obj
-    
-    if lock_micros > 0:
-        val = round(lock_micros / 1000.0, 2)
-        waits_ms["lock_wait"] = min(val, ms) if ms > 0 else val
-
-    # 🕵️ Metric Consolidation (v2.3.1)
-    # Removing redundant 'oplog_wait' to resolve Oplog Slot Wait duplication.
-    # The source 'totalOplogSlotDurationMicros' is already captured in the forensic dict.
-
-    s_read = (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
-    s_write = (get_nested_value(entry, "attr.storage.data.timeWritingMicros") or 0) + (attr.get("waitForWriteConcernDurationMillis") or 0) * 1000
-    s_cache = cache_micros # Raw µs
-    
-    # 🧪 Write Bottleneck Unification (v2.7.13)
-    # Include Oplog Slot Duration in storage wait for mutation ops (update, findAndModify, delete, insert)
-    # This aligns the 'I/O Bound' diagnostic with realistic write-path concurrency pressure.
-    # BUG FIX (v4.4.0): MongoDB 5.0+ WiredTiger already accounts for oplog concurrency in some metrics.
-    # We only add it here if it's significant and duration is high enough to avoid double-counting noise.
-    oplog_micros = (attr.get("totalOplogSlotDurationMicros") or 0)
-    oplog_wait = oplog_micros if (oplog_micros > 1000 and ms > 100) else 0
-    
-    if s_read > 0 or s_write > 0 or oplog_wait > 0 or s_cache > 0: 
-        # Convert to ms for the internal waits_ms dict which is the "wait-hierarchy" source
-        val = round((s_read + s_write + oplog_wait + s_cache) / 1000.0, 2)
-        # 🧪 Wall-Clock Hardening (v2.3.1)
-        # Cap visual components at total duration if they represent cumulative parallel effort.
-        waits_ms["storage_wait"] = min(val, ms) if ms > 0 else val
-
-    plan_ms = (attr.get("planningTimeMicros") or 0) / 1000.0
-    if plan_ms > 0: waits_ms["planning"] = round(plan_ms, 2)
-    
-    queue_micros = get_nested_value(entry, "attr.queues.execution.totalTimeQueuedMicros") or 0
-    if queue_micros > 0: 
-        val = round(queue_micros / 1000.0, 2)
-        waits_ms["queued"] = min(val, ms) if ms > 0 else val
-
-    # 🚦 Replication Backpressure (v3.3.3)
-    flow_control = attr.get("flowControlMillis") or 0
-    if flow_control > 0:
-        waits_ms["replication_wait"] = flow_control
-
-    working_ms = attr.get("workingMillis")
-    if working_ms is not None: waits_ms["execution"] = working_ms
+    # 🚦 Wait Hierarchy Calculation (v4.6.3)
+    waits_ms = calculate_waits(attr, entry, forensic, ms, op)
 
     schema_cmd = attr.get("originatingCommand") or cmd_obj
-    # 🧪 Unified Schema Routing (v2.3.5)
-    # If the op is already resolved (e.g. tx-update), use it; Otherwise probe schema_cmd
     schema_op = op if op.startswith("tx-") or op in ["update", "insert", "delete"] else (next(iter(schema_cmd)) if schema_cmd else op)
     
     # 🕵️ Surgical Regex Grep (v2.7.4)
-    # Catch $regex at any level of nesting within the command object via string audit
     cmd_str = str(cmd_obj)
     has_regex = "$regex" in cmd_str or "$regularExpression" in cmd_str
 
-    # Forensic IP Extraction (v1.2.6)
-    ip_raw = str(attr.get("remote") or attr.get("client") or "unknown")
-    client_ip = str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw)
-
     # 🔍 Search & AI Intent Extraction (v4.6.3)
-    # Modularized extraction for Atlas Search and Vector Search metadata.
     plan_summary = extract_search_metadata(attr, entry, cmd_obj, op)
 
     metrics = {
@@ -611,10 +413,11 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
         "has_crud": has_crud,
-        "plan_summary": plan_summary, "app_name": app_name,
-        "user": user_id,
-        "client_ip": client_ip,  # 🏺 Recovered from the current line
-        "op_id": attr.get("opId") or entry.get("opId") or "N/A",
+        "plan_summary": plan_summary, 
+        "app_name": identity["appName"],
+        "user": identity["user"],
+        "client_ip": identity["client_ip"],
+        "op_id": identity["op_id"],
         "forensic": forensic, "waits_ms": waits_ms
     }
     if include_full_command: metrics["attr"] = attr
@@ -653,6 +456,139 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
         
     return False
 
+def synthesize_flat_attr(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    🧪 Flat-Block Hybrid Induction (v3.2.5).
+    Synthesizes a temporary attr block from top-level fields for lean logs.
+    """
+    attr = {}
+    SEARCH_PROBES = [
+        "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
+        "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
+        "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
+        "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
+        "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
+        "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
+        "storage", "locks", "queues", "mongot", "command", "originatingCommand",
+        "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
+    ]
+    for k in SEARCH_PROBES:
+        if k in entry: attr[k] = entry[k]
+        
+    err_obj = entry.get("error")
+    if isinstance(err_obj, dict):
+        for k, v in err_obj.items():
+            if k not in attr: attr[k] = v
+    elif isinstance(err_obj, str) and "error" not in attr:
+        attr["error"] = err_obj
+    return attr
+
+def extract_identity(attr: Dict[str, Any], entry: Dict[str, Any], op: str) -> Dict[str, str]:
+    """Identifies the application, user, IP, and operation ID anchors."""
+    orig_cmd = attr.get("originatingCommand", {})
+    ip_raw = str(attr.get("remote") or attr.get("client") or "unknown")
+    
+    return {
+        "appName": str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or "unknown"),
+        "user": str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "unknown"),
+        "client_ip": str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw),
+        "op_id": str(attr.get("opId") or entry.get("opId") or "N/A")
+    }
+
+def extract_query_hash(attr: Dict[str, Any], entry: Dict[str, Any], op: str) -> str:
+    """Surgically extracts the structural fingerprint (8.0 aware)."""
+    shape_hash = attr.get("queryShapeHash") or attr.get("planCacheShapeHash") or attr.get("queryHash")
+    if not shape_hash:
+        shape_hash = entry.get("queryShapeHash") or entry.get("planCacheShapeHash") or entry.get("queryHash")
+    
+    if not shape_hash and op == "getmore" and "originatingCommand" in attr:
+        orig = attr["originatingCommand"]
+        shape_hash = orig.get("queryShapeHash") or orig.get("planCacheShapeHash") or orig.get("queryHash")
+    
+    return shape_hash or "N/A"
+
+def extract_forensic_stats(attr: Dict[str, Any], entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Harvests performance counters and storage metrics recursively."""
+    # 🕵️ BFS Discovery
+    forensic = discovery_harvest(attr, METRIC_MARKERS)
+    
+    # Error metadata extraction
+    err_obj = attr.get("error") or entry.get("error")
+    harvested_error = {}
+    if isinstance(err_obj, dict):
+        harvested_error["errCode"] = err_obj.get("code") or err_obj.get("errCode")
+        harvested_error["errName"] = err_obj.get("codeName") or err_obj.get("errName")
+        harvested_error["errMsg"] = err_obj.get("errmsg") or err_obj.get("errMsg")
+    elif isinstance(err_obj, str):
+        harvested_error["errMsg"] = err_obj
+
+    # Promote metadata
+    for k in ["errCode", "errName", "errMsg", "ok"]:
+        if k in harvested_error and k not in forensic: forensic[k] = harvested_error[k]
+        elif k in attr and k not in forensic: forensic[k] = attr[k]
+
+    # Resolve names
+    if ("errCode" in forensic or "errMsg" in forensic) and "errName" not in forensic:
+        code = forensic.get("errCode")
+        forensic["errName"] = ERROR_CODE_MAP.get(int(code) if str(code).isdigit() else 0) or str(code or "DirectError")
+
+    # Storage specials (v4.6.4)
+    if "shardNames" in attr: forensic["shards"] = len(attr["shardNames"])
+    
+    # Map dots to canonical metric IDs
+    NESTED_MAPPING = {
+        "attr.mongot.timeWaitingMillis": "mongot_wait",
+        "attr.storage.data.txnBytesDirty": "txnBytesDirty",
+        "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache"
+    }
+    for path, metric_id in NESTED_MAPPING.items():
+        val = get_nested_value(entry, path)
+        if val is not None: forensic[metric_id] = val
+        
+    return forensic
+
+def calculate_waits(attr: Dict[str, Any], entry: Dict[str, Any], forensic: Dict[str, Any], ms: float, op: str) -> Dict[str, float]:
+    """Constructs the diagnostic wait-hierarchy (ms)."""
+    waits = {}
+    
+    # 1. Locks
+    lock_micros = 0
+    for res, counts in attr.get("locks", {}).items():
+        if isinstance(counts, dict):
+            w = counts.get("timeAcquiringMicros", 0)
+            lock_micros += sum(w.values()) if isinstance(w, dict) else (w if isinstance(w, (int, float)) else 0)
+    if lock_micros > 0: waits["lock_wait"] = round(lock_micros / 1000.0, 2)
+
+    # 2. Storage (Unified)
+    s_read = (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
+    s_write = (get_nested_value(entry, "attr.storage.data.timeWritingMicros") or 0) + (attr.get("waitForWriteConcernDurationMillis") or 0) * 1000
+    s_cache = forensic.get("timeWaitingMicros_cache", 0)
+    oplog_micros = (attr.get("totalOplogSlotDurationMicros") or 0)
+    oplog_wait = oplog_micros if (oplog_micros > 1000 and ms > 100) else 0
+    
+    s_total = (s_read + s_write + s_cache + oplog_wait) / 1000.0
+    if s_total > 0: waits["storage_wait"] = round(s_total, 2)
+
+    # 3. Queue / Planning / Repl
+    q_micros = get_nested_value(entry, "attr.queues.execution.totalTimeQueuedMicros") or 0
+    if q_micros > 0: waits["queued"] = round(q_micros / 1000.0, 2)
+    
+    p_micros = attr.get("planningTimeMicros") or 0
+    if p_micros > 0: waits["planning"] = round(p_micros / 1000.0, 2)
+    
+    flow = attr.get("flowControlMillis") or 0
+    if flow > 0: waits["replication_wait"] = flow
+
+    # 4. Pure Execution
+    work = attr.get("workingMillis")
+    if work is not None: waits["execution"] = work
+
+    # 🧪 Wall-Clock Hardening (v2.3.1): Cap components at total latency
+    if ms > 0:
+        for k in waits: waits[k] = min(waits[k], ms)
+        
+    return waits
+
 def extract_search_metadata(attr: Dict[str, Any], entry: Dict[str, Any], cmd_obj: Dict[str, Any], op: str) -> str:
     """
     Modular Intent Extractor for Atlas Search & Vector Search.
@@ -668,20 +604,55 @@ def extract_search_metadata(attr: Dict[str, Any], entry: Dict[str, Any], cmd_obj
     if not isinstance(target, dict): return plan_summary
 
     pipeline = target.get("pipeline") or []
-    if not isinstance(pipeline, list): return plan_summary
+    if not isinstance(pipeline, list):
+        # Handle cases where $search might be the top-level command (rare but possible in some versions)
+        if "$search" in target:
+            idx = target["$search"].get("index", "default")
+            return f"🔍 SEARCH [{idx}]"
+        return plan_summary
 
+    # Recursively scan for search stages
     for stage in pipeline:
         if not isinstance(stage, dict): continue
+        
         # Atlas Search ($search)
         if "$search" in stage:
             idx = stage["$search"].get("index", "default")
             return f"🔍 SEARCH [{idx}]"
+            
         # Vector Search ($vectorSearch)
         elif "$vectorSearch" in stage:
             idx = stage["$vectorSearch"].get("index", "default")
             return f"🧬 VECTOR [{idx}]"
             
+        # Also check for nested search (e.g. inside $facet)
+        for k, v in stage.items():
+            if isinstance(v, list):
+                for sub in v:
+                    if isinstance(sub, dict) and ("$search" in sub or "$vectorSearch" in sub):
+                        s_type = "SEARCH" if "$search" in sub else "VECTOR"
+                        icon = "🔍" if s_type == "SEARCH" else "🧬"
+                        idx = sub.get("$search", sub.get("$vectorSearch")).get("index", "default")
+                        return f"{icon} {s_type} [{idx}]"
+            
     return plan_summary
+
+def discovery_harvest(obj: Any, marker_map: Dict[str, str], result: Optional[Dict[str, Any]] = None, depth: int = 0) -> Dict[str, Any]:
+    """
+    The Universal Discovery Harvester (v3.2.0).
+    Performs a Breadth-First Search (BFS) for keys listed in METRIC_MARKERS.
+    """
+    if result is None: result = {}
+    if depth > 10 or not isinstance(obj, dict): return result
+    
+    for k, v in obj.items():
+        if k in marker_map:
+            std_id = marker_map[k]
+            if std_id not in result:
+                result[std_id] = v
+        if isinstance(v, dict):
+            discovery_harvest(v, marker_map, result, depth + 1)
+    return result
 
 def get_nested_value(obj: Any, path: str) -> Any:
     try:

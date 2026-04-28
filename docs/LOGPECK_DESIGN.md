@@ -1,4 +1,4 @@
-# 🐦 LogPeck — Core Design Specification (v4.1.5)
+# 🐦 LogPeck — Core Design Specification (v5.0.0)
 
 > **Status**: Production Blueprint (High-Fidelity)  
 > **Source of Truth**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py) & [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py)  
@@ -259,3 +259,275 @@ The fundamental purpose of this split is to distinguish between high-latency eve
 
 ### 12.3 Implementation Gate
 The [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py) must explicitly map these metrics to the correct evaluation domain before the Rules Engine executes.
+
+---
+
+## 🖥️ 13. Dashboard UI Specification (v4.6.4)
+
+> **Source of Truth**: [reporter.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/reporter.py)
+> **Purpose**: This section defines every visual element of the HTML dashboard. Any modification to the UI **MUST** be reflected here. Any future change **MUST NOT** remove or restructure existing elements — only add to them surgically.
+
+### 13.0 Defensive Layout Constraints (CSS Safety)
+To prevent extreme data payloads (e.g., massive JSON documents, gigabyte string sizes, or Base64 hashes) from destroying the dashboard grid, the UI is bound by strict, non-negotiable CSS constraints:
+1. **Table Integrity**: All `.forensic-table` elements **MUST** use `table-layout: fixed`.
+2. **Text Wrapping**: Table cells (`td`) **MUST** use `word-break: break-all` and `overflow-wrap: break-word` to force brutal word-wrapping of unstructured keys.
+3. **Payload Boundaries**: All `<pre>` blocks displaying JSON payloads **MUST** be strictly constrained within grid boundaries using `max-width: 100%`, `box-sizing: border-box`, and `white-space: pre-wrap !important`.
+
+### 13.1 Global Layout
+
+| Element | Description |
+| :--- | :--- |
+| **Header** | Logo (🐦 logpeck), version badge, log file source path |
+| **Tab Bar** | 6 tabs, horizontal, uppercase labels. Active tab has green underline. |
+| **Design Tokens** | Dark mode (`--bg: #0b111a`), MongoDB emerald accent (`--accent: #00ed64`), Inter + Outfit + JetBrains Mono fonts |
+
+### 13.2 Tab Structure (6 Tabs)
+
+| # | Tab ID | Label | Default Active | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | `health` | 🏥 Health Overview | ✅ Yes | Global cluster health cards, bottleneck radar, severity/component waves |
+| 2 | `slow` | 🐢 Business Workload Forensics | No | User-level slow query shapes with full drill-down |
+| 3 | `system` | 🛠️ System Query Forensics | No | Infrastructure/system query shapes (TTL, Heartbeats, admin ops) |
+| 4 | `timeouts` | 🚨 Failure Forensics | No | Error/timeout shapes with error code + description columns |
+| 5 | `connections` | 🔌 Connection Analytics | No | Connection churn, app/IP/user waves, driver stitching |
+| 6 | `reference` | 📚 Reference | No | Auto-synced diagnostic decoder from `rules.json` + metric registry |
+
+---
+
+### 13.3 Tab 1: Health Overview
+
+| Section | Content |
+| :--- | :--- |
+| **Health Summary Cards** (7 cards, grid) | Total Logs Parsed · Time Window · Slow Queries · Avg Slow Duration · Max Slow Duration · Workload Failures · Log Errors |
+| **Forensic Bottleneck Radar** | Horizontal stacked bar: CPU (green) · Storage (amber) · Oplog (blue) · Replication (red) · Queue (pink) · Lock (purple) · Planning (indigo). Legend below. |
+| **Master Forensic Insight** | Executive summary card identifying the primary bottleneck |
+| **Platform Health Profile** | Two side-by-side panels: Severity Wave (color-coded bars) + Component Wave |
+| **Namespace Grid** | Table: Namespace × Parsed Lines (admin/local/config filtered out) |
+| **System Health Trace** | Top Messages table: Severity · Message Pattern · Count |
+| **System Error Patterns** | Table with expandable payload rows |
+
+---
+
+### 13.4 Tab 2 & 3: Workload / System Forensics
+
+Both tabs share the same structure. System tab wraps the table in a card with a gold-accented label.
+
+#### 13.4.1 Controls Bar
+| Element | Description |
+| :--- | :--- |
+| **Search Input** | Full-text filter across namespace, op, app, hash. Green left-border (Business) or Gold (System). |
+| **Tier Filter Buttons** | Up to 3 latency tier buttons (e.g., `500ms+`, `1s+`, `5s+`) + `ALL` reset button |
+| **Collapse All** | Closes all expanded drill-down rows |
+
+#### 13.4.2 Collapsed Row (Table Columns)
+
+| # | Column | Width | Content |
+| :--- | :--- | :--- | :--- |
+| 1 | `#` | 40px | Row number (with hidden query_hash + plan_cache_key for search) |
+| 2 | `OP` | 80px | Operation badge (find, aggregate, update, tx-find, etc.) |
+| 3 | `AVG` | 80px | Average latency (formatted duration) |
+| 4 | `MAX` | 80px | Maximum latency (bold, formatted duration) |
+| 5 | `COUNT` | 80px | Occurrence count |
+| 6 | `AAS LOAD` | 110px | Active Average Sessions load bar + percentage |
+| 7 | `TOTAL MS` | 100px | Cumulative wall-clock time |
+| 8 | `NAMESPACE` | 220px | Collection namespace (with "(Inferred)" italic tag if applicable) |
+| 9 | `DIAGNOSTIC` | 350px | Stacked diagnostic badges (severity-colored chips from rules engine) |
+| 10 | `APPLICATION` | 180px | Client app name |
+| 11 | `PLAN` | auto | Plan summary text or **Plan Badge** (styled pill for SEARCH/VECTOR indexes) |
+
+#### 13.4.3 Expanded Drill-Down (Full Row Detail)
+
+When a row is clicked, a `details-row` expands below it with a 6px green left-border. The drill-down contains the following sections **in exact order**:
+
+**Section A: Identity Header**
+| Field | Description |
+| :--- | :--- |
+| QUERY SHAPE HASH | Full 64-char hex hash (green if present, gray if N/A) |
+| QUERY HASH | Short 8-char hash |
+| PLAN CACHE KEY | Short 8-char key |
+| DISCOVERED QUERY SCHEMA | Colored pill tags for each extracted field name (right-aligned) |
+
+**Section B: Latency Fingerprint (Workload Wave)**
+- Horizontal stacked bar showing latency distribution across 7 tiers: 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s
+- Color gradient from green (tier1) through amber to red (tier7)
+- Legend dots below the bar
+
+**Section C: 🧪 Clinical Insights**
+- Grid of diagnostic cards (auto-fit, min 200px). Each card has:
+  - Left border color (green/amber/red based on severity)
+  - Label (uppercase, 0.6rem)
+  - Value (1.3rem, bold, colored)
+  - Sublabel (0.6rem, gray)
+- Cards rendered (in order, only when metric > 0):
+
+| # | Card | Metric Key | Thresholds (Green / Amber / Red) |
+| :--- | :--- | :--- | :--- |
+| 1 | Scan Efficiency | `scan_efficiency` | < 20 / 20-500 / > 500 |
+| 2 | Index Selectivity | `index_selectivity` | < 5 / 5-50 / > 50 |
+| 3 | Fetch Amplification | `fetch_amplification` | ≤ 1.1 / 1.1-3.0 / > 3.0 |
+| 4 | Index Amplification | `ins_amp` | < 5 / 5-10 / > 10 |
+| 5 | Cache Pressure | `cache_pressure` | < 100MB / 100-500MB / > 500MB |
+| 6 | Replication Backpressure | `replication_backpressure` | < 50ms / 50-200ms / > 200ms |
+| 7 | Storage Intensity | `storage_intensity` | < 30% / 30-70% / > 70% |
+| 8 | Search Latency | `search_latency` | < 100ms / 100-500ms / > 500ms |
+| 9 | WT Cache Stall | `cache_stall` | < 1ms / 1-10ms / > 10ms |
+
+- **Fallback States**:
+  - If all metrics are healthy → `✅ CLINICAL STATUS: OPTIMAL` (green border card)
+  - If no forensic data available → `⏳ CLINICAL STATUS: N/A` (gray card)
+
+**Section D: Forensic Execution Metrics (Left Panel)**
+- Two-column comparison table: `🥊 FASTEST SAMPLE` vs `🐢 SLOWEST SAMPLE`
+- First row is always `Wall-Clock Latency` (min_time vs max_time)
+- Remaining rows are organized by category headers:
+
+| Category | Metrics |
+| :--- | :--- |
+| 📊 READ FORENSICS | keysExamined, docsExamined |
+| LATENCY | storage_wait, queue_wait |
+| 🖋️ WRITE CHURN | keysInserted, nModified, nMatched, txnBytesDirty |
+| 💾 STORAGE WAIT | timeReadingMicros, timeWritingMicros, timeWaitingMicros_cache, totalOplogSlotDurationMicros |
+| 🧭 PLANNING | planning |
+| ⚙️ PURE EXECUTION | workingMillis, cpuNanos |
+
+- **Zero-Value Suppression**: Rows where both fastest and slowest values are 0 are hidden
+- **Dual-Labeling**: Each metric shows the human label AND the raw log key in small gray text
+
+**Section E: Extracted Query Parameters (Right Panel)**
+- Two-column comparison table: `🥊 VALUE` vs `🐢 VALUE`
+- **Layout Integrity**: The table utilizes a `fixed` table layout with forced text-wrap constraints (`word-break: break-all`, `overflow-wrap: break-word`) to guarantee that exceptionally long query variables (e.g., massive ObjectIDs, JWT tokens, or SHA hashes) stack correctly and never expand beyond the grid boundary.
+- Shows extracted filter/query fields (e.g., `id`, `type`, `xrefIds`)
+- For `insert` operations: this panel is empty (no query filter exists)
+
+**Section F: Fastest & Slowest Payloads (Side-by-Side)**
+- Grid displays the raw JSON payloads (`max_peek_attr`, `min_peek_attr`)
+- Includes "TS: [timestamp]" pills and a "COPY JSON" button
+- **Responsive Constraints**: JSON container blocks are rigorously scoped to exactly 50% max capacity (`max-width: 100%` inside a `1fr` column) with strict `white-space: pre-wrap` overrides. This ensures unbroken scalar strings (like Base64 encoded blobs) wrap natively instead of introducing layout-breaking horizontal scrollbars on the parent container.
+- Dark background (#000000), monospace font, max-height 450px with scroll
+
+---
+
+### 13.5 Tab 4: Failure Forensics
+
+#### 13.5.1 Executive Summary
+- **Failure Summary Grid**: Table with CODE · ERROR/DESCRIPTION · OCCURRENCES · AVG DELAY · PRIMARY NAMESPACE · MOST IMPACTED APP
+- **Timeout Pattern Grid**: Table with Last Seen · Code · Count · Avg · Max · Namespace · Op Preview · Error Pattern · App · Context (IP + Ctx)
+
+#### 13.5.2 Forensic Drill-Down Table
+- Same column structure as Tab 2 but with timeout-specific columns:
+
+| # | Column | Content |
+| :--- | :--- | :--- |
+| 1 | `#` | Row number |
+| 2 | `CODE` | Error code (JetBrains Mono, red) |
+| 3 | `DESCRIPTION` | Error name with 🚨 (timeout) or ☢️ (error) prefix |
+| 4 | `COUNT` | Occurrence count |
+| 5 | `HASH` | Short query shape hash (12 chars) |
+| 6 | `NAMESPACE` | Target namespace |
+| 7 | `APP` | Client application |
+
+- Expanded drill-down follows the same Section A–F structure as Tab 2
+
+---
+
+### 13.6 Tab 5: Connection Analytics
+
+| Section | Content |
+| :--- | :--- |
+| **Connection Summary Cards** (4 cards) | Total Connections · Churn Rate · Auth Failures · Log Trace Duration |
+| **Application Wave** | Top 10 apps by connection count (horizontal bars) |
+| **IP Wave** | Top 10 IPs by connection count |
+| **User Wave** | Top 10 users by connection count |
+| **Driver Stitching Table** | CLIENT APPLICATION · DRIVER STITCHING · COUNT |
+
+---
+
+### 13.7 Tab 6: Reference
+
+| Section | Content |
+| :--- | :--- |
+| **Diagnostic Decoder** | Auto-synced from `rules.json`. Grid cards with: Rule label, severity badge, technical path, description |
+| **Metric Registry** | Grid cards organized by category (Read, Write, Storage, etc.) with: Label, BSON source path, description |
+
+---
+
+### 13.8 Plan Badge System (v4.6.4)
+
+The PLAN column uses styled pill badges to visually distinguish Search and Vector operations:
+
+| Plan Type | Badge Style | Color |
+| :--- | :--- | :--- |
+| Standard (IXSCAN, COLLSCAN, etc.) | Plain monospace text | Gray (opacity: 0.7) |
+| Atlas Search (`$search`) | Rounded pill with border | Green (`var(--accent)`) |
+| Vector Search (`$vectorSearch`) | Rounded pill with border | Purple (`#a855f7`) |
+
+---
+
+### 13.9 Interactive Behaviors
+
+| Behavior | Implementation |
+| :--- | :--- |
+| **Row Expand/Collapse** | `toggleDetails(id)` — toggles `display: table-row` on the details-row |
+| **Tab Switching** | `openTab(tabId, el)` — hides all `.tab-content`, shows target, updates `.active` |
+| **Search Filter** | `filterRows(inputId, tableId)` — filters `.row-main` + next sibling by text content |
+| **Tier Filter** | `filterByTier(threshold, tableId)` — shows only rows where `data-tier >= threshold` |
+| **Collapse All** | `collapseAll()` — hides all `.details-row` elements |
+| **Copy JSON** | `copyToClipboard(elementId, button)` — copies `<pre>` text content, button text changes to "✓ Copied" |
+
+---
+
+## 🛠️ 14. Core Utility Tooling (`utils.py`)
+LogPeck adheres strictly to DRY (Don't Repeat Yourself) principles. All UI presentation scaling and unit math is centrally managed in `utils.py`.
+
+### 14.1 Duration Formatting (`format_duration`)
+Scales raw milliseconds gracefully across magnitudes:
+- **Pico/Nano**: Tracks fractions down to `0.000001ms`
+- **Micro**: `0.001ms` to `<1ms` -> `µs`
+- **Milli**: `1ms` to `<1000ms` -> `ms`
+- **Seconds/Minutes**: `>1000ms` -> `s` and `m s` format
+
+### 14.2 Byte Formatting (`format_bytes`)
+Scales raw bytes into IEC-standard magnitudes: `B`, `KB`, `MB`, `GB`, `TB`, `PB`.
+
+This centralized utility ensures that the CLI output, dynamic Rule Engine tags (e.g. `{value_duration}`), and HTML Dashboard generation all perfectly align without redundant formatting logic.
+
+---
+
+## 📑 15. Documentation Lifecycle
+- **Authoritative Registry**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py)
+- **Synchronicity Gate**: All architectural modifications to the stitching, routing, or error resolution logic in `analyzer.py` **MUST** be reflected in this design documentation (LOGPECK_DESIGN.md) prior to version release.
+- **UI Gate**: All modifications to `reporter.py` layout, tab structure, or drill-down anatomy **MUST** be reflected in Section 13 of this document.
+
+---
+
+## 🔍 16. Dashboard Search Engine & Index Matrix (v5.0.0)
+
+LogPeck utilizes a high-performance, client-side **Full-Text Content Match** engine for real-time forensic filtering. This section defines what data is indexed and how to ensure searchability for new fields.
+
+### 16.1 The "Search Index" Pattern
+Because the search engine matches against the `textContent` of a table row (`row-main`), any forensic signal that is visually hidden must be explicitly "pinned" to the DOM using a hidden search index span.
+
+**Technical Implementation:**
+```html
+<tr class="row-main">
+  <td>
+    [Visible Value]
+    <span style="display:none"> [Hidden Forensic Anchor 1] [Hidden Forensic Anchor 2] </span>
+  </td>
+</tr>
+```
+
+### 16.2 Search Index Matrix
+
+| Dashboard Tab | Visual Search Fields | Forensic Search Anchors (Hidden) |
+| :--- | :--- | :--- |
+| **Business Workload** | Namespace, Operation, App Name, Diagnostic Tags | Query Shape Hash, Plan Cache Key |
+| **System Workload** | Background Task Name, Component, Diagnostic Tags | Internal Thread ID |
+| **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | **Client IP**, Connection Context ID, Shape Hash |
+| **Connection Analytics**| App Name, Driver Version | **Client IP**, Username |
+
+### 16.3 Developer Checklist for Searchable Fields
+When adding a new forensic metric or metadata field to `reporter.py`:
+1. **Visual Column**: If the field is critical for triage (e.g. `App Name`), add it as a visible `<td>`.
+2. **Search Anchor**: If the field is for deep forensics only (e.g. `Connection Context`), append it to the hidden `<span>` inside the first `<td>` of the `row-main`.
+3. **Case Sensitivity**: The engine uses `.toLowerCase()`. All anchors should be string-cast and space-separated within the index span.

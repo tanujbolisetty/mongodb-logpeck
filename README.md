@@ -18,7 +18,9 @@
 - **🚨 Dynamic Latency Cliffs**: Automatically flags performance cliffs (e.g. Max > 10x Avg) for every query shape.
 - **🔌 Connection Analysis**: Aggregates client metadata (App, IP, User, Driver) to identify connection churn and noisy neighbors.
 - **🏥 Platform Health Profile**: Cluster-wide severity distribution and component-level workload mapping.
-- **🧬 Identity Stitching & Correlation (v2.7.6)**: Guaranteed identity attribution for context-lean logs by reconstructing state via the connection-based **MSH Matrix**.
+- **🧬 Identity Stitching & Correlation (v5.0.0)**: Guaranteed identity attribution for context-lean logs by reconstructing state via the connection-based **MSH Matrix**.
+- **🔍 Universal Search Index (v5.0.0)**: Live, multi-dimensional search across hashes, IPs, apps, and diagnostics.
+- **🛡️ Truth Engine (v5.0.0)**: Surgical aggregation of systemic infrastructure errors and "orphan" network pathologies.
 - **🔍 Custom Rules Engine**: Decoupled diagnostic logic in `rules.json` for tunable bottleneck thresholds.
 - **💓 Real-time Pulse**: Integrated progress tracking for high-volume log processing.
 
@@ -28,8 +30,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/mongodb/logpeck.git
-cd logpeck
+git clone https://github.com/tanujbolisetty/mongodb-logpeck.git
+cd mongodb-logpeck
 
 # Install logpeck in editable mode
 pip3 install -e .
@@ -76,7 +78,14 @@ Analyze background diagnostics and infrastructure telemetry (TTL cleanup, Oplog 
 peck system-workload --file mongod.log.gz
 ```
 
-### 4. Global Platform Health
+### 4. Failure & Timeout Forensics
+Analyze systemic failures, timeouts, and error hotspots.
+```bash
+# Analyze all failures and timeouts
+peck failure-workload --file mongod.log.gz
+```
+
+### 5. Global Platform Health
 Quickly assess the overall distribution of severity levels and component-level workload.
 ```bash
 peck health --file mongod.log.gz
@@ -88,9 +97,28 @@ Identify connection churn, authentication failures, and app attribution.
 peck connections --file mongod.log.gz
 ```
 
-### 6. Surgical Filtering & Search
+### 7. Surgical Filtering & Search
 - **`peck search`**: Professional keyword search (IPs, Hash, User, Driver) across the entire log.
 - **`peck filter`**: Structured multi-dimensional forensics using logical `AND` chaining.
+- **`--count`**: Add this flag to `search` or `filter` to rapidly get the total match volume without a full report.
+- **`--limit`**: Control results processed (default: 10).
+
+---
+
+## 🗺️ CLI vs Dashboard Mapping
+Use the table below to find the surgical CLI command equivalent for each professional dashboard tab.
+
+| Dashboard Tab | CLI Command | Purpose | Key Options |
+| :--- | :--- | :--- | :--- |
+| **1. Global Health** | `peck health` | High-level summary of severity levels and components. | `--json` |
+| **2. Business Workload** | `peck workload` | Analyzes application-level slow queries. | `--latency`, `--rules`, `--json` |
+| **3. System Workload** | `peck system-workload` | Analyzes infrastructure tasks (TTL, Oplog). | `--latency`, `--json` |
+| **4. Failure Forensics** | `peck failure-workload` | **(New)** Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
+| **5. Connection Analytics** | `peck connections` | Profiles client apps and connection churn. | `--json` |
+| **6. Reference** | (Automatic) | Registry of metrics and rules. | N/A |
+| **-** | `peck search` | Surgical keyword forensic search. | `--keyword`, `--full`, `--limit`, `--count` |
+| **-** | `peck filter` | Multi-dimensional forensic filtering. | `--filters`, `--full`, `--limit`, `--count` |
+| **-** | `peck dashboard` | Generates the full 6-tab HTML dashboard. | `--file`, `--folder`, `--latency`, `--html` |
 
 ---
 
@@ -116,6 +144,6 @@ GitHub: [@tanujbolisetty](https://github.com/tanujbolisetty)
 
 ---
 
-## ⚖️ License
-
+## 📄 License
+MIT © 2026
 Distributed under the **MIT License**. See `LICENSE` for more information.

@@ -99,7 +99,7 @@
     {
       "id": "CPU_BOUND",
       "type": "ratio",
-      "numerator": "cpu_ms",
+      "numerator": "total_cpu_ms",
       "denominator": "total_ms",
       "technical_path": "attr.cpuNanos / attr.durationMillis",
       "threshold": 0.8,
@@ -110,9 +110,9 @@
     {
       "id": "PIPELINE_COLLAPSE",
       "type": "ratio",
-      "numerator": "keysExamined",
+      "numerator": "docsExamined",
       "denominator": "nreturned",
-      "technical_path": "attr.keysExamined / attr.nreturned",
+      "technical_path": "attr.docsExamined / attr.nreturned",
       "threshold": 500,
       "min_numerator": 1000,
       "include_ops": [
@@ -122,7 +122,7 @@
       ],
       "label": "📉 [TRACE] REDUCTION PIPELINE (Ratio: {value:.0f}:1)",
       "severity": "info",
-      "description": "Stage-heavy aggregation that examines many documents in early stages before collapsing into few results. Often indicates a missing or late $match stage."
+      "description": "Stage-heavy aggregation that examines many documents in early stages before collapsing into few results. Often indicates a missing or late $match stage, or a full-collection aggregation (e.g. $group with COLLSCAN)."
     },
     {
       "id": "IDLE_TRANSACTION",
@@ -168,6 +168,30 @@
       "label": "🚨 EXECUTION QUEUE ({value:.0f}%)",
       "severity": "critical",
       "description": "Significant ticket queueing detected. The query spent most of its life waiting for an available execution slot, indicating the cluster has reached its concurrency limit."
+    },
+    {
+      "id": "LOCK_CONTENTION",
+      "type": "ratio",
+      "numerator": "total_lock_wait_ms",
+      "denominator": "total_ms",
+      "min_numerator": 100,
+      "technical_path": "attr.timeAcquiringMicros / attr.durationMillis",
+      "threshold": 0.4,
+      "label": "🔥 LOCK CONTENTION ({value:.0f}%)",
+      "severity": "critical",
+      "description": "High resource contention. The query spent a significant portion of its life waiting to acquire internal collection or document locks."
+    },
+    {
+      "id": "REPL_THROTTLED",
+      "type": "ratio",
+      "numerator": "total_replication_wait_ms",
+      "denominator": "total_ms",
+      "min_numerator": 100,
+      "technical_path": "attr.storage.data.timeReadingMicros (Replication)",
+      "threshold": 0.3,
+      "label": "🐌 REPL THROTTLED ({value:.0f}%)",
+      "severity": "warning",
+      "description": "Operation was throttled due to replication lag or secondary sync delays."
     },
     {
       "id": "QUERY_TIMEOUT",
@@ -372,6 +396,17 @@
       "label": "🚨 [TRACE] CACHE POISONING (>100 MB)",
       "severity": "critical",
       "description": "The transaction dirtied a massive amount of WiredTiger cache memory. This can severely degrade global cluster performance by forcing aggressive evictions."
+    },
+    {
+      "id": "CACHE_STALL",
+      "type": "threshold",
+      "field": "cache_stall",
+      "technical_path": "attr.storage.timeWaitingMicros.cache",
+      "op": "gt",
+      "value": 1,
+      "label": "🚨 [TRACE] WiredTiger Cache Stall ({value_duration})",
+      "severity": "critical",
+      "description": "WiredTiger cache pressure detected. The operation was stalled while waiting for dirty data to be evicted to disk, indicating that the cache is full and I/O cannot keep up with write volume."
     },
     {
       "id": "INDEX_AMPLIFICATION",
