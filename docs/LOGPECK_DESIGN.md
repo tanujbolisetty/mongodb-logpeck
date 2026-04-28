@@ -23,6 +23,29 @@ The core engine iterates through the logs, leveraging the MSH Matrix for attribu
 
 ---
 
+## 🔬 2. The Log Parsing Engine (The Minute Details)
+
+LogPeck utilizes a multi-layered regex and JSON parser to handle the structural evolution of MongoDB logs (v4.2 to v7.0+).
+
+### 2.1 The Core Regex Matrix
+While the engine prefers the `BSON` attribute parser, it utilizes these surgical regexes for high-volume identity harvesting:
+
+| Target | Regex Pattern | Purpose |
+| :--- | :--- | :--- |
+| **Connection ID** | `conn(\d+)` | Extracts the numeric `ctx` from unstructured string headers. |
+| **Namespace** | `([\w.-]+\.\$?\w+)` | Extracts the `DB.Collection` anchor when the `ns` attribute is missing. |
+| **Duration** | `(\d+)ms` | Captures wall-clock latency for non-standard log events. |
+| **Oplog Source** | `oplog.rs` | Special handling for high-volume replication gossip. |
+
+### 2.2 Attribute Sanitization Hierarchy
+To prevent "Pathological Attribute Bloat," the engine sanitizes the `attr` dictionary in this exact priority order:
+1. **Extraction**: Pulls numeric metrics into the `stats` bucket.
+2. **Standardization**: Forces all durations into milliseconds (ms).
+3. **Blacklisting**: Removes high-volume, low-signal keys (e.g., `appName` in every line) before storing forensic payloads.
+4. **Key Flattening**: Collapses `attr.locks` sub-trees into the flat `lock_wait` summary.
+
+---
+
 ## 🏛️ 2. The Forensic Metric Registry
 
 Every metric harvested by LogPeck is bound to a deterministic source path in the MongoDB BSON log.
@@ -106,6 +129,33 @@ To ensure analytical consistency across raw log formats (Command vs CRUD blocks)
 ### 4.4 Index Maintenance & Pressure
 - **Pressure Markers**: The engine harvests `numYields` and `writeConflicts` for background and foreground index tasks.
 - **Wait-Time Attribution**: `lock_wait` and `planning` time are aggressively attributed to index shapes to surface resource contention caused by index builds or schema mutations.
+
+---
+
+## 🧬 5. The MSH Matrix State Machine (Identity Stitching)
+
+The **Metadata-Session-Hostname (MSH)** matrix is the "Memory" of the forensic engine. It allows LogPeck to attribute a slow query occurring at 12:00:00 to an application connection that was established at 09:00:00.
+
+### 5.1 State Transitions
+The matrix tracks three distinct life-stages of a connection:
+
+1. **STAGE 1: Accepted (Entry ID 22943)**
+   - Registers the `ctx` (e.g., `conn123`) and maps it to the `remote` client IP.
+   - Status: *Anonymous Connection*.
+
+2. **STAGE 2: Authentication (Entry ID 20249/20250)**
+   - Overlays the `user` and `mechanisms` onto the `ctx`.
+   - Status: *Identified Principal*.
+
+3. **STAGE 3: Metadata Handshake (Entry ID 22944)**
+   - Attaches the `appName` and `driver` version strings.
+   - Status: *Full Forensic Identity*.
+
+### 5.2 Inheritance Logic
+When a "Business Query" (Pass 2) arrives with only a `ctx`, the engine recursively crawls the MSH Matrix:
+- **Direct Match**: Returns the cached identity.
+- **Session Fallback**: If `lsid` is present, it attempts to bridge the identity from other active connections in the same session.
+- **Global Inferred**: If all else fails, it tags the operation as `unknown` but preserves the `remote` IP harvested in Stage 1.
 
 ---
 
@@ -531,3 +581,28 @@ When adding a new forensic metric or metadata field to `reporter.py`:
 1. **Visual Column**: If the field is critical for triage (e.g. `App Name`), add it as a visible `<td>`.
 2. **Search Anchor**: If the field is for deep forensics only (e.g. `Connection Context`), append it to the hidden `<span>` inside the first `<td>` of the `row-main`.
 3. **Case Sensitivity**: The engine uses `.toLowerCase()`. All anchors should be string-cast and space-separated within the index span.
+
+---
+
+## 🎨 17. UI Token System & Design Architecture
+
+LogPeck v5.0 implements a rigid, high-fidelity design system to ensure diagnostic clarity across extreme datasets.
+
+### 17.1 Color Foundation (HSL Philosophy)
+We avoid standard hex codes to maintain "Vibrancy Parity" across the dashboard:
+- **Background**: `hsl(215, 41%, 7%)` — Deep slate for zero eye-strain.
+- **Accent (Emerald)**: `hsl(145, 100%, 46%)` — The MongoDB "Success" anchor.
+- **Error (Red)**: `hsl(0, 84%, 60%)` — High-intensity alert.
+- **Warning (Gold)**: `hsl(45, 93%, 47%)` — Performance cliff anchor.
+
+### 17.2 Typography & Rhythm
+- **Primary Interface**: `Inter, sans-serif` (Optimal legibility).
+- **Executive Headers**: `Outfit, sans-serif` (Premium weight).
+- **Forensic Payloads**: `'JetBrains Mono', monospace` (Standard for code alignment).
+- **Vertical Rhythm**: Every card and table row is bound by a `1.5rem` padding constant to ensure visual balance even when 1,000+ rows are rendered.
+
+### 17.3 Performance Optimization
+The dashboard is a **Single-File Zero-Dependency** application:
+1. **Zero External CSS**: All styles are inlined in the `<head>`.
+2. **O(n) Search**: Live filtering is achieved via a single linear DOM traversal (O(n)), ensuring that searching through 5,000 query shapes remains sub-10ms.
+3. **Memory Management**: Expanded rows use `details-content` wrapping to ensure that the layout engine only calculates the geometry of visible forensic cards.
