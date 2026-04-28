@@ -165,6 +165,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
     message_registry = {} # Unique log message snippets
     conn_registry = {}    # Connection state (IP, User, App)
     auth_fail_count = 0; timeout_count = 0; identified_error_count = 0; timeout_patterns = {}
+    system_error_patterns = {} # 🛠️ Capture network/system errors without query hashes
     error_namespace_stats = Counter(); error_code_agg = {}
     global_latency_dist = Counter()
     
@@ -372,6 +373,26 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0, rules_path: 
                         timeout_patterns[key]["max_ms"] = max(timeout_patterns[key]["max_ms"], dur_ms)
 
                         error_namespace_stats[ns_guess] += 1
+                    
+                    if is_error_op and not is_timeout_op:
+                        e_cat = attr.get("category") or "system.error"
+                        e_msg = attr.get("what") or attr.get("message") or attr.get("errmsg") or attr.get("error") or msg
+                        e_note = attr.get("note", "N/A")
+                        
+                        # To keep the payload concise, extract just the error-related fields
+                        err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note"]}
+                        
+                        key = (str(e_cat), str(e_msg)[:100], str(e_note)[:50])
+                        if key not in system_error_patterns:
+                            system_error_patterns[key] = {
+                                "count": 0,
+                                "ts": str(ts),
+                                "category": str(e_cat),
+                                "msg": str(e_msg)[:120],
+                                "note": str(e_note)[:120],
+                                "payload": json.dumps(err_payload, indent=2)[:300] if err_payload else "N/A"
+                            }
+                        system_error_patterns[key]["count"] += 1
 
                     if not isinstance(attr, dict): continue
 
@@ -901,7 +922,8 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
     top_shapes = sorted(shape_stats.values(), key=lambda x: x["total_ms"], reverse=True)
     
     # Use global active time if provided, otherwise fall back to local tab total
-    sum_total_active = global_total_active if global_total_active is not None else (sum(s["total_active_ms"] for s in shape_stats.values()) or 1)
+    sum_total_active = global_total_active if global_total_active else (sum(s["total_active_ms"] for s in shape_stats.values()) or 1)
+    if sum_total_active == 0: sum_total_active = 1
     
     for i, q in enumerate(top_shapes):
         tags = []

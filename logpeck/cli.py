@@ -242,6 +242,7 @@ def main():
     dashboard_parser.add_argument("--html", default="output/logpeck_report.html", help="Dashboard output path")
     dashboard_parser.add_argument("--latency", type=int, default=0, help="Min latency (ms) for forensic capture (default: 0)")
     dashboard_parser.add_argument("--rules", default=None)
+    dashboard_parser.add_argument("--filter", help="Filter files by substring in filename")
 
     args = parser.parse_args()
 
@@ -502,6 +503,8 @@ def main():
 
             if args.folder:
                 files = [os.path.join(args.folder, f) for f in os.listdir(args.folder) if f.endswith(".log") or f.endswith(".gz") or f.endswith(".json")]
+                if args.filter:
+                    files = [f for f in files if args.filter in os.path.basename(f)]
                 for f in files:
                     out_html = os.path.join(out_dir, os.path.basename(f) + "_report.html")
                     print(f"🐦 Forensic Sweep: {os.path.basename(f)} ↳ {out_html}", file=sys.stderr)

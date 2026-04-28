@@ -238,9 +238,19 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
         ns = attr.get("namespace") or ns
 
+    # 🧬 Recovery Anchor (v4.4.0)
+    # Signal if this entry has high-confidence data blocks (CRUD)
+    has_crud = isinstance(attr.get("CRUD"), dict)
+
     # 🕵️ Transaction & Command Namespace Resolution (v2.7.6)
     params = attr.get("parameters", {})
-    is_tx = str(ns).endswith(".$cmd") or "txnNumber" in attr or (isinstance(crud, dict) and "txnNumber" in crud) or "txnNumber" in params
+    # v4.5.5: Strengthened detection to include Logical Sessions and Autocommit markers
+    is_tx = (str(ns).endswith(".$cmd") or 
+             "txnNumber" in attr or 
+             "autocommit" in attr or
+             "lsid" in attr or
+             has_crud or 
+             "txnNumber" in params)
     
     if is_tx or ns == "unknown" or not ns:
         coll = None
@@ -273,9 +283,11 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         op = "TTL Index"
 
     # Final Normalization and Transaction Enrichment
-    if is_tx and op.lower() in ["update", "insert", "delete", "findandmodify", "find"]:
+    if is_tx and op.lower() in ["update", "insert", "delete", "remove", "deletes", "findandmodify", "find"]:
         if not op.lower().startswith("tx-"):
-            op = f"tx-{op}"
+            # Normalize 'remove' or 'deletes' to 'delete' when prefixing
+            tx_op = "delete" if op.lower() in ["remove", "deletes"] else op
+            op = f"tx-{tx_op}"
 
     if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
         h_ns = heuristic_extract_ns(msg)
@@ -283,10 +295,6 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
             h_ns = heuristic_extract_ns(str(attr["error"]))
         if h_ns: ns = h_ns
         
-    # 🧬 Recovery Anchor (v4.4.0)
-    # Signal if this entry has high-confidence data blocks (CRUD)
-    has_crud = isinstance(attr.get("CRUD"), dict)
-    
     return op, ns, has_crud
 
 def normalize_conn_id(ctx: str) -> str:
@@ -375,7 +383,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
             "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
             "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
             "storage", "locks", "queues", "mongot", "command", "originatingCommand",
-            "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl"
+            "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
         ]
         for k in SEARCH_PROBES:
             if k in entry: attr[k] = entry[k]
@@ -472,10 +480,8 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
                     # 🧬 Inline Normalization (v3.2.2)
                     # Standardize microseconds and nanoseconds into milliseconds
                     if isinstance(v, (int, float)):
-                        if k.endswith("Micros") or k in ["timeAcquiringMicros", "planningTimeMicros"]:
-                            v = round(v / 1000.0, 3)
-                        elif k.endswith("Nanos") or k == "cpuNanos":
-                            v = round(v / 1000000.0, 3)
+                        # Maintain raw units for forensic dict to avoid naming confusion (v4.5.9)
+                        pass
                     result[std_id] = v
             if isinstance(v, dict):
                 discovery_harvest(v, marker_map, result, depth + 1)
@@ -520,6 +526,10 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # Prefer nested path, fallback to top-level or extracted forensic dict
     txn_bytes_dirty = get_nested_value(entry, "attr.storage.data.txnBytesDirty") or attr.get("txnBytesDirty") or forensic.get("txnBytesDirty")
     if txn_bytes_dirty is not None: forensic["txnBytesDirty"] = txn_bytes_dirty
+    
+    cache_micros = get_nested_value(entry, "attr.storage.timeWaitingMicros.cache") or 0
+    if cache_micros > 0:
+        forensic["timeWaitingMicros_cache"] = cache_micros
 
     waits_ms = {}
     lock_micros = 0
@@ -542,6 +552,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
     s_read = (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
     s_write = (get_nested_value(entry, "attr.storage.data.timeWritingMicros") or 0) + (attr.get("waitForWriteConcernDurationMillis") or 0) * 1000
+    s_cache = cache_micros # Raw µs
     
     # 🧪 Write Bottleneck Unification (v2.7.13)
     # Include Oplog Slot Duration in storage wait for mutation ops (update, findAndModify, delete, insert)
@@ -551,8 +562,9 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     oplog_micros = (attr.get("totalOplogSlotDurationMicros") or 0)
     oplog_wait = oplog_micros if (oplog_micros > 1000 and ms > 100) else 0
     
-    if s_read > 0 or s_write > 0 or oplog_wait > 0: 
-        val = round((s_read + s_write + oplog_wait) / 1000.0, 2)
+    if s_read > 0 or s_write > 0 or oplog_wait > 0 or s_cache > 0: 
+        # Convert to ms for the internal waits_ms dict which is the "wait-hierarchy" source
+        val = round((s_read + s_write + oplog_wait + s_cache) / 1000.0, 2)
         # 🧪 Wall-Clock Hardening (v2.3.1)
         # Cap visual components at total duration if they represent cumulative parallel effort.
         waits_ms["storage_wait"] = min(val, ms) if ms > 0 else val
@@ -587,6 +599,10 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     ip_raw = str(attr.get("remote") or attr.get("client") or "unknown")
     client_ip = str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw)
 
+    # 🔍 Search & AI Intent Extraction (v4.6.3)
+    # Modularized extraction for Atlas Search and Vector Search metadata.
+    plan_summary = extract_search_metadata(attr, entry, cmd_obj, op)
+
     metrics = {
         "ms": ms, "ns": ns, "op": op, "query_shape_hash": q_hash,
         "query_hash": attr.get("queryHash") or entry.get("queryHash") or "N/A",
@@ -595,7 +611,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
         "has_crud": has_crud,
-        "plan_summary": attr.get("planSummary", "N/A"), "app_name": app_name,
+        "plan_summary": plan_summary, "app_name": app_name,
         "user": user_id,
         "client_ip": client_ip,  # 🏺 Recovered from the current line
         "op_id": attr.get("opId") or entry.get("opId") or "N/A",
@@ -609,16 +625,16 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
     Surgically identifies if an event is internal system noise (v2.0.1 Refinement).
     Filters by Namespace, App Name, OR Component.
     """
-    # 0. Transaction & Management Immunity (v2.7.4 Fix)
-    # Never filter transactions or destructive admin commands as noise.
-    # v4.4.0: Explicitly protect CRUD operations and tx-prefixed commands.
-    if has_crud or str(op).startswith("tx-") or op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
-        return False
-
     # 1. Explicit System Namespace check (Priority 1)
     if ns and ns != "unknown":
         if any(ns.startswith(p) for p in SYSTEM_NAMESPACES) or ".system." in ns or ns == "oplog.rs":
             return True
+
+    # 2. Transaction & Management Immunity (v2.7.4 Fix)
+    # Never filter transactions or destructive admin commands as noise.
+    # v4.4.0: Explicitly protect CRUD operations and tx-prefixed commands.
+    if has_crud or str(op).startswith("tx-") or op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
+        return False
             
     # 2. System Identity check (Priority 2: Identity > Business Namespace)
     # This captures background tasks even if they target business namespaces (e.g. TTL, mongot)
@@ -636,6 +652,36 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
         return False
         
     return False
+
+def extract_search_metadata(attr: Dict[str, Any], entry: Dict[str, Any], cmd_obj: Dict[str, Any], op: str) -> str:
+    """
+    Modular Intent Extractor for Atlas Search & Vector Search.
+    Identifies index names and surfaces them to the Plan Summary.
+    """
+    plan_summary = attr.get("planSummary") or entry.get("planSummary") or "N/A"
+    
+    # Trace target (handle getMore originations)
+    target = cmd_obj
+    if op == "getMore" and isinstance(attr.get("originatingCommand"), dict):
+        target = attr["originatingCommand"]
+        
+    if not isinstance(target, dict): return plan_summary
+
+    pipeline = target.get("pipeline") or []
+    if not isinstance(pipeline, list): return plan_summary
+
+    for stage in pipeline:
+        if not isinstance(stage, dict): continue
+        # Atlas Search ($search)
+        if "$search" in stage:
+            idx = stage["$search"].get("index", "default")
+            return f"🔍 SEARCH [{idx}]"
+        # Vector Search ($vectorSearch)
+        elif "$vectorSearch" in stage:
+            idx = stage["$vectorSearch"].get("index", "default")
+            return f"🧬 VECTOR [{idx}]"
+            
+    return plan_summary
 
 def get_nested_value(obj: Any, path: str) -> Any:
     try:

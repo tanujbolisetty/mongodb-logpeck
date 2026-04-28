@@ -2,6 +2,30 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [4.5.9] - 2026-04-27
+### Fixed
+- **Forensic Scaling**: Corrected unit conversion in the Storage Intensity engine to ensure sub-millisecond metrics are accurately represented in the dashboard.
+- **Cache Wait Extraction**: Fixed a regression in `parser.py` that caused `cache_wait` durations to be dropped during high-load throughput, restoring visibility into lock contention.
+
+## [4.5.8] - 2026-04-27
+### Fixed
+- **Query Categorization**: Fixed a bug where system namespaces (e.g., `system.sessions`, `config.availability`) were incorrectly promoted to the Business Workload tab when part of a transaction. System namespaces now have priority over transaction immunity.
+
+## [4.5.7] - 2026-04-27
+### Added
+- **System & Network Errors (Forensic Visibility)**: Introduced a dedicated telemetry section for "headless" infrastructure anomalies (e.g., `asio.system`, TCP timeouts) that lack query hashes. These are now isolated in a new table within the "Failure Forensics" tab to maintain workload signal while ensuring critical network events are not silenced.
+- **Note Probe**: Expanded `parser.py` to capture the `note` attribute from MongoDB system logs.
+
+### Fixed
+- **Module Resolution (Editable Mode)**: Updated `README.md` and installation procedures to enforce editable mode (`pip3 install -e .`), resolving a critical issue where background `multiprocessing` workers imported stale global modules instead of local forensic logic.
+- **Directory Hygiene**: Conducted a full sweep to align repository with `logpeck-maintenance` standards, migrating stray artifacts and test scripts to their governed locations.
+
+## [4.5.6] - 2026-04-27
+### Hardened
+- **Transaction Consistency (tx-delete)**: Standardized forensic labeling for all mutation types. Operations arriving via `CRUD` blocks or with `lsid`/`txnNumber` metadata are now consistently prefixed with `tx-` (e.g., `tx-delete`) to align with `insert` and `update` behavior.
+- **Batch Forensics**: Improved `cli.py` to support multi-report generation when using `--folder` mode, enabling cluster-wide primary node sweeps.
+- **Dataset Guard (v4.5.6)**: Fixed a critical `ZeroDivisionError` in the forensic synthesis engine that occurred when processing log windows with zero active workload (0ms total time).
+
 ## [4.5.2] - 2026-04-27
 ### Hardened
 - **Dual-Labeling (Forensic UX)**: Implemented technical sub-labels for the Forensic Execution Metrics table, showing the raw MongoDB log key (e.g., `nreturned`) beneath business-friendly names to bridge the gap between Executive and DBA views.

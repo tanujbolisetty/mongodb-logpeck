@@ -119,6 +119,16 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         timeout_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{t_ts}</td><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td><td><span class='tag-critical'>{t_count}</span></td><td style='font-size:0.75rem'>{t_avg}</td><td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td><td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td><td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td><td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td><td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td><td style='font-size:0.7rem;color:var(--text-secondary)'>IP: {t.get('remote', 'N/A')}<br>Ctx: {t.get('ctx', 'N/A')}</td></tr>"
     timeout_table_html += "</tbody></table>"
     
+    system_error_table_html = "<table><thead><tr><th>Last Seen</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th></tr></thead><tbody>"
+    for err in stats.get("system_error_patterns", []):
+        err_ts = str(err.get('ts', 'N/A'))[11:19]
+        system_error_table_html += f"<tr><td style='font-size:0.75rem;font-family:monospace'>{err_ts}</td><td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td><td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td><td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td><td><span class='tag-critical'>{err.get('count', 0)}</span></td></tr>"
+        if err.get('payload') and err.get('payload') != 'N/A':
+            system_error_table_html += f"<tr><td colspan='5' style='padding:0 1rem 1rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05)'><div style='background:#0f172a;padding:0.8rem;border-radius:6px;font-family:monospace;font-size:0.7rem;color:var(--text-secondary);white-space:pre-wrap;border-left:2px solid var(--warn)'>{err.get('payload')}</div></td></tr>"
+        else:
+            system_error_table_html += f"<tr><td colspan='5' style='padding:0; border-bottom: 1px solid rgba(255,255,255,0.05)'></td></tr>"
+    system_error_table_html += "</tbody></table>"
+    
     def generate_tier_buttons(table_id):
         buttons = f'<button class="badge" style="cursor:pointer; border:1px solid var(--border); background:#1e293b" onclick="filterByTier(0, \'{table_id}\')">ALL</button>'
         active_tiers = stats.get("active_latency_tiers", [])
@@ -200,7 +210,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if docs_ex > 0:
                     se = row_data.get("scan_efficiency", 0)
                     se_clr = "var(--tier1)" if se < 20 else ("#fbbf24" if se < 500 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT (Slowest Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {se_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">SCAN EFFICIENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{se_clr}; margin:0.3rem 0">{se:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / IMPACT</div></div>')
 
                 # 2. INDEX SELECTIVITY (Specificity)
                 # Measures how many index entries were scanned to return 1 result.
@@ -208,7 +218,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if keys_ex > 0:
                     is_sel = row_data.get("index_selectivity", 0)
                     is_clr = "var(--tier1)" if is_sel < 5 else ("#fbbf24" if is_sel < 50 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT (Slowest Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {is_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">INDEX SELECTIVITY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{is_clr}; margin:0.3rem 0">{is_sel:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">KEYS / IMPACT</div></div>')
 
                 # 3. FETCH AMPLIFICATION (Coverage)
                 # Measures the ratio of Documents Loaded vs Keys Scanned.
@@ -216,7 +226,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                 if docs_ex > 0 and keys_ex > 0:
                     fa = row_data.get("fetch_amplification", 0)
                     fa_clr = "var(--tier1)" if fa <= 1.1 else ("#fbbf24" if fa < 3 else "var(--error)")
-                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS (Slowest Sample)</div></div>')
+                    insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {fa_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6">FETCH AMPLIFICATION (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{fa_clr}; margin:0.3rem 0">{fa:,.1f}</div><div style="font-size:0.6rem; color:var(--text-secondary)">DOCS / KEYS</div></div>')
 
                 # 4. INDEX AMPLIFICATION (Mutation Effort)
                 # Measures how many index modifications resulted from a single document change.
@@ -710,6 +720,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
                         {timeout_forensic_rows_html}
                     </tbody>
                 </table>
+            </div>
+
+            <div class="card" style="margin-top:1.5rem">
+                <div class="card-label" style="color:var(--warn)">🌐 System & Network Errors</div>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:1.5rem">Raw infrastructure and network anomalies that occurred outside of tracked query boundaries.</p>
+                {system_error_table_html}
             </div>
         </div>
     </div>

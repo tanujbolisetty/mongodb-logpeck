@@ -28,11 +28,18 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/tanujbolisetty/mongodb-logpeck.git
-cd mongodb-logpeck
+git clone https://github.com/mongodb/logpeck.git
+cd logpeck
 
 # Install logpeck in editable mode
 pip3 install -e .
+
+> [!TIP]
+> If the `peck` command is not found after installation, ensure your Python binary directory (e.g., `~/Library/Python/3.13/bin` on macOS) is in your `PATH`. You can add it to your shell profile (e.g., `.zshrc` or `.bash_profile`):
+> `export PATH=$PATH:$(python3 -m site --user-base)/bin`
+
+# Or using standard pip (depending on your environment)
+# pip install -e .
 ```
 
 ---

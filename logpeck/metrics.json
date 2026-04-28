@@ -238,7 +238,7 @@
       "id": "queue_wait",
       "label": "Ticket Queue",
       "category": "LATENCY",
-      "unit": "ms",
+      "unit": "us",
       "source": "attr.queues.execution.totalTimeQueuedMicros",
       "markers": ["totalTimeQueuedMicros"],
       "description": "Pre-execution admission control. Time spent waiting for an execution ticket. Signal: Global concurrency saturation."
@@ -247,7 +247,7 @@
       "id": "lock_wait",
       "label": "Lock Contention",
       "category": "LATENCY",
-      "unit": "ms",
+      "unit": "us",
       "source": "attr.locks.*.timeAcquiringMicros",
       "markers": ["timeAcquiringMicros"],
       "description": "During-execution acquisition wait. Time spent waiting for Global, DB, or Collection locks. Signal: High-velocity contention."

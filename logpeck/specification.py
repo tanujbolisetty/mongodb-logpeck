@@ -210,6 +210,7 @@ SIMPLIFIED_OPS = {
     "find": "find",
     "update": "update",
     "delete": "delete",
+    "remove": "delete",
     "insert": "insert",
     "aggregate": "aggregate",
     "getmore": "getmore",
