@@ -124,7 +124,7 @@ Use the table below to find the surgical CLI command equivalent for each profess
 | **4. Failure Forensics** | `peck failure-workload` | **(New)** Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
 | **5. Connection Analytics** | `peck connections` | Profiles client apps and connection churn. | `--json` |
 | **6. Reference** | (Automatic) | Registry of metrics and rules. | N/A |
-| **-** | `peck search` | Surgical keyword forensic search. | `--keyword`, `--full`, `--limit`, `--count` |
+| **-** | `peck search` | Surgical keyword forensic search. | `--keyword`, `--grep`, `--full`, `--limit`, `--count` |
 | **-** | `peck filter` | Multi-dimensional forensic filtering. | `--filters`, `--full`, `--limit`, `--count` |
 | **-** | `peck dashboard` | Generates the full 6-tab HTML dashboard. | `--file`, `--folder`, `--latency`, `--html` |
 
