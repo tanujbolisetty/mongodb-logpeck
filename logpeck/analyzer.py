@@ -97,18 +97,18 @@ def read_logs_chunked(file_path: str):
             if entry: yield entry
 
 
-def build_forensic_context(log_file_path: str) -> Dict[str, str]:
+def build_forensic_context(log_file_path: str) -> Dict[str, Dict[str, str]]:
     """
-    The Pre-Scan Discovery Layer.
+    The Pre-Scan Discovery Layer (v5.0.1).
     
     Performs a high-speed context sweep of the log file to build a map 
-    of Connection ID -> Namespace.
+    of Connection ID -> {Namespace, AppName}.
     
-    WHY: In many failure logs (e.g., Timeouts or SocketExceptions), the 
-    namespace is missing. By pre-sweeping the log, we can look up what 
-    collection 'conn123' was last using to correctly attribute the failure.
+    WHY: In many failure logs (e.g., Timeouts), the namespace or app identity 
+    is missing. By pre-sweeping, we can correctly attribute 'conn123' to 
+    'Compass' or the 'inventory.items' collection.
     """
-    last_ns_cache = {}
+    ctx_registry = {}  # { ctx: { "ns": "...", "app": "..." } }
     total_parsed = 0
     import sys
     print(f"🔬 Forensic Context Sweep (v{__version__})...", file=sys.stderr)
@@ -130,17 +130,25 @@ def build_forensic_context(log_file_path: str) -> Dict[str, str]:
                     attr = obj.get("attr", {})
                     if not isinstance(attr, dict): continue
                     
+                    if ctx not in ctx_registry:
+                        ctx_registry[ctx] = {"ns": "unknown", "app": "unknown"}
+
+                    # Capture Identity (from metadata handshake 22944)
+                    app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "unknown")
+                    if app != "unknown":
+                        ctx_registry[ctx]["app"] = app
+
                     # Identify the namespace (db.collection) active on this context
                     p_cmd = attr.get("command") or attr.get("originatingCommand") or attr.get("doc", {}).get("q")
                     raw_ns = attr.get("ns")
                     if raw_ns and raw_ns != "unknown":
                         _, res_ns, _ = detect_op_and_ns(attr, p_cmd or {}, str(obj.get("msg", "")), raw_ns)
-                        last_ns_cache[ctx] = str(res_ns)
+                        ctx_registry[ctx]["ns"] = str(res_ns)
                 except: continue
     except Exception as e:
         print(f"  ⚠️ Context sweep partially interrupted: {e}")
     
-    return last_ns_cache
+    return ctx_registry
 
 def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str, Any]:
     """
