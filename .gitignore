@@ -2,6 +2,7 @@
 output/
 samplelogs/
 scratch/
+forensic_data/
 
 # Python artifacts
 __pycache__/
@@ -43,4 +44,4 @@ tests/
 .agents/
 
 # Bulk Automations
-scripts/
+# (Keeping scripts/ tracked for team distribution)
