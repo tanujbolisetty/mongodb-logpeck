@@ -1,4 +1,4 @@
-# 🐦 LogPeck — Core Design Specification (v5.0.7)
+# 🐦 LogPeck — Core Design Specification (v5.0.8)
 
 > **Status**: Production Blueprint (High-Fidelity)  
 > **Source of Truth**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py) & [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py)  
@@ -232,14 +232,26 @@ To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard,
 
 The Failure Forensics dashboard is designed for rapid diagnostic triage.
 
-### 8.1 High-Resolution Error Grid (v5.0.7 Hardened)
-To eliminate redundancy, error information is split into distinct columns:
-- **CODE**: The numeric MongoDB error code (e.g., `50`). Displayed in high-contrast red.
-- **ERROR / DESCRIPTION**: The human-readable name (e.g., `MaxTimeMSExpired`) prepended with an icon (🚨 for Timeouts, ☢️ for Errors).
-- **OCCURRENCES**: Total count of the specific error code.
-- **AVG DELAY**: The average wall-clock latency for this failure pattern.
-- **PRIMARY NAMESPACE**: The database/collection most frequently associated with this error.
-- **MOST IMPACTED APP**: The application name contributing the highest volume to this failure pattern.
+### 13.1 Failure Forensic Columns (v5.0.8 Consolidation)
+The "Failure Forensics" tab is optimized for signal-to-noise ratio by consolidating multiple views into a three-part diagnostic hierarchy:
+
+1.  **Executive Failure Summary**: Aggregated by `Error Code`.
+2.  **Query Shape Failure Analysis**: Aggregated by `Query Shape` + `Error Code`.
+3.  **System & Network Errors**: Raw infrastructure anomalies.
+
+The "Error Event Timeline" (previously Section 2) has been deprecated in v5.0.8 to prevent UI clutter. Its critical chronological signal has been merged into the Query Shape table.
+
+#### 13.1.1 Query Shape Failure Analysis Table
+| Column | Width | Description |
+| :--- | :--- | :--- |
+| **#** | 40px | Row index for quick reference. |
+| **LAST SEEN** | 100px | HH:MM:SS of the most recent occurrence. |
+| **CODE** | 80px | MongoDB Error Code (e.g., 50, 11000). |
+| **ERROR / DESCRIPTION** | 250px | Human-readable error name or pattern. |
+| **COUNT** | 70px | Total occurrences of this shape/error pair. |
+| **SHAPE HASH** | 150px | Fingerprint of the query structure. |
+| **NAMESPACE** | 220px | Database and Collection target. |
+| **CONTEXT / APP** | 200px | Originating application or client context. |
 
 ### 8.2 Redundancy Elimination
 The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation Exceeded (50)` becomes `Operation Exceeded`) when the Code column is present, providing a concise, industrial-grade view.

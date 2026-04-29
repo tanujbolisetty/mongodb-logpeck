@@ -109,48 +109,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "unknown" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
     msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
-    timeout_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Count</th><th>Avg</th><th>Max</th><th>Shape Hash</th><th>Namespace</th><th>Op Preview</th><th>Error Pattern</th><th>App</th></tr></thead><tbody>"
-    for i, t in enumerate(stats.get("timeout_patterns", [])):
-        did = f"timeout-{i}"
-        t_ts = str(t.get('ts', 'N/A'))[11:19]
-        t_preview = str(t.get('preview', 'N/A'))[:60]
-        t_code = t.get('error_code', 'N/A') or 'N/A'
-        t_count = t.get('count', 0)
-        t_avg = format_duration(t.get('total_ms', 0) / max(t_count, 1))
-        t_max = format_duration(t.get('max_ms', 0))
-        t_app = t.get('app_name', 'unknown')
-        t_hash = t.get('shape_hash', 'N/A')
-        
-        # Main Row: Searchable & Toggleable
-        timeout_table_html += f"""<tr class="row-main" onclick="toggleDetails('{did}')">
-            <td style='font-size:0.75rem;font-family:monospace'>{t_ts}<span style="display:none"> {t.get('remote', 'N/A')} {t.get('ctx', 'N/A')}</span></td>
-            <td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)\">{t_code}</span></td>
-            <td><span class='tag-critical'>{t_count}</span></td>
-            <td style='font-size:0.75rem'>{t_avg}</td>
-            <td style='font-size:0.75rem;color:var(--error);font-weight:700'>{t_max}</td>
-            <td style='font-family:monospace;font-size:0.7rem;color:var(--text-secondary)'>{t_hash}</td>
-            <td style='font-size:0.75rem'>{t.get('ns', 'N/A')}</td>
-            <td style='font-size:0.72rem;font-family:monospace;color:var(--accent)'>{t_preview}</td>
-            <td style='font-size:0.72rem;color:var(--error)'>{t.get('msg', 'N/A')}</td>
-            <td style='font-size:0.72rem;color:var(--text-secondary)'>{t_app}</td>
-        </tr>"""
-        
-        # Details Row: Forensic Context
-        timeout_table_html += f'''<tr id="{did}" class="details-row"><td colspan="10"><div class="details-content">
-            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">FORENSIC CONTEXT</div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:2rem">
-                <div>
-                    <div class="card-label">Remote Client</div>
-                    <div class="f-val" style="color:var(--text-primary)">IP: {t.get('remote', 'N/A')}</div>
-                    <div class="f-val" style="color:var(--text-secondary); font-size:0.75rem; margin-top:0.4rem">Context: {t.get('ctx', 'N/A')}</div>
-                </div>
-                <div>
-                    <div class="card-label">Query Shape Hash</div>
-                    <div class="f-val" style="color:var(--accent)">{t_hash}</div>
-                </div>
-            </div>
-        </div></td></tr>'''
-    timeout_table_html += "</tbody></table>"
+    timeout_table_html = "" # Consolidated into Query Shape Analysis
+
     
     system_error_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th></tr></thead><tbody>"
     for i, err in enumerate(stats.get("system_error_patterns", [])):
@@ -481,8 +441,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if t_cnt > 0: desc_html = f'🚨 {desc_html}'
                 elif e_cnt > 0: desc_html = f'☢️ {desc_html}'
 
+                last_seen = str(row.get('last_ts', 'N/A'))[11:19]
                 hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary)">{last_seen}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+
+
             else:
                 hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
@@ -774,16 +737,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 {failure_summary_html}
             </div>
 
-            <div class="card" style="margin-top:1.5rem">
-                <div class="card-label" style="color:var(--error)">⚡ Error Event Timeline (Client Context)</div>
-                {timeout_table_html}
-            </div>
-            <div class="card" style="margin-top:1.5rem">
-                <div class="card-label" style="color:var(--error)">🔬 Query Shape Failure Analysis</div>
                 <table id="timeoutTable">
                     <thead>
                         <tr>
                             <th style="width:40px">#</th>
+                            <th style="width:100px">LAST SEEN</th>
                             <th style="width:80px">CODE</th>
                             <th style="width:250px">ERROR / DESCRIPTION</th>
                             <th style="width:70px">COUNT</th>
@@ -792,6 +750,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <th style="width:200px">CONTEXT / APP</th>
                         </tr>
                     </thead>
+
                     <tbody>
                         {timeout_forensic_rows_html}
                     </tbody>

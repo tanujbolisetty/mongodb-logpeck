@@ -2,6 +2,12 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.8] - 2026-04-29
+### Changed
+- **Forensic Consolidation**: Removed the redundant "Error Event Timeline" table to reduce dashboard clutter.
+- **Enhanced Signal**: Injected a "LAST SEEN" column into the "Query Shape Failure Analysis" table, preserving chronological context while improving signal-to-noise ratio.
+- **Version Bump**: Promoted release to v5.0.8 following major UI refinement.
+
 ## [5.0.7] - 2026-04-29
 ### Added
 - **Hardened Failure Summary Grid**: Redesigned the "Executive Failure Summary" into a professional 6-column grid: `CODE`, `ERROR / DESCRIPTION`, `OCCURRENCES`, `AVG DELAY`, `PRIMARY NAMESPACE`, and `MOST IMPACTED APP`.

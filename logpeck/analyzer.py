@@ -731,12 +731,14 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                                 "total_keysInserted":0, "total_keysUpdated":0, "total_keysDeleted":0,
                                 "total_txn_bytes_dirty":0, "total_mongot_wait_ms":0, "total_storage_read_micros":0,
                                 "histogram":{b:0 for b in LATENCY_BUCKETS}, "max_example_raw":None, "min_example_raw":None, 
-                                "max_metrics": None, "min_metrics": None,
+                                "max_metrics": None, "min_metrics": None, "last_ts": str(ts),
                                 "max_peek_attr": {}, "min_peek_attr": {}, "max_wait_metrics":{}, "min_wait_metrics":{}, "query_fields": set(), "app_names": set(),
                                 "query_hash": "N/A", "plan_cache_key": "N/A"
                             }
                         
                         s_o = target_stats[h]; s_o["count"] += 1; s_o["total_ms"] += duration
+                        s_o["last_ts"] = str(ts)
+
                         
                         # 🧪 Transaction Metric Extraction (v2.7.1 Fix)
                         # Extract forensic data before calculating app_ms to ensure idle time is captured.
