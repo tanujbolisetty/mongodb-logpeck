@@ -443,16 +443,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
                 last_seen = str(row.get('last_ts', 'N/A'))
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
-                elif last_seen == "None": last_seen = "N/A"
                 
-                hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('top_ns', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('top_app', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td>{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                extra_cols = "" # Prevent double-appending
             elif is_system_view:
-                # Move Last Seen to end for system errors too
                 last_seen = str(row.get('ts', 'N/A'))[11:19] if row.get('ts') else "N/A"
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--warn)\">{row.get('code', 'N/A')}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--warn);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td><span style="font-weight:700; color:var(--text-primary)">{row.get('msg', 'N/A')}</span></td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('note', 'N/A')}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
-                hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
+                extra_cols = ""
 
             
             schema_col = ""

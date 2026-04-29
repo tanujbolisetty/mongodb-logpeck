@@ -1196,6 +1196,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "max_query_params": max_d.get("query_params", {}),
             "min_query_params": min_d.get("query_params", {}),
             "latency_distribution": q.get("histogram", {}),
+            "last_ts": q.get("last_ts", max_ts),
             "error_code": eval_data.get("error_code"),
             "error_name": eval_data.get("error_name"),
             "max_example_raw": max_entry if isinstance(max_entry, str) else json.dumps(max_entry),
