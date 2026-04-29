@@ -2,6 +2,10 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.3] - 2026-04-29
+### Fixed
+- **Dashboard Search Visibility**: Resolved issue where forensic detail tables were hidden during active UI filtering. Detail cards now respect their expanded state during search.
+
 ## [5.0.2] - 2026-04-29
 ### Added
 - **High-Precision Grep Mode**: Added `--grep` flag to `peck search`. This performs a stateless, full-text match against the raw JSON string, mimicking standard `grep` while preserving LogPeck's structured output.

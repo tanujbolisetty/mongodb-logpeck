@@ -1015,8 +1015,36 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
 
 
     <script>
-        function toggleDetails(id) {{ const el = document.getElementById(id); if(!el) return; el.style.display = (el.style.display === 'table-row' || el.style.display === 'block') ? 'none' : (el.tagName === 'TR' ? 'table-row' : 'block'); }}
+        function toggleDetails(id) {{ 
+            const el = document.getElementById(id); 
+            if(!el) return; 
+            const isVisible = (el.style.display === 'table-row' || el.style.display === 'block');
+            el.style.display = isVisible ? 'none' : (el.tagName === 'TR' ? 'table-row' : 'block'); 
+            if (!isVisible) el.classList.add('expanded'); else el.classList.remove('expanded');
+        }}
         function openTab(name, el) {{ document.querySelectorAll('.tab-content').forEach(t => {{ t.classList.remove('active'); t.style.display = 'none'; }}); document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); var target = document.getElementById(name); if(target) {{ target.classList.add('active'); target.style.display = 'block'; }} el.classList.add('active'); }}
+        function filterTable(tableId, inputId) {{
+            const input = document.getElementById(inputId);
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById(tableId);
+            const rows = table.getElementsByClassName('row-main');
+            const details = table.getElementsByClassName('row-details');
+
+            for (let i = 0; i < rows.length; i++) {{
+                const text = rows[i].textContent.toLowerCase();
+                const isMatch = text.includes(filter);
+                
+                rows[i].style.display = isMatch ? "" : "none";
+                
+                if (details[i]) {{
+                    if (!isMatch) {{
+                        details[i].style.display = "none";
+                    }} else if (details[i].classList.contains('expanded')) {{
+                        details[i].style.display = "table-row";
+                    }}
+                }}
+            }}
+        }}
         function filterRows(inputId, containerId) {{
             const input = document.getElementById(inputId), filter = input.value.toLowerCase(), container = document.getElementById(containerId);
             if(!container) return;
