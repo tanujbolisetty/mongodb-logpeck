@@ -201,31 +201,21 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     user_wave_html = render_wave(conn.get("top_users", {}))
     driver_mapping_html = "<table style='margin-top:1rem'><thead><tr><th>CLIENT APPLICATION</th><th>DRIVER STITCHING</th><th>COUNT</th></tr></thead><tbody>" + "".join([f"<tr><td style='font-size:0.85rem;color:var(--text-secondary)'>{m.get('app', 'N/A')}</td><td style='font-size:0.82rem;color:var(--accent);font-weight:700'>{m.get('driver', 'N/A')}</td><td style='font-family:monospace'>{m.get('count', 0):,}</td></tr>" for m in conn.get("app_driver_mapping", [])]) + "</tbody></table>"
 
-    # 🧬 Executive Failure Summary (v2.7.16)
-    failure_summary_html = "<table><thead><tr><th>CODE</th><th>ERROR / DESCRIPTION</th><th>OCCURRENCES</th><th>AVG DELAY</th><th>PRIMARY NAMESPACE</th><th>MOST IMPACTED APP</th></tr></thead><tbody>"
+    # 🧬 Executive Failure Summary (v5.0.7): Metadata setup
     ecs = stats.get("error_code_summary", [])
-    if not ecs:
-        failure_summary_html += "<tr><td colspan='6' style='text-align:center;color:var(--text-secondary);padding:2rem'>No workload failures detected in this trace window</td></tr>"
-    for e in ecs:
-        e_code = e.get("code", "N/A")
-        e_name = e.get("name", "UnknownError")
-        e_desc = e_name.replace(f" ({e_code})", "").replace(f" {e_code}", "")
-        failure_summary_html += f"""
-            <tr>
-                <td><span style="font-family:'JetBrains Mono'; font-weight:700; color:var(--tier6)">{e_code}</span></td>
-                <td><strong style="color:var(--text-primary)">{e_desc}</strong></td>
-                <td><span class="tag-critical">{e.get("count", 0):,}</span></td>
-                <td>{format_duration(e.get("avg_ms", 0))}</td>
-                <td style="font-size:0.75rem">{e.get("top_ns", "N/A")}</td>
-                <td style="font-size:0.75rem; color:var(--text-secondary)">{e.get("top_app", "N/A")}</td>
-            </tr>
-        """
-    failure_summary_html += "</tbody></table>"
 
-    def render_summary_rows(data_list, start_idx=0, is_system_view=False, is_timeout_view=False):
+    def render_summary_rows(data_list, start_idx=0, is_system_view=False, is_timeout_view=False, is_failure_summary=False):
         rows = ""
+        if not data_list:
+            cols = 6 if is_failure_summary else 11
+            return f"<tr><td colspan='{cols}' style='text-align:center;color:var(--text-secondary);padding:2rem'>No data available in this view</td></tr>"
+
+        if is_failure_summary:
+            rows += "<table><thead><tr><th style='width:80px'>CODE</th><th style='width:250px'>ERROR / DESCRIPTION</th><th style='width:100px'>OCCURRENCES</th><th style='width:150px'>AVG DELAY</th><th style='width:220px'>PRIMARY NAMESPACE</th><th style='width:200px'>MOST IMPACTED APP</th></tr></thead><tbody>"
+
         for i, row in enumerate(data_list):
-            did = f"sys_{start_idx + i}" if is_system_view else (f"to_{start_idx + i}" if is_timeout_view else f"d_{start_idx + i}")
+            prefix = "fs" if is_failure_summary else ("sys" if is_system_view else ("to" if is_timeout_view else "d"))
+            did = f"{prefix}_{start_idx + i}"
             l_pct = row.get("load_pct", 0); l_wid = min(l_pct * 1.5, 100)
             tags = row.get("diagnostic_tags", [])
             chip_list = [f"<span class='tag-{str(t.get('severity', 'info')).lower()}'>{t.get('label', 'UNKNOWN')}</span>" for t in tags]
@@ -451,7 +441,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             elif "VECTOR" in str(plan_raw):
                 plan_html = f'<span style="background:rgba(255,255,255,0.05);border:1px solid #a855f7;color:#a855f7;padding:2px 8px;border-radius:12px;font-size:0.65rem;font-weight:800;white-space:nowrap">{plan_raw}</span>'
 
-            if is_system_view:
+            if is_failure_summary:
+                extra_cols = ""
+                colspan_val = "6"
+                aas_load_col = ""
+            elif is_system_view:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
@@ -466,7 +460,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 colspan_val = "11"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
 
-            if is_timeout_view:
+            if is_failure_summary:
+                e_code = row.get("code", "N/A")
+                e_name = row.get("name", "N/A")
+                code_html = f'<span style="font-family:\'JetBrains Mono\'; font-weight:700; color:var(--error)">{e_code}</span>'
+                desc_html = f'<span style="font-weight:700; color:var(--text-primary)">{e_name}</span>'
+                avg_delay = format_duration(row.get('avg_ms', 0))
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td>{avg_delay}</td><td style="color:var(--text-secondary)">{row.get('top_ns', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('top_app', 'N/A')}</td></tr>\n'''
+            elif is_timeout_view:
                 t_cnt = row.get('count', 0)
                 e_cnt = row.get('error_count', 0)
                 e_code = row.get("error_code") or (row.get("max_forensic", {}).get("errCode")) or ("50" if t_cnt > 0 else "N/A")
@@ -480,9 +481,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if t_cnt > 0: desc_html = f'🚨 {desc_html}'
                 elif e_cnt > 0: desc_html = f'☢️ {desc_html}'
 
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {row.get('query_hash', 'N/A')} {row.get('plan_cache_key', 'N/A')}</span></td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+                hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
             else:
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {row.get('query_hash', 'N/A')} {row.get('plan_cache_key', 'N/A')}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
+                hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--accent);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td>{format_duration(row.get('avg_time', 0))}</td><td><strong>{format_duration(row.get('max_time', 0))}</strong></td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(row.get('total_ms', 0))}</td><td style="color:var(--text-secondary);font-weight:600">{ns_display}</td>{extra_cols}</tr>\n'''
+
             
             schema_col = ""
             if schema_tags:
@@ -549,13 +553,16 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     </div>
                 </div>
             </div></td></tr>'''
+        if is_failure_summary:
+            rows += "</tbody></table>"
         return rows
 
     rows_html = render_summary_rows(summary, 0)
     system_rows_html = render_summary_rows(system_summary, 1000, is_system_view=True)
     timeout_forensic_rows_html = render_summary_rows(timeout_summary, 2000, is_timeout_view=True)
+    failure_summary_html = render_summary_rows(ecs, 3000, is_failure_summary=True)
 
-    # 📚 Forensic Knowledge Base: Diagnostic Decoder (v2.7.0)
+    # 📚 Forensic Knowledge Base: Diagnostic Decoder (v5.0.7)
     diag_rows = []
     for r in rules_glossary:
         # 🕵️ Senior Logic: Extract the best 'Internal Trigger' description
@@ -1040,8 +1047,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             const details = table.getElementsByClassName('row-details');
 
             for (let i = 0; i < rows.length; i++) {{
-                const text = rows[i].textContent.toLowerCase();
-                const isMatch = text.includes(filter);
+                const mainText = rows[i].textContent.toLowerCase();
+                const detailText = details[i] ? details[i].textContent.toLowerCase() : "";
+                const isMatch = mainText.includes(filter) || detailText.includes(filter);
                 
                 rows[i].style.display = isMatch ? "" : "none";
                 
@@ -1060,7 +1068,30 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             const trs = container.getElementsByTagName("tr");
             for (let i = 0; i < trs.length; i++) {{
                 const row = trs[i];
-                if (row.classList.contains('cat-header') || row.parentElement.tagName === 'THEAD' || row.classList.contains('details-row')) continue;
+                // Skip rows inside detail cards from being HIDDEN by the search
+                if (row.closest('.details-content')) continue;
+                
+                if (row.classList.contains('cat-header') || row.parentElement.tagName === 'THEAD') continue;
+                
+                if (row.classList.contains('row-main')) {{
+                    const mainText = row.textContent.toLowerCase();
+                    const nextRow = row.nextElementSibling;
+                    const detailText = (nextRow && nextRow.classList.contains('row-details')) ? nextRow.textContent.toLowerCase() : "";
+                    const isMatch = mainText.includes(filter) || detailText.includes(filter);
+                    
+                    row.style.display = isMatch ? "" : "none";
+                    if (nextRow && nextRow.classList.contains('row-details')) {{
+                        if (!isMatch) {{
+                            nextRow.style.display = "none";
+                        }} else if (nextRow.classList.contains('expanded')) {{
+                            nextRow.style.display = "table-row";
+                        }}
+                    }}
+                    continue;
+                }}
+                
+                if (row.classList.contains('row-details')) continue; // Handled by row-main logic
+
                 row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
             }}
         }}

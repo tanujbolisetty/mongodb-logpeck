@@ -19,7 +19,7 @@ from rich import print as rprint
 console = Console(stderr=True)
 
 # ==============================================================================
-# logpeck: cli.py (v3.3.4)
+# logpeck: cli.py (v5.0.7)
 # The Unified Command-Line Interface for MongoDB Log Forensics.
 # ==============================================================================
 # This module provides the user-facing entry point for both interactive and 
@@ -189,7 +189,7 @@ def main():
     It parses sys.argv and dispatches to the appropriate analytical module.
     """
     parser = argparse.ArgumentParser(
-        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v4.3.6)\n"
+        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v5.0.7)\n"
                     "Hardened observability with Ticket/Lock/Repl wait-hierarchy logic and Clinical Mutation diagnostics.",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )

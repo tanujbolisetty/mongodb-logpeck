@@ -34,7 +34,7 @@ Use this for standard production auditing:
 pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git
 ```
 
-#### **Option B: Beta Version (v5.0.0 Hardening Branch)**
+#### **Option B: Beta Version (v5.0.6 Hardening Branch)**
 Use this to access the new **Truth Engine** and **Universal Search Index**:
 ```bash
 pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git@fix/forensic-engine-hardening

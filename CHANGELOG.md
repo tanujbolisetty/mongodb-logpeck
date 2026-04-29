@@ -2,6 +2,17 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.7] - 2026-04-29
+### Added
+- **Hardened Failure Summary Grid**: Redesigned the "Executive Failure Summary" into a professional 6-column grid: `CODE`, `ERROR / DESCRIPTION`, `OCCURRENCES`, `AVG DELAY`, `PRIMARY NAMESPACE`, and `MOST IMPACTED APP`.
+- **High-Contrast Error Coding**: Implemented bold red styling (`hsl(0, 84%, 60%)`) for all MongoDB error codes in the dashboard to ensure rapid failure triage.
+- **Deep Search Indexing**: Implemented hidden hash indexing (Shape Hash, Query Hash, Plan Cache Key) across all summary rows. This allows instant finding of specific queries without expanding rows first.
+
+### Fixed
+- **Executive Failure Summary Alignment**: Synchronized dashboard data keys with `analyzer.py` engine. Error codes are now accurately mapped to namespaces and applications, resolving "N/A" placeholders in the executive view.
+- **Search UI Regression**: Fixed an issue where the "Business Workload Forensics" tab would fail to show results for long Query Shape Hashes.
+- **Visibility Hardening**: Ensured that forensic detail cards maintain their readability and layout during active UI search filtering.
+
 ## [5.0.6] - 2026-04-29
 ### Added
 - **Forensic Provenance**: Injected `SOURCE LOG AUDIT` badge into the dashboard header, ensuring multi-shard forensic visibility.

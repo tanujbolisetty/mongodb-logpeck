@@ -88,6 +88,34 @@ def evaluate_rule(rule: dict, data: dict) -> Tuple[bool, Optional[float]]:
     except: pass
     return False, None
 
+def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
+    """
+    Surgically extracts the numerical error code from potentially nested blocks.
+    Priority: 1. Top-level errCode, 2. Top-level code, 3. Nested error.code
+    """
+    if not isinstance(attr, dict): return 50 if is_timeout else None
+    
+    # 1. Direct Extraction
+    code = attr.get("errCode") or attr.get("code")
+    
+    # 2. Deep Harvesting (Nested Error Objects)
+    if code is None and isinstance(attr.get("error"), dict):
+        e_obj = attr["error"]
+        code = e_obj.get("code") or e_obj.get("value")
+        
+    # 3. Timeout Defaulting
+    if code is None and is_timeout:
+        return 50
+        
+    # 4. Type Normalization (ensure int if it looks like one)
+    try:
+        if code is not None:
+            return int(code)
+    except (ValueError, TypeError):
+        pass
+        
+    return code
+
 def read_logs_chunked(file_path: str):
     is_gz = file_path.lower().endswith(".gz")
     opener = gzip.open(file_path, 'rt', encoding='utf-8') if is_gz else open(file_path, 'r', encoding='utf-8')
@@ -423,9 +451,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason"]}
                         
                         # Promote numerical codes from nested error objects if present
-                        sys_code = attr.get("value") or attr.get("code")
-                        if not sys_code and isinstance(attr.get("error"), dict):
-                            sys_code = attr.get("error", {}).get("value") or attr.get("error", {}).get("code")
+                        sys_code = harvest_error_code(attr, is_timeout=False)
                         
                         # Promote specific names for high-frequency errors
                         if sys_code == 11000 or "E11000" in str(e_msg):
@@ -671,7 +697,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         if is_error_op or is_timeout_op:
                             # 🧪 Executive Failure Aggregation (v2.7.16)
                             # Pull code and name, and track hotspots by error code
-                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "N/A")
+                            err_c = harvest_error_code(attr, is_timeout=is_timeout_op) or "N/A"
                             err_n = attr.get("errName") or (ERROR_CODE_MAP.get(err_c) if isinstance(err_c, int) else "N/A")
                             
                             # Standardize description: if we have a name, use it.
@@ -680,12 +706,20 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             if err_c not in error_code_agg:
                                 error_code_agg[err_c] = {
                                     "code": err_c, "name": err_desc, "count": 0, "total_ms": 0,
-                                    "namespaces": Counter(), "apps": Counter()
+                                    "namespaces": Counter(), "apps": Counter(),
+                                    "max_ms": 0, "max_metrics": None, "max_peek_attr": None, "max_example_raw": None
                                 }
                             ec_o = error_code_agg[err_c]
                             ec_o["count"] += 1; ec_o["total_ms"] += duration
                             ec_o["namespaces"][ns] += 1
                             ec_o["apps"][a_n] += 1
+                            
+                            # 🧪 Witness Harvesting: Capture the most 'impactful' (slowest) occurrence as a representative sample
+                            if ec_o["max_metrics"] is None or duration >= ec_o["max_ms"]:
+                                ec_o["max_ms"] = duration
+                                ec_o["max_metrics"] = metrics
+                                ec_o["max_peek_attr"] = attr
+                                ec_o["max_example_raw"] = str(entry).strip()
 
                         if h not in target_stats:
                             target_stats[h] = {
@@ -882,8 +916,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         "name": v["name"],
                         "count": v["count"],
                         "avg_ms": v["total_ms"] / v["count"] if v["count"] > 0 else 0,
+                        "max_ms": v["max_ms"],
                         "top_ns": v["namespaces"].most_common(1)[0][0] if v["namespaces"] else "N/A",
-                        "top_app": v["apps"].most_common(1)[0][0] if v["apps"] else "N/A"
+                        "top_app": v["apps"].most_common(1)[0][0] if v["apps"] else "N/A",
+                        "max_metrics": v["max_metrics"],
+                        "max_peek_attr": v["max_peek_attr"],
+                        "max_example_raw": v["max_example_raw"],
+                        "diagnostic_tags": [{"label": "ERROR", "severity": "error"}]
                     }
                     for k, v in sorted(error_code_agg.items(), key=lambda x: x[1]["count"], reverse=True)
                 ],

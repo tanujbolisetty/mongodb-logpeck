@@ -1,4 +1,4 @@
-# 🐦 LogPeck — Core Design Specification (v5.0.6)
+# 🐦 LogPeck — Core Design Specification (v5.0.7)
 
 > **Status**: Production Blueprint (High-Fidelity)  
 > **Source of Truth**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py) & [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py)  
@@ -232,10 +232,14 @@ To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard,
 
 The Failure Forensics dashboard is designed for rapid diagnostic triage.
 
-### 8.1 High-Resolution Error Grid
+### 8.1 High-Resolution Error Grid (v5.0.7 Hardened)
 To eliminate redundancy, error information is split into distinct columns:
-- **CODE**: The numeric MongoDB error code (e.g., `50`).
-- **DESCRIPTION**: The human-readable name (e.g., `MaxTimeMSExpired`) prepended with an icon (🚨 for Timeouts, ☢️ for Errors).
+- **CODE**: The numeric MongoDB error code (e.g., `50`). Displayed in high-contrast red.
+- **ERROR / DESCRIPTION**: The human-readable name (e.g., `MaxTimeMSExpired`) prepended with an icon (🚨 for Timeouts, ☢️ for Errors).
+- **OCCURRENCES**: Total count of the specific error code.
+- **AVG DELAY**: The average wall-clock latency for this failure pattern.
+- **PRIMARY NAMESPACE**: The database/collection most frequently associated with this error.
+- **MOST IMPACTED APP**: The application name contributing the highest volume to this failure pattern.
 
 ### 8.2 Redundancy Elimination
 The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation Exceeded (50)` becomes `Operation Exceeded`) when the Code column is present, providing a concise, industrial-grade view.
@@ -473,12 +477,12 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 | # | Column | Content |
 | :--- | :--- | :--- |
 | 1 | `#` | Row number |
-| 2 | `CODE` | Error code (JetBrains Mono, red) |
+| 2 | `CODE` | Error code (JetBrains Mono, bold red: `hsl(0, 84%, 60%)`) |
 | 3 | `DESCRIPTION` | Error name with 🚨 (timeout) or ☢️ (error) prefix |
-| 4 | `COUNT` | Occurrence count |
+| 4 | `OCCURRENCES` | Total count of this failure shape |
 | 5 | `HASH` | Short query shape hash (12 chars) |
 | 6 | `NAMESPACE` | Target namespace |
-| 7 | `APP` | Client application |
+| 7 | `APPLICATION` | Client application name |
 
 - Expanded drill-down follows the same Section A–F structure as Tab 2
 
@@ -590,7 +594,7 @@ Because the search engine matches against the `textContent` of a table row (`row
 | :--- | :--- | :--- |
 | **Business Workload** | Namespace, Operation, App Name, Diagnostic Tags | Query Shape Hash, Plan Cache Key |
 | **System Workload** | Background Task Name, Component, Diagnostic Tags | Internal Thread ID |
-| **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | **Client IP**, Connection Context ID, Shape Hash |
+| **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | **Client IP**, Connection Context ID, Shape Hash, Full Error Description |
 | **Connection Analytics**| App Name, Driver Version | **Client IP**, Username |
 
 ### 16.3 Developer Checklist for Searchable Fields
@@ -635,3 +639,29 @@ All interactions with JSON configuration files (`metrics.json`, `rules.json`) an
 
 ### 4.2 Forensic Provenance
 Batch reports generated using the `--folder` mode inject a `SOURCE LOG AUDIT` context into the dashboard. This allows SREs to maintain forensic lineage when auditing logs from multiple shards or nodes simultaneously.
+
+---
+
+## 🏗️ 18. Frontend Implementation Rules (Developer Mandate)
+
+To maintain the production-grade integrity of the LogPeck dashboard, all frontend modifications MUST adhere to these strict mandates:
+
+### 18.1 Table Alignment & Column Integrity
+- **Mandatory 6-Column Failure Summary**: The `Executive Failure Summary` MUST always have 6 columns (CODE, ERROR / DESCRIPTION, OCCURRENCES, AVG DELAY, PRIMARY NAMESPACE, MOST IMPACTED APP).
+- **No Index Column in Summaries**: The `#` column is reserved for forensic drill-down tables only. It MUST NOT be present in executive summary tables.
+- **Header Naming**: Use `OCCURRENCES` instead of `COUNT` for failure patterns to align with forensic terminology.
+
+### 18.2 Visual Language & Styling
+- **Error Codes**: All numeric MongoDB error codes MUST be styled in **bold high-contrast red** (`hsl(0, 84%, 60%)`) using the `JetBrains Mono` font.
+- **Diagnostic Icons**: Timeouts MUST be prefixed with 🚨; general Errors MUST be prefixed with ☢️.
+- **Hover Transitions**: All `row-main` elements MUST implement a subtle scale and background shift on hover to provide interactive feedback.
+
+### 18.3 Forensic Expansion Protocol
+- **Unified ID Mapping**: Every `row-main` MUST have a unique `id` (e.g., `row-fast-{idx}`) that corresponds to its sibling `details-row` (e.g., `details-fast-{idx}`).
+- **State Preservation**: The `toggleDetails(id)` function MUST manage the visibility of the expansion row without affecting the scroll position or search filter state.
+- **Colspan Matching**: When modifying table headers, the `colspan` value in the corresponding `details-row` MUST be updated immediately to prevent layout fragmentation.
+
+### 18.4 Search Indexing (The Hidden Layer)
+- **Deep Discovery**: Every `row-main` MUST include a hidden `<span>` inside the first column containing forensic anchors (Hashes, IPs, Context IDs).
+- **Searchable Payloads**: In the Failure Forensics tab, the full string representation of the error pattern MUST be included in the hidden search index to enable searching by partial error messages.
+- **Consistency**: All search anchors MUST be space-separated and cast to lowercase to match the linear O(n) search traversal.

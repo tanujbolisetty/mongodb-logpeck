@@ -1,5 +1,5 @@
 # ==============================================================================
-# logpeck: specification.py
+# logpeck: specification.py (v5.0.7)
 # The Centralized 'Truth Registry' for MongoDB Forensic Mapping.
 # ==============================================================================
 # This module serves as the authoritative source of truth for the entire 
