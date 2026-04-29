@@ -37,7 +37,7 @@ from .specification import (
 from .version import __version__
 from .utils import format_duration
 
-EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801", "4651401"}
+EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801", "4651401", "20478", "20526", "23799"}
 
 
 RE_OBJECT_ID = re.compile(r'ObjectId\([^)]+\)')
