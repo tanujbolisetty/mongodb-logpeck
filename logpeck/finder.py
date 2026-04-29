@@ -20,7 +20,8 @@ def search_logs(
     log_file_path: str, 
     keyword: str, 
     limit: int = 10, 
-    count_only: bool = False
+    count_only: bool = False,
+    grep_mode: bool = False
 ) -> Union[List[Dict[str, Any]], int]:
     """
     High-fidelity stateful keyword search across JSON logs.
@@ -31,9 +32,10 @@ def search_logs(
        the matching log line is lean (e.g., a timeout or connection end).
     """
     # 🕵️ Forensic Pass 1: Global Multi-Context Sweep (MCS)
-    # Builds the high-speed connection registry and namespace cache for the entire trace.
-    # Essential for attributing collections to lean timeout events.
-    context_cache = build_forensic_context(log_file_path)
+    # Skip if in --grep mode for raw, stateless speed.
+    context_cache = {}
+    if not grep_mode:
+        context_cache = build_forensic_context(log_file_path)
     
     results = []
     count = 0
@@ -51,15 +53,20 @@ def search_logs(
         ctx_info = context_cache.get(ctx, {"ns": "unknown", "app": "unknown"})
         
         # Build discovery search space
-        err_hint = ""
-        if isinstance(attr.get("error"), dict):
-            err_hint = str(attr["error"].get("errmsg", ""))
+        if grep_mode:
+            # WYSIWYG Mode: Search the ENTIRE raw JSON entry
+            search_space = str(entry).lower()
+            command_space = ""
         else:
-            err_hint = str(attr.get("error", ""))
-        
-        # Injected Search Space (msg + ctx + err + app_identity)
-        search_space = (msg + " " + str(entry.get("ctx", "")) + " " + err_hint + " " + str(attr.get("errmsg", "")) + " " + ctx_info["app"]).lower()
-        command_space = str(attr.get("command", "")).lower() + " " + str(attr.get("originatingCommand", "")).lower()
+            # Forensic Mode: Optimized search space + Injected Identity
+            err_hint = ""
+            if isinstance(attr.get("error"), dict):
+                err_hint = str(attr["error"].get("errmsg", ""))
+            else:
+                err_hint = str(attr.get("error", ""))
+            
+            search_space = (msg + " " + str(entry.get("ctx", "")) + " " + err_hint + " " + str(attr.get("errmsg", "")) + " " + ctx_info["app"]).lower()
+            command_space = str(attr.get("command", "")).lower() + " " + str(attr.get("originatingCommand", "")).lower()
         
         found = False
         if keyword_lower in search_space or keyword_lower in command_space:

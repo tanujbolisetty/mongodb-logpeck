@@ -30,6 +30,7 @@ This document provides a comprehensive technical guide to all command-line flags
 
 ### 2. Search & Filter Flags
 *   **`--keyword <term>`**: (Search only) The literal string to find.
+*   **`--grep`**: (Search only) Stateless search. Searches the **raw JSON string** of every entry and skips identity reconstruction. Use this for high-precision matching where you only want rows that literally contain the keyword.
 *   **`--filters <json>`**: (Filter only) A JSON query object for complex matching.
     *   *Example*: `'{"ms": {"gt": 1000}, "ns": "orders.v1"}'`
 *   **`--limit <int>`**: Controls the maximum number of results displayed.

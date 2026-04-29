@@ -210,6 +210,7 @@ def main():
     search_parser.add_argument("--count", action="store_true", help="Only output the total number of matches")
     search_parser.add_argument("--limit", type=int, default=10, help="Max results to display (default: 10, use 0 for unlimited)")
     search_parser.add_argument("--json", action="store_true", help="Output time card in JSON format")
+    search_parser.add_argument("--grep", action="store_true", help="Stateless search: Search raw JSON string and skip identity reconstruction")
 
     # Command: filter
     filter_parser = subparsers.add_parser("filter", help="Multidimension forensic filter")
@@ -395,7 +396,7 @@ def main():
         elif args.command == "search":
             # If counting, we bypass the limit to get the true total
             search_limit = 0 if args.count else args.limit
-            results = search_logs(args.file, args.keyword, limit=search_limit)
+            results = search_logs(args.file, args.keyword, limit=search_limit, count_only=args.count, grep_mode=args.grep)
             
             if args.count:
                 print(len(results))
