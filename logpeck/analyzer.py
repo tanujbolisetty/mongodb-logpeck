@@ -37,7 +37,7 @@ from .specification import (
 from .version import __version__
 from .utils import format_duration
 
-EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801"}
+EXCLUDED_EVENT_IDS = {"51800", "21530", "18", "22943", "22944", "5286306", "51801", "4651401"}
 
 
 RE_OBJECT_ID = re.compile(r'ObjectId\([^)]+\)')
@@ -295,6 +295,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         if d_str != "unknown":
                             if ctx not in conn_registry: conn_registry[ctx] = {}
                             conn_registry[ctx]["driver"] = d_str
+                        continue
 
                     # 🚦 Deep-Scan Diagnostic Triage (v1.3.14)
                     attr_safe = (attr or {})
