@@ -244,7 +244,6 @@ The "Error Event Timeline" (previously Section 2) has been deprecated in v5.0.8 
 #### 13.1.1 Query Shape Failure Analysis Table
 | Column | Width | Description |
 | :--- | :--- | :--- |
-| **#** | 40px | Row index for quick reference. |
 | **LAST SEEN** | 100px | HH:MM:SS of the most recent occurrence. |
 | **CODE** | 80px | MongoDB Error Code (e.g., 50, 11000). |
 | **ERROR / DESCRIPTION** | 250px | Human-readable error name or pattern. |

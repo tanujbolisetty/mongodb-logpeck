@@ -443,7 +443,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
                 last_seen = str(row.get('last_ts', 'N/A'))[11:19]
                 hashes = f"{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}".strip()
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{row.get('row', i+1)}<span style="display:none"> {hashes}</span></td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary)">{last_seen}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary)">{last_seen}</td><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td>{extra_cols}</tr>\n'''
+
 
 
             else:
@@ -740,7 +741,6 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <table id="timeoutTable">
                     <thead>
                         <tr>
-                            <th style="width:40px">#</th>
                             <th style="width:100px">LAST SEEN</th>
                             <th style="width:80px">CODE</th>
                             <th style="width:250px">ERROR / DESCRIPTION</th>
@@ -750,6 +750,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <th style="width:200px">CONTEXT / APP</th>
                         </tr>
                     </thead>
+
 
                     <tbody>
                         {timeout_forensic_rows_html}
