@@ -28,21 +28,21 @@
 
 ## 📦 Installation
 
+#### **Option A: Stable Version (Main Branch)**
+Use this for standard production auditing:
 ```bash
-# Clone the repository
-git clone https://github.com/tanujbolisetty/mongodb-logpeck.git
-cd mongodb-logpeck
+pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git
+```
 
-# Install logpeck in editable mode
-pip3 install -e .
+#### **Option B: Beta Version (v5.0.0 Hardening Branch)**
+Use this to access the new **Truth Engine** and **Universal Search Index**:
+```bash
+pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git@fix/forensic-engine-hardening
+```
 
 > [!TIP]
-> If the `peck` command is not found after installation, ensure your Python binary directory (e.g., `~/Library/Python/3.13/bin` on macOS) is in your `PATH`. You can add it to your shell profile (e.g., `.zshrc` or `.bash_profile`):
+> If the `peck` command is not found after installation, ensure your Python binary directory is in your `PATH`. For example, on macOS:
 > `export PATH=$PATH:$(python3 -m site --user-base)/bin`
-
-# Or using standard pip (depending on your environment)
-# pip install -e .
-```
 
 ---
 
