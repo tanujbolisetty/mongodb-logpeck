@@ -44,4 +44,4 @@ tests/
 .agents/
 
 # Bulk Automations
-# (Keeping scripts/ tracked for team distribution)
+scripts/
