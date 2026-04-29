@@ -6,6 +6,7 @@
 
 ---
 
+
 ## 🏗️ 1. Forensic Pipeline Architecture
 
 LogPeck implements a **2-Pass Analytical Engine** designed to handle the temporal and structural fragmentation of MongoDB logs.
@@ -550,11 +551,24 @@ This centralized utility ensures that the CLI output, dynamic Rule Engine tags (
 
 ---
 
-## 🔍 16. Dashboard Search Engine & Index Matrix (v5.0.0)
+## 🔍 16. Forensic Search Engine & Discovery Architecture (v5.0.2)
 
-LogPeck utilizes a high-performance, client-side **Full-Text Content Match** engine for real-time forensic filtering. This section defines what data is indexed and how to ensure searchability for new fields.
+LogPeck implements a dual-mode search engine to balance diagnostic power with surgical precision.
 
-### 16.1 The "Search Index" Pattern
+### **16.1 Stateful Mode (Default Forensic Mode)**
+*   **Mechanism**: Performs a 2-pass analysis. Pass 1 builds the **MSH Identity Registry** (mapping Connection IDs to Application Names and IPs). Pass 2 executes keyword matching.
+*   **Identity Injection**: Keyword matches are performed against a virtual string that combines the raw log message with the backfilled identity from Pass 1.
+*   **Impact**: Enables "Identity-Aware" searching (e.g., searching for "Compass" finds queries that don't have the word "Compass" on the line).
+
+### **16.2 Stateless Mode (High-Precision `--grep` Mode)**
+*   **Mechanism**: Single-pass, raw string matching.
+*   **Search Space**: The entire raw JSON entry is treated as a single string.
+*   **Speed**: Optimized for raw performance and high-precision matching of literal strings.
+*   **Constraint**: No identity reconstruction or namespace backfilling is performed.
+
+### **16.3 The Search Index Pattern (UI Integration)**
+To ensure search parity between the CLI and the Dashboard, LogPeck uses a **Search Index Pattern** in the generated HTML. 
+
 Because the search engine matches against the `textContent` of a table row (`row-main`), any forensic signal that is visually hidden must be explicitly "pinned" to the DOM using a hidden search index span.
 
 **Technical Implementation:**

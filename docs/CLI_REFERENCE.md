@@ -33,6 +33,17 @@ This document provides a comprehensive technical guide to all command-line flags
 *   **`--grep`**: (Search only) Stateless search. Searches the **raw JSON string** of every entry and skips identity reconstruction. Use this for high-precision matching where you only want rows that literally contain the keyword.
 *   **`--filters <json>`**: (Filter only) A JSON query object for complex matching.
     *   *Example*: `'{"ms": {"gt": 1000}, "ns": "orders.v1"}'`
+
+#### **Search Modes Comparison**
+
+| Feature | **Default (Forensic)** | **`--grep` (Stateless)** |
+| :--- | :--- | :--- |
+| **Search Space** | Optimized Space + **Injected Identity** | **Entire Raw JSON String** |
+| **Discovery** | Finds all operations for a connection. | Finds only literal matches. |
+| **Speed** | 2-Pass (Slower for very large logs) | 1-Pass (Grep-like speed) |
+| **Reconstruction**| Yes (Fills in missing Namespaces/Apps) | No (Shows only what is on the line) |
+| **Use Case** | Deep Diagnostics & Root Cause Analysis. | Quick, high-precision text finding. |
+
 *   **`--limit <int>`**: Controls the maximum number of results displayed.
     *   **Absolute Default: 10**. 
     *   Use `0` for unlimited output (Caution: can flood terminal).

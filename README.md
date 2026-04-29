@@ -85,13 +85,21 @@ Analyze systemic failures, timeouts, and error hotspots.
 peck failure-workload --file mongod.log.gz
 ```
 
-### 5. Global Platform Health
-Quickly assess the overall distribution of severity levels and component-level workload.
+### 5. Forensic Search (Stateful vs. Stateless)
+LogPeck offers two powerful ways to discover information:
+
+- **Forensic Search (Default)**: Reconstructs identity. Searching for "Compass" finds every slow query run by Compass, even if "Compass" isn't on that specific log line.
+- **High-Precision Search (`--grep`)**: A stateless, full-text match. Mimics standard `grep` speed and precision by searching the entire raw JSON entry.
+
 ```bash
-peck health --file mongod.log.gz
+# Forensic: Find everything connected to the identity
+peck search --file mongod.log --keyword "compass"
+
+# High-Precision: Find only literal matches
+peck search --file mongod.log --keyword "compass" --grep
 ```
 
-### 5. Connection Portfolio & Client Analysis
+### 6. Connection Portfolio & Client Analysis
 Identify connection churn, authentication failures, and app attribution.
 ```bash
 peck connections --file mongod.log.gz
@@ -111,7 +119,7 @@ Use the table below to find the surgical CLI command equivalent for each profess
 | Dashboard Tab | CLI Command | Purpose | Key Options |
 | :--- | :--- | :--- | :--- |
 | **1. Global Health** | `peck health` | High-level summary of severity levels and components. | `--json` |
-| **2. Business Workload** | `peck workload` | Analyzes application-level slow queries. | `--latency`, `--rules`, `--json` |
+| **2. Business Workload** | `peck workload` | Analyzes application-level slow queries. | `--latency`, `--json` |
 | **3. System Workload** | `peck system-workload` | Analyzes infrastructure tasks (TTL, Oplog). | `--latency`, `--json` |
 | **4. Failure Forensics** | `peck failure-workload` | **(New)** Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
 | **5. Connection Analytics** | `peck connections` | Profiles client apps and connection churn. | `--json` |
