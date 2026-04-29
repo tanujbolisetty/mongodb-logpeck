@@ -532,20 +532,26 @@ def main():
             if not os.path.exists(out_dir): os.makedirs(out_dir)
 
             if args.folder:
-                files = [os.path.join(args.folder, f) for f in os.listdir(args.folder) if f.endswith(".log") or f.endswith(".gz") or f.endswith(".json")]
+                files = []
+                for root, _, filenames in os.walk(args.folder):
+                    for f in filenames:
+                        if f.endswith(".log") or f.endswith(".gz") or f.endswith(".json"):
+                            files.append(os.path.join(root, f))
+                
                 if args.filter:
                     files = [f for f in files if args.filter in os.path.basename(f)]
+                
                 for f in files:
                     out_html = os.path.join(out_dir, os.path.basename(f) + "_report.html")
                     print(f"🐦 Forensic Sweep: {os.path.basename(f)} ↳ {out_html}", file=sys.stderr)
                     result = analyze_slow_queries(log_file_path=f, threshold_ms=args.latency)
-                    generate_html_report(result, out_html)
+                    generate_html_report(result, out_html, source_name=os.path.basename(f))
                 print("✅ Batch Forensic Cycle Complete.", file=sys.stderr)
             else:
                 dest = args.html if (os.path.dirname(args.html) or args.html.startswith("/")) else f"output/{args.html}"
                 result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency)
                 print(f"🐦 Forensic Sweep: {args.file} ↳ {dest}", file=sys.stderr)
-                generate_html_report(result, dest)
+                generate_html_report(result, dest, source_name=os.path.basename(args.file))
                 print("✅ Dashboard Complete.", file=sys.stderr)
 
     except Exception as e:

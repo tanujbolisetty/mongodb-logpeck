@@ -1,6 +1,6 @@
 # 🐦 LogPeck: Forensic CLI Reference
 
-This document provides a comprehensive technical guide to all command-line flags available in the `logpeck` forensic suite (v5.0.0).
+This document provides a comprehensive technical guide to all command-line flags available in the `logpeck` forensic suite (v5.0.5).
 
 ---
 
@@ -54,7 +54,7 @@ This document provides a comprehensive technical guide to all command-line flags
 *   **`--cards`**: Switches the display from a summary table to individual "Forensic Cards" (one per log entry).
 
 ### 3. Dashboard Orchestration
-*   **`--folder <path>`**: Enables batch processing. Every log in the folder will be analyzed and converted to an HTML dashboard.
+*   **`--folder <path>`**: Enables recursive batch processing. The engine will perform a deep scan of the target folder and all sub-directories, automatically discovering every log file (`.log`, `.gz`, `.json`) for forensic analysis.
 *   **`--html <path>`**: Specifies the destination for the generated HTML report.
 *   **`--filter <substring>`**: When using `--folder`, only processes files containing this substring (e.g., `--filter "shard-01"`).
 

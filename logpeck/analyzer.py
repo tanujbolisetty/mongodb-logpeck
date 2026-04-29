@@ -52,7 +52,7 @@ def load_diagnostic_rules() -> List[dict]:
     path = os.path.join(os.path.dirname(__file__), "rules.json")
     if os.path.exists(path):
         try:
-            with open(path, 'r') as f: return json.load(f).get("rules", [])
+            with open(path, 'r', encoding='utf-8') as f: return json.load(f).get("rules", [])
         except: pass
     return []
 
@@ -287,14 +287,26 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     
                     # 🧪 Early Failure Detection (v2.7.8): Capture FATAL/ERROR logs even if attr is missing
                     # 🕵️ Senior Logic: Expand error search space to include common network and lifecycle failures.
+                    # 🧪 Early Failure Detection (v5.0.4): Hardened Severity Triage
+                    # 🕵️ Senior Logic: We ignore Severity 'I' (Informational) logs as failures UNLESS:
+                    # 1. They are an explicit Timeout Signature (e.g., Code 50).
+                    # 2. They contain an explicit error 'code' or 'errCode' field.
+                    # This prevents high-volume infrastructure noise (like heartbeat disconnects) from clogging forensics.
+                    
                     FAILURE_SIGNATURES = [
                         "error", "failed", "failure", "socketexception", "clientdisconnect", "interrupted", 
                         "exceededtimelimit", "networkinterface", "steppeddown", "primarysteppeddown",
                         "notyetinitialized", "invalidsyncsource", "terminated", "connection closed",
                         "infrastructure failure"
                     ]
-                    is_error_op_base = sev in ["ERROR", "FATAL", "E", "F"] or any(sig in search_space for sig in FAILURE_SIGNATURES)
+                    
                     is_timeout_op = any(sig in search_space for sig in timeout_sigs) or "planexecutor error" in search_space
+                    has_error_code = any(k in (attr or {}) or k in obj for k in ["errCode", "code"])
+                    
+                    # Core Predicate: Real errors are Warning/Error/Fatal OR (Info + Explicit Code/Timeout)
+                    is_error_op_base = (sev in ["ERROR", "FATAL", "WARN", "E", "F", "W"]) or \
+                                      ((is_timeout_op or has_error_code) and sev in ["INFO", "I"]) or \
+                                      (any(sig in search_space for sig in FAILURE_SIGNATURES) and sev not in ["INFO", "I"])
                     
                     if not isinstance(attr, dict):
                         # 🧪 Lean Log Induction (v3.2.13): Allow logs without 'attr' if they have durations or are errors.
@@ -303,11 +315,25 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         else:
                             continue
 
-                    # 🧬 Soundness Correction (v4.3.0): Unified Distinct Error Triage
+                    # 🧬 Soundness Correction (v5.0.6): Unified Distinct Error Triage
                     # Ensure each problematic log line is counted exactly once in the global error registry.
-                    is_error_op = is_error_op_base or any(k in (attr or {}) or k in obj for k in ["error", "errCode", "code"]) or str((attr or {}).get("ok", obj.get("ok"))) == "0"
-                    if "errorMessage" in obj or "errmsg" in obj: is_error_op = True
-                    if header.get("msg") == "Infrastructure Failure": is_error_op = True
+                    # We prioritize explicit failures (ok:0, error codes) even if logged as 'INFO'.
+                    is_error_op = is_error_op_base
+                    
+                    # 🕵️ Noise Suppression Blacklist: Skip known heartbeat/access noise
+                    NOISE_BLACKLIST = ["reauthenticate", "JWK Set", "certificate expiration", "heartbeat"]
+                    is_noise = any(n.lower() in msg.lower() for n in NOISE_BLACKLIST)
+                    
+                    if not is_noise:
+                        if any(k in (attr or {}) or k in obj for k in ["error", "errCode", "code"]) or str((attr or {}).get("ok", obj.get("ok"))) == "0":
+                            is_error_op = True
+                        if "errorMessage" in obj or "errmsg" in obj:
+                            is_error_op = True
+                        if header.get("msg") == "Infrastructure Failure":
+                            is_error_op = True
+                    else:
+                        # If it's identified as noise, we explicitly downgrade it
+                        is_error_op = False
                     
                     if is_error_op:
                         identified_error_count += 1
@@ -379,7 +405,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
 
                         error_namespace_stats[ns_guess] += 1
                     
-                    if is_error_op and not is_timeout_op and msg != "Slow query":
+                    if is_error_op and not is_timeout_op:
                         # 🧬 High-Resolution Systemic Error Extraction (v4.6.3)
                         # Extract the most meaningful label for the summary, but keep the payload raw.
                         e_cat = attr.get("category") or header.get("c") or "SYSTEM"
@@ -393,17 +419,39 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             
                         e_note = attr.get("note", "N/A")
                         
-                        # 🧪 Technical Forensic Payload: Preserve the depth you like
+                        # 🧪 Technical Forensic Payload: Deeply harvest codes from nested blocks
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason"]}
                         
-                        key = (str(e_cat), str(e_msg)[:100], str(e_note)[:50])
+                        # Promote numerical codes from nested error objects if present
+                        sys_code = attr.get("value") or attr.get("code")
+                        if not sys_code and isinstance(attr.get("error"), dict):
+                            sys_code = attr.get("error", {}).get("value") or attr.get("error", {}).get("code")
+                        
+                        # Promote specific names for high-frequency errors
+                        if sys_code == 11000 or "E11000" in str(e_msg):
+                            e_msg = f"DuplicateKey: {e_msg}"
+                        elif sys_code == 13 or "Unauthorized" in str(e_msg):
+                            e_msg = f"Unauthorized: {e_msg}"
+                        elif "ConnectionPoolExpired" in str(e_msg):
+                            e_msg = f"ConnectionPoolExpired: {e_msg}"
+
+                        # Hardened Payload Guard: Skip if empty forensic evidence exists for informational logs
+                        if not err_payload and (sev in ["INFO", "I"] or not is_error_op):
+                            continue
+                        
+                        # Ensure we don't have empty messages
+                        if not e_msg or e_msg.strip() == "":
+                            e_msg = msg or "Unknown System Error"
+
+                        key = (str(e_cat), str(e_msg)[:120], str(e_note)[:50])
                         if key not in system_error_patterns:
                             system_error_patterns[key] = {
-                                "count": 0,
                                 "ts": str(ts),
                                 "category": str(e_cat).upper(),
-                                "msg": str(e_msg)[:120],
+                                "msg": str(e_msg)[:150],
                                 "note": str(e_note)[:120],
+                                "code": str(sys_code) if sys_code is not None else "N/A",
+                                "count": 0,
                                 "payload": json.dumps(err_payload, indent=2) if err_payload else "N/A"
                             }
                         system_error_patterns[key]["count"] += 1
@@ -822,8 +870,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                 "components": {str(k): v for k, v in component_stats.most_common(12)}, 
                 "top_messages": [
                     {"severity": str(sk[0]), "msg": str(sk[1]), "count": sv["count"], "preview": sv["preview"]} 
-                    for sk, sv in sorted(message_registry.items(), key=lambda x: x[1]["count"], reverse=True)[:12]
-                ], 
+                    for sk, sv in sorted(message_registry.items(), key=lambda x: x[1]["count"], reverse=True)
+                    if sk[0] not in ["INFO", "I"]
+                ][:12], 
                 "timeout_patterns": sorted(timeout_patterns.values(), key=lambda x: x["count"], reverse=True)[:8], 
                 "namespaces": {str(k): v for k, v in namespace_stats.most_common(12) if k != "unknown" and ".$cmd" not in k},
                 "error_namespaces": {str(k): v for k, v in error_namespace_stats.most_common(16) if k != "unknown" and ".$cmd" not in k},

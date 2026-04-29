@@ -28,13 +28,15 @@ def load_glossary_rules() -> List[Dict[str, Any]]:
     default_path = os.path.join(os.path.dirname(__file__), "rules.json")
     if os.path.exists(default_path):
         try:
-            with open(path := default_path, 'r') as f: 
+            with open(path := default_path, 'r', encoding='utf-8') as f: 
                 return json.load(f).get("rules", [])
         except Exception: 
             pass
     return []
 
-def generate_html_report(results: Dict[str, Any], output_path: str):
+import sys
+
+def generate_html_report(results: Dict[str, Any], output_path: str, source_name: str = "N/A"):
     stats = results.get("stats", {}); conn = results.get("connections", {}); summary = results.get("summary", [])
     system_summary = results.get("system_summary", []); timeout_summary = results.get("timeout_summary", []); threshold = results.get("threshold", 100)
     
@@ -150,13 +152,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         </div></td></tr>'''
     timeout_table_html += "</tbody></table>"
     
-    system_error_table_html = "<table><thead><tr><th>Last Seen</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th></tr></thead><tbody>"
+    system_error_table_html = "<table><thead><tr><th>Last Seen</th><th>Code</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th></tr></thead><tbody>"
     for i, err in enumerate(stats.get("system_error_patterns", [])):
         did = f"syserr-{i}"
         err_ts = str(err.get('ts', 'N/A'))[11:19]
         # Main Row: Toggleable
         system_error_table_html += f"""<tr class="row-main" onclick="toggleDetails('{did}')">
             <td style='font-size:0.75rem;font-family:monospace'>{err_ts}</td>
+            <td style='font-family:monospace;font-weight:700;color:var(--tier6)'>{err.get('code', 'N/A')}</td>
             <td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td>
             <td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td>
             <td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td>
@@ -168,7 +171,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
         if err.get('payload') and err.get('payload') != 'N/A':
             payload_html = f"<div style='background:#000;padding:1.5rem;border-radius:12px;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;border:1px solid var(--border);border-left:4px solid var(--warn)'>{err.get('payload')}</div>"
             
-        system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="5"><div class="details-content">
+        system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="6"><div class="details-content">
             <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">TECHNICAL FORENSIC PAYLOAD</div>
             {payload_html}
         </div></td></tr>'''
@@ -673,7 +676,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str):
 </head>
 <body>
     <div class="header">
-        <h1>🐦 logpeck <span class="badge">Forensic Analytics {VERSION}</span></h1>
+        <div style="display:flex; align-items:center; gap:1.5rem">
+            <h1>🐦 logpeck <span class="badge">Forensic Analytics {VERSION}</span></h1>
+            <div style="background:rgba(255,255,255,0.05); padding:0.4rem 1rem; border-radius:8px; border:1px solid var(--border); border-left:4px solid var(--accent)">
+                <div class="card-label" style="font-size:0.6rem; margin-bottom:0.2rem">SOURCE LOG AUDIT</div>
+                <div style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--text-primary); font-weight:700">{source_name}</div>
+            </div>
+        </div>
         <div style="text-align: right">
             <div class="card-label">Forensic Filter</div>
             <div style="font-weight: 700; color: var(--accent)">Latency >{threshold}ms</div>

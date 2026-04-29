@@ -1,4 +1,4 @@
-# 🐦 LogPeck — Core Design Specification (v5.0.0)
+# 🐦 LogPeck — Core Design Specification (v5.0.6)
 
 > **Status**: Production Blueprint (High-Fidelity)  
 > **Source of Truth**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py) & [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py)  
@@ -80,7 +80,7 @@ LogPeck partitions query shapes into three dedicated diagnostic channels based o
 
 | Priority | Tab Category | Routing Criteria |
 | :--- | :--- | :--- |
-| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. **Failures always win**; infrastructure errors are routed here, never buried in System. |
+| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. Also promotes any log with Severity `WARN`, `ERROR`, or `FATAL`. **Failures always win**; infrastructure errors are routed here. Includes a dedicated table for headless/orphan network anomalies (e.g. DuplicateKey, Unauthorized) with deep-harvested numerical codes. |
 | **2 (High)** | **🐢 Business Workload** | All successful user-level operations targeting business namespaces. This is the 2nd tab for primary developer visibility. |
 | **3 (Med)** | **🛠️ System Query** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL, Heartbeats). |
 
@@ -218,10 +218,13 @@ LogPeck implements an autonomous resolution layer to transform numeric MongoDB c
 - **Inventory**: Contains 488 official MongoDB error codes (1 to 13436065).
 - **Back-filling**: If a log entry contains an `errCode` but lacks an `errName`, the engine automatically populates the name from the internal registry during Pass 2 synthesis.
 
-### 7.2 Severity-Based Forensic Promotion
-To ensure 100% visibility into system instability:
-- **Lethal Promotion**: Any log line with severity `F` (Fatal) or `E` (Error) is automatically promoted to the **Failure Forensics** tab.
-- **Infrastructure Fallback**: Logs tagged with critical severity that lack a structured `attr` dictionary (e.g., startup crashes or invariant failures) are still captured. The engine injects an empty attribute block to ensure the failure is groupable and visible.
+### 7.3 Surgical Error Triage (Hardened v5.0.6)
+To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard, the engine implements a surgical promotion protocol:
+- **Default Promotion**: Events with Severity `W` (Warning), `E` (Error), or `F` (Fatal) are automatically promoted.
+- **Operational Failure Recovery**: Logs with `ok: 0` or explicit error codes (e.g., `E11000`) are promoted even if logged at Severity `I` (Informational).
+- **Noise Suppression Blacklist**: Known infrastructure patterns (e.g., "reauthenticate", "JWK Set", "certificate expiration") are explicitly silenced to prevent forensic clutter.
+- **Forensic Payload Guard**: System Error Patterns are only captured if they contain valid diagnostic metadata (`attr` fields) or are non-informational. This prevents "empty forensics" entries in the UI.
+- **Result**: High-volume infrastructure noise is suppressed while ensuring 100% visibility into genuine application failures and authorization errors.
 
 ---
 
@@ -620,3 +623,15 @@ The dashboard is a **Single-File Zero-Dependency** application:
 1. **Zero External CSS**: All styles are inlined in the `<head>`.
 2. **O(n) Search**: Live filtering is achieved via a single linear DOM traversal (O(n)), ensuring that searching through 5,000 query shapes remains sub-10ms.
 3. **Memory Management**: Expanded rows use `details-content` wrapping to ensure that the layout engine only calculates the geometry of visible forensic cards.
+
+---
+
+## 💾 4. Cross-Platform Integrity & Encoding (v5.0.6)
+
+To ensure forensic reliability across Windows, macOS, and Linux, LogPeck enforces a strict UTF-8 encoding contract for all file operations.
+
+### 4.1 Strict Encoding Policy
+All interactions with JSON configuration files (`metrics.json`, `rules.json`) and the generation of HTML reports utilize `encoding='utf-8'`. This prevents "Charmap" decode errors on Windows systems where the local code page (e.g., CP1252) would otherwise fail on high-bit characters (e.g., emojis 🐦, or non-ASCII log attributes).
+
+### 4.2 Forensic Provenance
+Batch reports generated using the `--folder` mode inject a `SOURCE LOG AUDIT` context into the dashboard. This allows SREs to maintain forensic lineage when auditing logs from multiple shards or nodes simultaneously.

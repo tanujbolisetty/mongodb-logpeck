@@ -21,7 +21,7 @@ def load_metrics():
     """Returns the list of forensic metrics defined in metrics.json."""
     path = os.path.join(os.path.dirname(__file__), "metrics.json")
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             return data.get("metrics", [])
     except Exception as e:

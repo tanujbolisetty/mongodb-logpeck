@@ -2,6 +2,18 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.6] - 2026-04-29
+### Added
+- **Forensic Provenance**: Injected `SOURCE LOG AUDIT` badge into the dashboard header, ensuring multi-shard forensic visibility.
+- **Deep Error Harvesting**: Implemented recursive extraction for numerical error codes (e.g., `code`, `value`) from nested JSON payloads.
+- **Specific Error Labeling**: Added high-fidelity prefixes for `DuplicateKey` (11000), `Unauthorized` (13), and `ConnectionPoolExpired` failures.
+
+### Fixed
+- **Windows Encoding Compatibility**: Enforced `utf-8` encoding for all JSON configuration (`metrics.json`, `rules.json`) and report operations, resolving 'charmap' decode errors on Windows systems.
+- **Surgical Failure Triage**: Removed restrictive filters that were silencing system errors occurring within logs tagged as "Slow query".
+- **Dashboard UI Consistency**: Added the missing **CODE** column to the System & Network Errors table.
+
+
 ## [5.0.3] - 2026-04-29
 ### Fixed
 - **Dashboard Search Visibility**: Resolved issue where forensic detail tables were hidden during active UI filtering. Detail cards now respect their expanded state during search.
