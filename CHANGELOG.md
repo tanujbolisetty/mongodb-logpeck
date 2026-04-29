@@ -2,6 +2,10 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.1] - 2026-04-29
+### Fixed
+- **Identity-Aware Search**: Resolved issue where `appName` wasn't searchable in the CLI. The engine now correlates application identities from the MSH Matrix during the discovery pass.
+
 ## [5.0.0] - 2026-04-28
 ### Added
 - **Truth Engine**: Surgical identification and aggregation of systemic/infrastructure errors (Tab 1 & Tab 4).
