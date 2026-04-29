@@ -385,9 +385,12 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # 🧬 Shape & Hash Extraction (v4.6.3)
     q_hash = extract_query_hash(attr, entry, op)
     
-    # ⏱️ Duration Discovery
-    ms = attr.get("durationMillis") or attr.get("durationMS") or entry.get("durationMillis") or entry.get("durationMS") or 0
-    if not ms and "parameters" in attr: ms = attr["parameters"].get("durationMillis", 0)
+    # ⏱️ Duration Discovery (v5.0.8 Hardening)
+    # Support multiple formats: durationMillis, durationMS, or flat 'ms' field.
+    ms = attr.get("durationMillis") or attr.get("durationMS") or attr.get("ms") or \
+         entry.get("durationMillis") or entry.get("durationMS") or entry.get("ms") or 0
+    if not ms and "parameters" in attr: 
+        ms = attr["parameters"].get("durationMillis", 0)
 
     # 🕵️ Forensic Stats Extraction (v4.6.3)
     forensic = extract_forensic_stats(attr, entry)

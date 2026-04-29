@@ -118,18 +118,22 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         err_ts = str(err.get('ts', 'N/A'))[11:19]
         # Main Row: Toggleable
         system_error_table_html += f"""<tr class="row-main" onclick="toggleDetails('{did}')">
-            <td style='font-size:0.75rem;font-family:monospace'>{err_ts}</td>
             <td style='font-family:monospace;font-weight:700;color:var(--tier6)'>{err.get('code', 'N/A')}</td>
             <td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td>
             <td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td>
             <td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td>
             <td><span class='tag-critical'>{err.get('count', 0)}</span></td>
+            <td style='font-size:0.75rem;font-family:monospace;text-align:right'>{err_ts}</td>
         </tr>"""
         
         # Details Row: Hidden by default
         payload_html = "N/A"
         if err.get('payload') and err.get('payload') != 'N/A':
-            payload_html = f"<div style='background:#000;padding:1.5rem;border-radius:12px;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;border:1px solid var(--border);border-left:4px solid var(--warn)'>{err.get('payload')}</div>"
+            payload_html = f'''
+                <div style="position:relative">
+                    <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard(\'sys-payload-{i}\', this)">COPY</button>
+                    <div id="sys-payload-{i}" style="background:#000;padding:1.5rem;border-radius:12px;font-family:\'JetBrains Mono\', monospace;font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;border:1px solid var(--border);border-left:4px solid var(--warn)">{err.get('payload')}</div>
+                </div>'''
             
         system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="6"><div class="details-content">
             <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">TECHNICAL FORENSIC PAYLOAD</div>
@@ -167,7 +171,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     def render_summary_rows(data_list, start_idx=0, is_system_view=False, is_timeout_view=False, is_failure_summary=False):
         rows = ""
         if not data_list:
-            cols = 6 if is_failure_summary else 11
+            cols = 6 if is_failure_summary else 12
             return f"<tr><td colspan='{cols}' style='text-align:center;color:var(--text-secondary);padding:2rem'>No data available in this view</td></tr>"
 
         if is_failure_summary:
@@ -407,17 +411,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 aas_load_col = ""
             elif is_system_view:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
-                colspan_val = "11"
+                colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
             elif is_timeout_view:
-                hash_val = row.get('query_shape_hash', 'N/A')
-                short_hash = hash_val[:12] + '...' if len(hash_val) > 12 else hash_val
-                extra_cols = f"""<td style="font-family:'JetBrains Mono', monospace; font-size:0.75rem; color:var(--accent)">{short_hash}</td><td style="font-size:0.75rem;color:var(--accent)">{ns_display}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td>"""
                 colspan_val = "7"
                 aas_load_col = ""
             else:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
-                colspan_val = "11"
+                colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
 
             if is_failure_summary:
@@ -426,7 +427,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 code_html = f'<span style="font-family:\'JetBrains Mono\'; font-weight:700; color:var(--error)">{e_code}</span>'
                 desc_html = f'<span style="font-weight:700; color:var(--text-primary)">{e_name}</span>'
                 avg_delay = format_duration(row.get('avg_ms', 0))
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td>{avg_delay}</td><td style="color:var(--text-secondary)">{row.get('top_ns', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('top_app', 'N/A')}</td></tr>\n'''
+                rows += f'''<tr class="row-main"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td>{avg_delay}</td><td style="color:var(--text-secondary)">{row.get('top_ns', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('top_app', 'N/A')}</td></tr>\n'''
             elif is_timeout_view:
                 t_cnt = row.get('count', 0)
                 e_cnt = row.get('error_count', 0)
@@ -447,9 +448,19 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = "" # Prevent double-appending
             elif is_system_view:
-                last_seen = str(row.get('ts', 'N/A'))[11:19] if row.get('ts') else "N/A"
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td><span style=\"font-family:'JetBrains Mono'; font-weight:700; color:var(--warn)\">{row.get('code', 'N/A')}</span></td><td><span class="badge" style="background:#1e293b;border:1px solid var(--border);color:var(--warn);padding:0.2rem 0.5rem;border-radius:4px;font-size:0.72rem;font-weight:700">{row.get('category', 'N/A')}</span></td><td><span style="font-weight:700; color:var(--text-primary)">{row.get('msg', 'N/A')}</span></td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('note', 'N/A')}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                last_seen = str(row.get('last_ts', 'N/A'))
+                if len(last_seen) > 19: last_seen = last_seen[11:19]
+                total_ms = row.get('total_ms', 0)
+                ns = row.get('namespace', 'N/A')
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'unknown').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = ""
+            else:
+                # 🧪 Standard Workload Row (v5.0.8 Restoration)
+                last_seen = str(row.get('max_ts', 'N/A'))
+                if len(last_seen) > 19: last_seen = last_seen[11:19]
+                total_ms = row.get('total_ms', 0)
+                ns = row.get('namespace', 'N/A')
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--accent)">{row.get('category', 'unknown').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
 
             
             schema_col = ""
@@ -470,53 +481,86 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 
                 forensic_grid = f"""<div class="comparison-grid" style="margin-top:3rem; {grid_style}">{l_col}{r_col}</div>"""
 
-            rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:2rem; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
-                    <div style="flex:1">
-                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
-                        <div style="color:{'var(--text-secondary)' if row.get('query_shape_hash') == 'N/A' else 'var(--accent)'}; font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
+            if is_timeout_view:
+                rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
+                        <div style="flex:1.5">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">ERROR SIGNATURE</div>
+                            <div style="color:var(--error); font-weight:700; font-size:0.95rem; margin-top:0.4rem">🚨 {row.get('error_name', 'MaxTimeMSExpired')} ({row.get('error_code', 50)})</div>
+                        </div>
+                        <div style="flex:1">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
+                            <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
+                        </div>
+                        <div style="flex:1">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE</div>
+                            <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
+                        </div>
+                        <div style="flex:1.2; text-align:right">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">SHAPE HASH</div>
+                            <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
+                        </div>
                     </div>
-                    <div style="width:100px">
-                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
-                        <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
-                    </div>
-                    <div style="width:120px">
-                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE KEY</div>
-                        <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
-                    </div>
-                    {schema_col}
-                </div>
-                <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
-                <div class="dist-bar" style="height:26px">{wave_html}</div>
-                <div class="legend-grid" style="margin-top:0.8rem">{legend_html}</div>
-                
-                <div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem; margin-top:3rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> 🧪 CLINICAL INSIGHTS</div>
-                {insights_html}
 
-                {forensic_grid}
-                <div class="comparison-grid" style="margin-top:3rem; grid-template-columns: 1fr 1fr;">
-                    <div>
-                        <div class="card-label" style="display:flex; align-items:center; gap:20px;">
-                            <span>💨 Fastest Payload</span>
-                            <div style="display:flex; align-items:center; gap:12px">
-                                <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('min_ts', 'unknown')}</div>
-                                <button class="btn-copy" onclick="copyToClipboard('payload-fast-{start_idx + i}', this)">COPY JSON</button>
-                            </div>
-                        </div>
-                        <pre id="payload-fast-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{fast_json}</pre>
+                    <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">REPRESENTATIVE FORENSIC PAYLOAD</div>
+                    <div style="background:#000; padding:1.5rem; border-radius:12px; font-family:'JetBrains Mono', monospace; font-size:0.75rem; color:var(--text-secondary); white-space:pre-wrap; border:1px solid var(--border); border-left:4px solid var(--error); position:relative">
+                        <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard('payload-msg-{start_idx + i}', this)">COPY</button>
+                        <div id="payload-msg-{start_idx + i}">{row.get('max_example_raw', 'N/A')}</div>
                     </div>
-                    <div>
-                        <div class="card-label" style="display:flex; align-items:center; gap:20px;">
-                            <span>🐢 Slowest Payload</span>
-                            <div style="display:flex; align-items:center; gap:12px">
-                                <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('max_ts', 'unknown')}</div>
-                                <button class="btn-copy" onclick="copyToClipboard('payload-slow-{start_idx + i}', this)">COPY JSON</button>
-                            </div>
-                        </div>
-                        <pre id="payload-slow-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{slow_json}</pre>
+                    
+                    <div style="margin-top:1.5rem; display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-secondary)">
+                        <div><strong style="color:var(--text-primary)">LAST SEEN:</strong> {row.get('last_ts', 'N/A')}</div>
+                        <div><strong style="color:var(--text-primary)">AFFECTED APP:</strong> {row.get('app_name', 'unknown')}</div>
                     </div>
-                </div>
-            </div></td></tr>'''
+                </div></td></tr>'''
+            else:
+                rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:2rem; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
+                        <div style="flex:1">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
+                            <div style="color:{'var(--text-secondary)' if row.get('query_shape_hash') == 'N/A' else 'var(--accent)'}; font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
+                        </div>
+                        <div style="width:100px">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
+                            <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
+                        </div>
+                        <div style="width:120px">
+                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE KEY</div>
+                            <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
+                        </div>
+                        {schema_col}
+                    </div>
+                    <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
+                    <div class="dist-bar" style="height:26px">{wave_html}</div>
+                    <div class="legend-grid" style="margin-top:0.8rem">{legend_html}</div>
+                    
+                    <div class="card-label" style="color:var(--text-primary); display:flex; align-items:center; gap:8px; font-size:0.75rem; margin-top:3rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> 🧪 CLINICAL INSIGHTS</div>
+                    {insights_html}
+
+                    {forensic_grid}
+                    <div class="comparison-grid" style="margin-top:3rem; grid-template-columns: 1fr 1fr;">
+                        <div>
+                            <div class="card-label" style="display:flex; align-items:center; gap:20px;">
+                                <span>💨 Fastest Payload</span>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('min_ts', 'unknown')}</div>
+                                    <button class="btn-copy" onclick="copyToClipboard('payload-fast-{start_idx + i}', this)">COPY JSON</button>
+                                </div>
+                            </div>
+                            <pre id="payload-fast-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{fast_json}</pre>
+                        </div>
+                        <div>
+                            <div class="card-label" style="display:flex; align-items:center; gap:20px;">
+                                <span>🐢 Slowest Payload</span>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('max_ts', 'unknown')}</div>
+                                    <button class="btn-copy" onclick="copyToClipboard('payload-slow-{start_idx + i}', this)">COPY JSON</button>
+                                </div>
+                            </div>
+                            <pre id="payload-slow-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{slow_json}</pre>
+                        </div>
+                    </div>
+                </div></td></tr>'''
         if is_failure_summary:
             rows += "</tbody></table>"
         return rows
@@ -716,6 +760,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <th style="width:350px">Diagnostic</th>
                             <th style="width:180px">Component/App</th>
                             <th>Plan</th>
+                            <th style="width:100px; text-align:right">Last Seen</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -789,6 +834,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     <th style="width:350px">DIAGNOSTIC</th>
                     <th style="width:180px">APPLICATION</th>
                     <th>PLAN</th>
+                    <th style="width:100px; text-align:right">LAST SEEN</th>
                 </tr>
             </thead>
             <tbody>

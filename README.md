@@ -1,41 +1,33 @@
 # 🐦 logpeck — Forensic MongoDB Log Analytics
 
-**High-fidelity, single-pass forensic engine for surgical MongoDB performance discovery.**
+**Surgical performance discovery for MongoDB. Reconstruct the "Why" behind latency, failures, and architectural bottlenecks.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-`logpeck` is a modern forensic assistant designed for high-velocity analysis of both plain-text and natively gzipped (`.gz`) MongoDB logs. It identifies architectural anti-patterns, wait-time bottlenecks, and "Latency Cliffs" that standard monitoring tools often miss.
-
 ---
 
-## 🚀 Key Features
+## 🎯 What you get from LogPeck
 
-- **⚡ Light-Speed 2-Pass Architecture**: Optimized for million-line scans, identifying outliers in seconds before deep forensic archaeology.
-- **📦 Native GZip Streaming**: Direct analysis of `.log.gz` traces with zero disk overhead.
-- **💎 Master Forensic Insight**: An executive summary card that identifies the primary bottleneck (I/O, CPU, Indexing) across the entire dataset.
-- **🛡️ Surgical Latency Histograms**: Visualizes query distribution across 12 geometric buckets (1ms to 60s+).
-- **🚨 Dynamic Latency Cliffs**: Automatically flags performance cliffs (e.g. Max > 10x Avg) for every query shape.
-- **🔌 Connection Analysis**: Aggregates client metadata (App, IP, User, Driver) to identify connection churn and noisy neighbors.
-- **🏥 Platform Health Profile**: Cluster-wide severity distribution and component-level workload mapping.
-- **🧬 Identity Stitching & Correlation (v5.0.0)**: Guaranteed identity attribution for context-lean logs by reconstructing state via the connection-based **MSH Matrix**.
-- **🔍 Universal Search Index (v5.0.0)**: Live, multi-dimensional search across hashes, IPs, apps, and diagnostics.
-- **🛡️ Truth Engine (v5.0.0)**: Surgical aggregation of systemic infrastructure errors and "orphan" network pathologies.
-- **🔍 Custom Rules Engine**: Decoupled diagnostic logic in `rules.json` for tunable bottleneck thresholds.
-- **💓 Real-time Pulse**: Integrated progress tracking for high-volume log processing.
+Standard monitoring tells you *when* things are slow. **LogPeck tells you why.** It transforms raw MongoDB logs into actionable forensic insights:
+
+*   **🐢 Latency Cliff Discovery**: Identifies query shapes where the slowest samples are significantly slower than the average—revealing intermittent resource blocking.
+*   **🚨 Architectural Anti-Patterns**: Automatically flags `COLLSCAN` events, in-memory sorts, and inefficient index usage.
+*   **🔗 Join & Regex Visibility**: Surface non-standard `$lookup` stages and CPU-intensive regex scans that impact cluster stability.
+*   **🛡️ Infrastructure Truth**: Isolates systemic network errors (timeouts, disconnects) from business workload performance.
+*   **🔌 Application Attribution**: Correlates every slow query to a specific Application, IP, and User, even in logs where that context is missing.
+*   **📉 Volumetric AAS Load**: Visualizes the physical "weight" of every operation relative to the total cluster load.
 
 ---
 
 ## 📦 Installation
 
-#### **Option A: Stable Version (Main Branch)**
-Use this for standard production auditing:
+#### **Stable Version**
 ```bash
 pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git
 ```
 
-#### **Option B: Beta Version (v5.0.6 Hardening Branch)**
-Use this to access the new **Truth Engine** and **Universal Search Index**:
+#### **Advanced Beta Branch** (Includes latest Truth Engine and Search Index)
 ```bash
 pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git@fix/forensic-engine-hardening
 ```
@@ -43,6 +35,27 @@ pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git@fix/foren
 > [!TIP]
 > If the `peck` command is not found after installation, ensure your Python binary directory is in your `PATH`. For example, on macOS:
 > `export PATH=$PATH:$(python3 -m site --user-base)/bin`
+
+---
+
+## ⚡ Quick Start (How to use)
+
+Generate a professional, six-tab forensic report in seconds:
+
+```bash
+# Analyze a log and generate an interactive dashboard
+peck dashboard --file mongod.log --html forensic_report.html
+```
+
+Or perform surgical analysis directly in your terminal:
+
+```bash
+# Find the slowest 10 business queries
+peck workload --file mongod.log --limit 10
+
+# Analyze all systemic errors and timeouts
+peck failure-workload --file mongod.log
+```
 
 ---
 
@@ -121,7 +134,7 @@ Use the table below to find the surgical CLI command equivalent for each profess
 | **1. Global Health** | `peck health` | High-level summary of severity levels and components. | `--json` |
 | **2. Business Workload** | `peck workload` | Analyzes application-level slow queries. | `--latency`, `--json` |
 | **3. System Workload** | `peck system-workload` | Analyzes infrastructure tasks (TTL, Oplog). | `--latency`, `--json` |
-| **4. Failure Forensics** | `peck failure-workload` | **(New)** Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
+| **4. Failure Forensics** | `peck failure-workload` | Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
 | **5. Connection Analytics** | `peck connections` | Profiles client apps and connection churn. | `--json` |
 | **6. Reference** | (Automatic) | Registry of metrics and rules. | N/A |
 | **-** | `peck search` | Surgical keyword forensic search. | `--keyword`, `--grep`, `--full`, `--limit`, `--count` |

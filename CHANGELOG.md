@@ -3,10 +3,16 @@
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
 ## [5.0.8] - 2026-04-29
-### Changed
-- **Forensic Consolidation**: Removed the redundant "Error Event Timeline" table to reduce dashboard clutter.
-- **Enhanced Signal**: Injected a "LAST SEEN" column into the "Query Shape Failure Analysis" table, preserving chronological context while improving signal-to-noise ratio.
-- **Version Bump**: Promoted release to v5.0.8 following major UI refinement.
+### Added
+- **Universal "LAST SEEN" Visibility**: Injected a mandatory `LAST SEEN` column across all forensic tables (Business, System, Failure, and Error Patterns) for immediate temporal context.
+- **Join Detection ($lookup)**: Implemented "blind search" detection for `$lookup` operations within command blocks, surfaced as a `🔗 JOIN (LOOKUP)` diagnostic tag.
+
+### Fixed
+- **Workload Forensics Regression**: Resolved a critical issue in `reporter.py` where business workload rows were suppressed, restoring visibility to the primary dashboard tab.
+- **System Error Alignment**: Corrected column-data mismatch in the System Error Patterns table, ensuring timestamps align with the "Last Seen" header.
+- **Duration Parsing Hardening**: Updated `parser.py` to support the `ms` field across multiple log formats, preventing 0ms misclassification of business queries.
+- **Parsing Pipeline Stability**: Implemented safe dictionary access (`.get()`) throughout `analyzer.py` to prevent engine crashes on malformed or partial log lines.
+- **UI Layout Integrity**: Synchronized `colspan` and row rendering logic across all views to support the expanded column structure.
 
 ## [5.0.7] - 2026-04-29
 ### Added

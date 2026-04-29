@@ -35,13 +35,14 @@ While the engine prefers the `BSON` attribute parser, it utilizes these surgical
 | :--- | :--- | :--- |
 | **Connection ID** | `conn(\d+)` | Extracts the numeric `ctx` from unstructured string headers. |
 | **Namespace** | `([\w.-]+\.\$?\w+)` | Extracts the `DB.Collection` anchor when the `ns` attribute is missing. |
-| **Duration** | `(\d+)ms` | Captures wall-clock latency for non-standard log events. |
+| **Duration** | `(\d+)ms` | Captures wall-clock latency for non-standard log events (v5.0.8: includes 'ms' field support). |
+| **Join Pattern** | `$lookup` | (v5.0.8) Blind search for relational join stages in the command block. |
 | **Oplog Source** | `oplog.rs` | Special handling for high-volume replication gossip. |
 
 ### 2.2 Attribute Sanitization Hierarchy
 To prevent "Pathological Attribute Bloat," the engine sanitizes the `attr` dictionary in this exact priority order:
 1. **Extraction**: Pulls numeric metrics into the `stats` bucket.
-2. **Standardization**: Forces all durations into milliseconds (ms).
+2. **Standardization**: Forces all durations into milliseconds (ms). (v5.0.8: Probes `durationMillis`, `durationMS`, and `ms` across both `attr` and top-level fields).
 3. **Blacklisting**: Removes high-volume, low-signal keys (e.g., `appName` in every line) before storing forensic payloads.
 4. **Key Flattening**: Collapses `attr.locks` sub-trees into the flat `lock_wait` summary.
 
@@ -80,9 +81,9 @@ LogPeck partitions query shapes into three dedicated diagnostic channels based o
 
 | Priority | Tab Category | Routing Criteria |
 | :--- | :--- | :--- |
-| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. Also promotes any log with Severity `WARN`, `ERROR`, or `FATAL`. **Failures always win**; infrastructure errors are routed here. Includes a dedicated table for headless/orphan network anomalies (e.g. DuplicateKey, Unauthorized) with deep-harvested numerical codes. |
-| **2 (High)** | **🐢 Business Workload** | All successful user-level operations targeting business namespaces. This is the 2nd tab for primary developer visibility. |
-| **3 (Med)** | **🛠️ System Query** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL, Heartbeats). |
+| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. Also promotes any log with Severity `WARN`, `ERROR`, or `FATAL`. **Failures always win**; infrastructure errors are routed here. Includes a dedicated table for headless/orphan network anomalies with deep-harvested numerical codes. **v5.0.8: Mandatory 'LAST SEEN' column added for temporal context.** |
+| **2 (High)** | **🐢 Business Workload** | All successful user-level operations targeting business namespaces. This is the 2nd tab for primary developer visibility. **v5.0.8: Mandatory 'LAST SEEN' column and join detection tagging.** |
+| **3 (Med)** | **🛠️ System Query** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL, Heartbeats). **v5.0.8: Mandatory 'LAST SEEN' column.** |
 
 ### 3.2 AAS Load % Math (Global Synchronization)
 To ensure proportionality, the **AAS Load %** (green progress bar) is calculated via a global denominator:

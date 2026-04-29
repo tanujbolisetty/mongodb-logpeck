@@ -248,10 +248,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     
                     if total_parsed % 500000 == 0: print(f"  ↳ {total_parsed:,} lines processed...", file=sys.stderr)
                     
-                    s = header["s"]; sev = str(SEVERITY_MAP.get(s, s)); severity_stats[sev] += 1
-                    c = header["c"]; component_stats[c] += 1
-                    msg = header["msg"]; norm_msg = RE_OBJECT_ID.sub('...', msg) if "ObjectId(" in msg else msg
-                    ctx = header["ctx"]
+                    s = header.get("s", "I"); sev = str(SEVERITY_MAP.get(s, s)); severity_stats[sev] += 1
+                    c = header.get("c", "unknown"); component_stats[c] += 1
+                    msg = header.get("msg", "unknown"); norm_msg = RE_OBJECT_ID.sub('...', msg) if "ObjectId(" in msg else msg
+                    ctx = header.get("ctx", "unknown")
                     
                     # 💡 Context-Aware Error Tracking (v1.3.4)
                     m_key = (sev, str(norm_msg[:80]))
@@ -707,12 +707,14 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                                 error_code_agg[err_c] = {
                                     "code": err_c, "name": err_desc, "count": 0, "total_ms": 0,
                                     "namespaces": Counter(), "apps": Counter(),
-                                    "max_ms": 0, "max_metrics": None, "max_peek_attr": None, "max_example_raw": None
+                                    "max_ms": 0, "max_metrics": None, "max_peek_attr": None, "max_example_raw": None,
+                                    "last_ts": None
                                 }
                             ec_o = error_code_agg[err_c]
                             ec_o["count"] += 1; ec_o["total_ms"] += duration
                             ec_o["namespaces"][ns] += 1
                             ec_o["apps"][a_n] += 1
+                            if ts: ec_o["last_ts"] = ts
                             
                             # 🧪 Witness Harvesting: Capture the most 'impactful' (slowest) occurrence as a representative sample
                             if ec_o["max_metrics"] is None or duration >= ec_o["max_ms"]:
@@ -1165,8 +1167,8 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "load_pct": stats["load_pct"],
             "aas_load": stats["aas"],
             # Forensic Metadata for Reporter Visibility
-            "docsExamined": eval_data["docsExamined"],
-            "keysExamined": eval_data["keysExamined"],
+            "docsExamined": eval_data.get("docsExamined", 0),
+            "keysExamined": eval_data.get("keysExamined", 0),
             "doc_mut": doc_mut,
             "is_system": q.get("is_system", 0),
             # Hybrid Clinical Ratios

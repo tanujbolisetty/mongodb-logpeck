@@ -180,6 +180,40 @@ def print_forensic_table(summary):
 
     console.print(table)
 
+def print_failure_summary_table(summary):
+    """
+    Prints the Executive Failure Summary (Table 1) for the CLI.
+    """
+    table = Table(header_style="bold red", box=None)
+    table.add_column("Code", style="bold red"); table.add_column("Error Name", ratio=1)
+    table.add_column("Count", justify="right"); table.add_column("Avg Delay", justify="right")
+    table.add_column("Top Namespace", style="dim"); table.add_column("Top App", style="dim")
+    
+    for row in summary:
+        table.add_row(
+            str(row.get('code', 'N/A')), str(row.get('name', 'N/A')),
+            str(row.get('count', 0)), format_duration(row.get('avg_ms', 0)),
+            str(row.get('top_ns', 'N/A')), str(row.get('top_app', 'N/A'))
+        )
+    console.print(Panel(table, title="📊 Executive Failure Summary", border_style="red"))
+
+def print_system_error_table(errors):
+    """
+    Prints System & Network Error Patterns (Table 3) for the CLI.
+    """
+    table = Table(header_style="bold yellow")
+    table.add_column("Code", style="cyan"); table.add_column("Category", style="yellow")
+    table.add_column("Message Pattern", ratio=1); table.add_column("Count", justify="right")
+    table.add_column("Last Seen", justify="right", style="dim")
+    
+    for err in errors:
+        ts = str(err.get('ts', 'N/A'))[11:19]
+        table.add_row(
+            str(err.get('code', 'N/A')), str(err.get('category', 'N/A')),
+            str(err.get('msg', 'N/A')), str(err.get('count', 0)), ts
+        )
+    console.print(Panel(table, title="🛠️ System & Network Error Forensics", border_style="yellow"))
+
 def main():
     """
     The Command Router for LogPeck.
@@ -469,10 +503,32 @@ def main():
 
         elif f"failure-workload" == args.command:
             result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency)
-            if args.json: print(json.dumps(result["timeout_summary"], indent=2)); return
+            stats = result.get("stats", {})
+            if args.json: 
+                out = {
+                    "executive": stats.get("error_code_summary", []),
+                    "shapes": result.get("timeout_summary", []),
+                    "system": stats.get("system_error_patterns", [])
+                }
+                print(json.dumps(out, indent=2)); return
 
             console.print(f"\n[bold red]🚨 Failure & Timeout Forensics (v{VERSION})[/bold red]")
-            print_forensic_table(result["timeout_summary"])
+            
+            # Tier 1: Executive Summary
+            ecs = stats.get("error_code_summary", [])
+            if ecs: print_failure_summary_table(ecs)
+            
+            # Tier 2: Query Shape Analysis
+            tos = result.get("timeout_summary", [])
+            if tos:
+                console.print("\n[bold]🔬 Query Shape Failure Analysis[/bold]")
+                print_forensic_table(tos)
+                
+            # Tier 3: System Errors
+            sys_errs = stats.get("system_error_patterns", [])
+            if sys_errs:
+                console.print("")
+                print_system_error_table(sys_errs)
 
         elif args.command == "connections":
             # Pass threshold 0 to get all connection metadata
