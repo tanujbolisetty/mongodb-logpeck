@@ -230,6 +230,17 @@
       "description": "The query uses a regular expression filter. Regex matches, especially those with the 'i' (case-insensitive) flag or non-anchored patterns, are CPU-intensive and cannot always fully leverage indexes."
     },
     {
+      "id": "JOIN_LOOKUP",
+      "type": "threshold",
+      "field": "has_lookup",
+      "technical_path": "cmd_obj string search ($lookup)",
+      "op": "gt",
+      "value": 0,
+      "label": "🔗 JOIN (LOOKUP)",
+      "severity": "warning",
+      "description": "The query uses a $lookup stage. Joins are non-standard in MongoDB and can cause significant performance degradation if not optimized with indexes on the 'from' collection."
+    },
+    {
       "id": "NOT_SUPPORTED_ON_VIEW",
       "type": "threshold",
       "field": "error_code",

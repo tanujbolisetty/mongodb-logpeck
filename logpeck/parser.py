@@ -398,9 +398,10 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     schema_cmd = attr.get("originatingCommand") or cmd_obj
     schema_op = op if op.startswith("tx-") or op in ["update", "insert", "delete"] else (next(iter(schema_cmd)) if schema_cmd else op)
     
-    # 🕵️ Surgical Regex Grep (v2.7.4)
+    # 🕵️ Surgical Pattern Grep (v2.7.5)
     cmd_str = str(cmd_obj)
     has_regex = "$regex" in cmd_str or "$regularExpression" in cmd_str
+    has_lookup = "$lookup" in cmd_str
 
     # 🔍 Search & AI Intent Extraction (v4.6.3)
     plan_summary = extract_search_metadata(attr, entry, cmd_obj, op)
@@ -412,6 +413,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         "query_schema": extract_query_schema(schema_cmd, schema_op),
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
+        "has_lookup": has_lookup,
         "has_crud": has_crud,
         "plan_summary": plan_summary, 
         "app_name": identity["appName"],

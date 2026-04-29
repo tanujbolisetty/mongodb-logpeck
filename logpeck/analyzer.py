@@ -723,7 +723,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
 
                         if h not in target_stats:
                             target_stats[h] = {
-                                "count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), "ns":str(ns), "inferred_ns": is_inferred, "op":str(op), "query_shape_hash":h_b, "has_regex": False, 
+                                "count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), "ns":str(ns), "inferred_ns": is_inferred, "op":str(op), "query_shape_hash":h_b, "has_regex": False, "has_lookup": False,
                                 "is_system": is_system_op or is_noise,
                                 "total_active_ms":0, "total_io_ms":0, "total_app_wait_ms":0, "total_oplog_wait_ms":0, "total_queue_wait_ms":0, "total_lock_wait_ms":0, "total_replication_wait_ms":0, "total_search_wait_ms":0, "timeout_count":0, "total_planning_ms":0, "total_yields":0, "total_write_conflicts":0, 
                                 "total_keys_examined":0, "total_docs_examined":0, "total_nreturned":0,
@@ -784,6 +784,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         
                         if metrics.get("has_regex"):
                             s_o["has_regex"] = True
+                        
+                        if metrics.get("has_lookup"):
+                            s_o["has_lookup"] = True
                         
                         if metrics.get("query_schema"):
                             s_o["query_fields"].update([str(f) for f in metrics["query_schema"]])
@@ -1121,6 +1124,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "nreturned": max_d.get("forensic", {}).get("nreturned", 1),
             "plan_summary": max_d.get("plan_summary", "N/A"),
             "has_regex": 1 if q.get("has_regex") else 0,
+            "has_lookup": 1 if q.get("has_lookup") else 0,
             "error_code": max_d.get("forensic", {}).get("errCode") or max_d.get("forensic", {}).get("code"),
             "error_name": max_d.get("forensic", {}).get("errName") or max_d.get("forensic", {}).get("codeName"),
             "clinical_stats": stats,
