@@ -689,3 +689,31 @@ To maintain the production-grade integrity of the LogPeck dashboard, all fronten
 - **Deep Discovery**: Every `row-main` MUST include a hidden `<span>` inside the first column containing forensic anchors (Hashes, IPs, Context IDs).
 - **Searchable Payloads**: In the Failure Forensics tab, the full string representation of the error pattern MUST be included in the hidden search index to enable searching by partial error messages.
 - **Consistency**: All search anchors MUST be space-separated and cast to lowercase to match the linear O(n) search traversal.
+
+---
+
+## 💻 19. CLI Forensic Visualization Contract
+
+To ensure visual parity with the dashboard while optimizing for terminal constraints, the LogPeck CLI adheres to the following layout contract:
+
+### 19.1 Table Structural Guardrails
+- **Grid Separation**: All forensic tables MUST use `show_lines=True` to provide clear row boundaries in high-density terminal environments.
+- **Header Styling**: Business/System tables use `bold magenta`; Failure tables use `bold red`.
+
+### 19.2 The "Short-Hash" Anchor
+- **Placement**: To save horizontal space, the `planCacheShapeHash` (truncated to 8 chars) MUST be displayed within square brackets `[ ]` on a new line directly below the Operation name in the first column.
+- **Formatting**: The hash MUST be styled as `dim` (gray) to maintain visual hierarchy, keeping the Operation name as the primary focus.
+
+### 19.3 Dynamic Column Wrapping
+- **App Column**: MUST use `overflow="fold"` to stack multiple client applications vertically, preventing horizontal table expansion.
+- **Diagnostic Column**: MUST use `overflow="fold"` to ensure all forensic badges (e.g., `Latency Cliff`, `IO Bound`) are visible without truncation.
+
+### 19.4 Failure Workload Parity
+The `failure-workload` command MUST prioritize error metadata over performance metrics, utilizing the following column order:
+1. **Code**: Bold high-contrast red.
+2. **Error**: Bold description.
+3. **Count**: Right-justified.
+4. **Query Shape Hash**: The full 64-char fingerprint (folded).
+5. **Namespace**: Target collection.
+6. **App**: Originating client.
+7. **Last Seen**: Dimmed timestamp.
