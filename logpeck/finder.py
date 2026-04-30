@@ -130,7 +130,7 @@ def filter_logs(
 
         match = True
         for key, val in filters.items():
-            # Deep Metric Lookup (v2.5.0)
+            # Deep Metric Lookup
             actual = metrics.get(key)
             if actual is None:
                 # Check forensic sub-dict (e.g. keysExamined, keysInserted)

@@ -19,7 +19,7 @@ from rich import print as rprint
 console = Console(stderr=True)
 
 # ==============================================================================
-# logpeck: cli.py (v5.0.7)
+# logpeck: cli.py
 # The Unified Command-Line Interface for MongoDB Log Forensics.
 # ==============================================================================
 # This module provides the user-facing entry point for both interactive and 
@@ -99,24 +99,24 @@ def print_log_card(entry, full=False):
     dur_str = f"({duration}ms)" if duration else ""
     
     console.print("-" * 80, style="dim")
-    # Use Rich markup escaping to ensure brackets and namespaces are printed correctly (v2.0.0)
+    # Use Rich markup escaping to ensure brackets and namespaces are printed correctly
     ns_display = escape(f"[{ns}]")
     dur_display = f" {dur_str}" if dur_str else ""
-    # Forensic Header (v2.0.2): Prioritize identified Op over generic Component
+    # Forensic Header: Prioritize identified Op over generic Component
     console.print(f"[dim]{ts_short}[/dim]  [bold]{sev}[/bold]  [cyan]{op.upper():<14}[/cyan] [green]{ns_display}[/green]{dur_display}")
     
     msg = entry.get("msg", "")
     if msg:
         console.print(f"  [italic]{msg[:130]}...[/italic]" if len(msg) > 130 else f"  [italic]{msg}[/italic]")
 
-    # Forensic Timeline (v2.0.2): Surface all extracted time markers
+    # Forensic Timeline: Surface all extracted time markers
     waits = metrics.get("waits_ms", {})
     if waits:
         wait_parts = [f"{k}={v}ms" for k, v in waits.items() if v > 0]
         if wait_parts:
             console.print(f"  [dim]Waits:[/dim] {', '.join(wait_parts)}")
 
-    # Forensic Statistics (v2.0.2): Surface clinical markers (keysExamined, etc.)
+    # Forensic Statistics: Surface clinical markers (keysExamined, etc.)
     stats = metrics.get("forensic", {})
     if stats:
         stat_parts = []
@@ -345,7 +345,7 @@ def main():
             
             console.print(Panel(conn_table, title="Connection Portfolio", border_style="dim"))
 
-            # --- Panel 4: Efficiency Audit (v2.2.0) ---
+            # --- Panel 4: Efficiency Audit ---
             eff = s.get("global_efficiency", {})
             total_ret = eff.get("nreturned", 0) or 1
             keys_ratio = round(eff.get("keysExamined", 0) / total_ret, 1)
@@ -385,7 +385,7 @@ def main():
             audit_table.add_column("⚠️ Critical Failures (by Code)", style="red", ratio=1)
             
             comp_list = list(s.get("components", {}).items())[:6]
-            # 🧪 Systemic Failure View (v2.7.16): Prioritise Error Code Summary for CLI
+            # 🧪 Systemic Failure View: Prioritise Error Code Summary for CLI
             ecs_list = s.get("error_code_summary", [])[:6]
             
             for i in range(max(len(comp_list), len(ecs_list))):

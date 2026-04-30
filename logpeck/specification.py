@@ -1,5 +1,5 @@
 # ==============================================================================
-# logpeck: specification.py (v5.0.7)
+# logpeck: specification.py
 # The Centralized 'Truth Registry' for MongoDB Forensic Mapping.
 # ==============================================================================
 # This module serves as the authoritative source of truth for the entire 
@@ -28,7 +28,7 @@ def load_metrics():
         print(f"⚠️ Warning: Could not load metrics.json: {e}")
         return []
 
-# 🧪 Type-Safe Error resolution (v4.3.5)
+# 🧪 Type-Safe Error resolution
 # ------------------------------------------------------------------------------
 # In Atlas logs, 'errCode' often arrives as a string ("50"). This function
 # ensures it is cast to an integer to match the keys in ERROR_CODE_MAP.
@@ -38,7 +38,7 @@ def resolve_error_code(harvested_error):
     e.g., Code 50 -> MaxTimeMSExpired
     """
     try:
-        # 🧪 Type-Safe Error resolution (v4.3.5)
+        # 🧪 Type-Safe Error resolution
         # Ensure string-based error codes map to human-readable names
         try:
             code = int(harvested_error["errCode"])
@@ -107,6 +107,54 @@ SYSTEM_APP_NAMES = {
     "mongot initial sync", "mongot steady state", "mongot steady state sync", "TTL Index"
 }
 
+# Log messages excluded from forensic analysis (lifecycle/metadata/internal noise).
+# Verified against 16 production log files (atlaslogs_20260427_185128).
+# Identity info (app, user, IP, driver) is still harvested for the MSH Matrix.
+EXCLUDED_EVENT_MSGS = {
+    # --- Connection Lifecycle (high-volume, ~371K/day each) ---
+    "Connection accepted",
+    "Connection ended",
+
+    # --- Client Identity / Handshake ---
+    "client metadata",                                          # ~314K/day
+    "Successfully authenticated",                                # ~298K/day
+
+    # --- Internal Storage / Executor Noise ---
+    "Failed to gather storage statistics for slow operation",    # ~8/day
+    "Client's executor exceeded time limit",                     # ~285/day
+    #   ^ Fires when an internal background executor exceeds its time limit.
+    #     NOT a user-initiated operation failure.
+}
+
+# MongoDB log severity codes to human-readable labels.
+SEVERITY_MAP = {
+    "I": "INFO", "W": "WARN", "E": "ERROR", "F": "FATAL",
+    "D": "DEBUG", "D1": "DEBUG", "D2": "DEBUG"
+}
+
+# Histogram bucket boundaries for latency distribution (milliseconds).
+LATENCY_BUCKETS = [100, 250, 500, 1000, 2000, 5000, 10000]
+
+# Timeout signature strings (matched against lowercased search space).
+TIMEOUT_SIGNATURES = [
+    "exceeded time limit", "exceededtimelimit", "timed out",
+    "deadline exceeded", "code: 50", "code: 202",
+    "networkinterfaceexceededtimelimit",
+    "operation timed out while waiting to acquire connection"
+]
+
+# Failure indicator strings (matched against lowercased search space).
+# Used to classify non-INFO logs as error events.
+FAILURE_SIGNATURES = [
+    "error", "failed", "failure", "socketexception", "clientdisconnect", "interrupted",
+    "exceededtimelimit", "networkinterface", "steppeddown", "primarysteppeddown",
+    "notyetinitialized", "invalidsyncsource", "terminated", "connection closed",
+    "infrastructure failure"
+]
+
+# High-frequency infrastructure noise to suppress from error classification.
+NOISE_BLACKLIST = ["reauthenticate", "JWK Set", "certificate expiration", "heartbeat"]
+
 # ✂️ 5. Query Hygiene (Structural Pruning)
 # ------------------------------------------------------------------------------
 # These fields are removed during the "Normalization" phase.
@@ -134,7 +182,7 @@ SEARCH_STRUCTURAL_FIELDS = {
 }
 
 
-# 🕵️ 6. System Health Routing (v2.7.0)
+# 🕵️ 6. System Health Routing
 # ==============================================================================
 # Patterns that trigger event promotion to the System Health tab.
 SYSTEM_EVENT_IDENTIFIERS = [
@@ -167,7 +215,7 @@ SYSTEM_EVENT_IDENTIFIERS = [
     "infrastructure failure"
 ]
 
-# 🧬 6.5 Lifecycle & Gossip Diagnostics (v2.7.4)
+# 🧬 6.5 Lifecycle & Gossip Diagnostics
 # ==============================================================================
 # Patterns for high-velocity system events to be de-noised during sweep.
 LIFECYCLE_EVENT_IDENTIFIERS = [
@@ -241,7 +289,46 @@ SIMPLIFIED_OPS = {
     "interrupted at shutdown": "Shutdown Interrupt"
 }
 
-# 🐢 8. Performance Efficiency Thresholds
+# 🔍 8. Parser Ingestion Registry
+# ==============================================================================
+# Patterns and mappings used during the Pass 1 ingestion phase in parser.py.
+
+# Heuristic patterns for namespace recovery when 'attr.ns' is missing.
+RE_HEURISTIC_NS_PATTERNS = [
+    r'on ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'ns: ["\']?([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'namespace: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'for ns: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'collection: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'target: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'
+]
+
+# Keys that carry the target collection name in the command object.
+COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count", "distinct", "findAndModify", "getMore", "$search"]
+
+# Maps abbreviations to standard operation names.
+CRUD_OP_MAP = {"u": "update", "i": "insert", "d": "delete"}
+
+# Fields probed during flat-block induction for lean logs.
+SEARCH_PROBES = [
+    "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
+    "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
+    "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
+    "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
+    "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
+    "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
+    "storage", "locks", "queues", "mongot", "command", "originatingCommand",
+    "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
+]
+
+# Maps nested BSON paths to canonical forensic metric IDs.
+NESTED_METRIC_MAPPING = {
+    "attr.mongot.timeWaitingMillis": "mongot_wait",
+    "attr.storage.data.txnBytesDirty": "txnBytesDirty",
+    "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache"
+}
+
+# 🐢 9. Performance Efficiency Thresholds
 # ==============================================================================
 THRESHOLD_SCAN_RATIO = 10.0  # Normalized limit for 'SCAN_REDUCTION' tag.
 THRESHOLD_SLOW_MS = 100      # Baseline for performance profiling.

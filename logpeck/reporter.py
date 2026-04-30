@@ -16,7 +16,7 @@ from .utils import format_duration, format_bytes
 # 3. Dynamic Rule Injection (Syncing explanations from rules.json).
 # ==============================================================================
 
-# 🧠 Diagnostic Documentation Loader (v3.1.0)
+# 🧠 Diagnostic Documentation Loader
 # Pulls forensic explanations directly from rules.json to ensure the dashboard remains a live 'Truth Engine'
 def load_glossary_rules() -> List[Dict[str, Any]]:
     """
@@ -58,7 +58,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         <div class="card"><div class="card-label">Log Errors</div><div class="card-value" style="color:{err_color}">{stats.get("log_error_count", 0)}</div></div>
     '''
     
-    # 🧬 Forensic Bottleneck Radar (v3.3.3)
+    # 🧬 Forensic Bottleneck Radar
     # --------------------------------------------------------------------------
     # This visualization maps global wait time across critical dimensions.
     # It identifies whether the cluster is bound by CPU, I/O, or Locking.
@@ -105,7 +105,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
     severity_wave_html = render_wave(stats.get("severities", {}), {"ERROR": "var(--error)", "WARN": "var(--warn)", "INFO": "var(--accent)"})
     component_wave_html = render_wave(stats.get("components", {}))
-    # 🕵️ Forensic Suppression (v1.3.14): Filter out admin, local, config, and system namespaces to resolve signal-to-noise issues.
+    # 🕵️ Forensic Suppression: Filter out admin, local, config, and system namespaces to resolve signal-to-noise issues.
     ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "unknown" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
     msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
@@ -129,10 +129,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         # Details Row: Hidden by default
         payload_html = "N/A"
         if err.get('payload') and err.get('payload') != 'N/A':
+            p_raw = err.get('payload')
+            try: p_pretty = json.dumps(json.loads(p_raw), indent=2) if isinstance(p_raw, str) else json.dumps(p_raw, indent=2)
+            except: p_pretty = str(p_raw)
+            
             payload_html = f'''
                 <div style="position:relative">
                     <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard(\'sys-payload-{i}\', this)">COPY</button>
-                    <div id="sys-payload-{i}" style="background:#000;padding:1.5rem;border-radius:12px;font-family:\'JetBrains Mono\', monospace;font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;border:1px solid var(--border);border-left:4px solid var(--warn)">{err.get('payload')}</div>
+                    <pre id="sys-payload-{i}" class="payload-pre" style="background:#000;padding:1.5rem;border-radius:12px;font-size:0.72rem;color:var(--text-secondary);border:1px solid var(--border);border-left:4px solid var(--warn);max-height:450px;overflow:auto">{p_pretty}</pre>
                 </div>'''
             
         system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="6"><div class="details-content">
@@ -165,7 +169,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     user_wave_html = render_wave(conn.get("top_users", {}))
     driver_mapping_html = "<table style='margin-top:1rem'><thead><tr><th>CLIENT APPLICATION</th><th>DRIVER STITCHING</th><th>COUNT</th></tr></thead><tbody>" + "".join([f"<tr><td style='font-size:0.85rem;color:var(--text-secondary)'>{m.get('app', 'N/A')}</td><td style='font-size:0.82rem;color:var(--accent);font-weight:700'>{m.get('driver', 'N/A')}</td><td style='font-family:monospace'>{m.get('count', 0):,}</td></tr>" for m in conn.get("app_driver_mapping", [])]) + "</tbody></table>"
 
-    # 🧬 Executive Failure Summary (v5.0.7): Metadata setup
+    # 🧬 Executive Failure Summary: Metadata setup
     ecs = stats.get("error_code_summary", [])
 
     def render_summary_rows(data_list, start_idx=0, is_system_view=False, is_timeout_view=False, is_failure_summary=False):
@@ -204,7 +208,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 keys_ex = row_data.get("keysExamined", 0)
                 doc_mut = row_data.get("doc_mut", 0)
                 
-                # Formula thresholds per clinical feedback (v3.3.6 Workload-Adaptive)
+                # Formula thresholds per clinical feedback ( Workload-Adaptive)
                 
                 # 1. SCAN EFFICIENCY (Discovery Effort)
                 # Measures how many documents were scanned to return 1 result. 
@@ -250,7 +254,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     </div>
                     ''')
 
-                # ✨ Advanced Clinical Suite v4.0.0 (The Full Stack)
+                # ✨ Advanced Clinical Suite (The Full Stack)
 
                 # 5. CACHE PRESSURE (Memory Tax)
                 cp = row_data.get("cache_pressure", 0)
@@ -278,7 +282,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     sl_fmt = f"{sl/1000:,.1f}s" if sl >= 1000 else f"{sl:,.0f}ms"
                     insights.append(f'<div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {sl_clr}"><div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Maximum time spent waiting for the Atlas Search backend process.">SEARCH LATENCY (Slowest Sample)</div><div style="font-size:1.3rem; font-weight:800; color:{sl_clr}; margin:0.3rem 0">{sl_fmt}</div><div style="font-size:0.6rem; color:var(--text-secondary)">MONGOT WAIT</div></div>')
 
-                # 9. WT CACHE STALL (Eviction Pressure) — v4.6.4
+                # 9. WT CACHE STALL (Eviction Pressure) —
                 cs = row_data.get("cache_stall", 0)
                 if cs > 0:
                     cs_clr = "var(--tier1)" if cs < 1 else ("#fbbf24" if cs < 10 else "var(--error)")
@@ -323,7 +327,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             def render_f_row(k, d1, d2, force_show=False, show_raw_key=False):
                 v1, v2 = d1.get(k, 0), d2.get(k, 0)
                 
-                # 🧪 Zero-Value Suppression (v3.2.0)
+                # 🧪 Zero-Value Suppression
                 # If neither sample has a value, hide the row unless force_show is set.
                 if not force_show:
                     def is_falsy(v):
@@ -348,7 +352,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 label = FIELD_DISPLAY.get(k, k)
                 source = METRIC_SOURCES.get(k, k)
                 
-                # 🧪 Dual-Labeling (v4.5.2): Show raw log key only if it differs from the label
+                # 🧪 Dual-Labeling: Show raw log key only if it differs from the label
                 raw_tag = ""
                 if show_raw_key and label != k:
                     raw_tag = f'<div style="font-family:\'JetBrains Mono\'; font-size:0.6rem; opacity:0.4; margin-top:2px">{k}</div>'
@@ -365,14 +369,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     if line: content += line; count += 1
                 return content if count > 0 else ""
 
-            # 🧪 Surgical Visibility Guards (v3.1.0)
-            # 🧪 Surgical Visibility Guards (v3.2.0): Dynamic categories from registry
+            # 🧪 Surgical Visibility Guards
+            # 🧪 Surgical Visibility Guards: Dynamic categories from registry
             metrics_content = ""
             for cat in METRIC_CATEGORIES:
                 fields = [m["id"] for m in METRIC_REGISTRY if m["category"] == cat]
                 metrics_content += render_category(cat, fields, row)
             
-            # 🧪 Surgical Visibility Guard Refinement (v3.2.0)
+            # 🧪 Surgical Visibility Guard Refinement
             # Only show forensic card if there is non-zero content OR wall-clock latency > 0
             has_metrics = len(metrics_content) > 0 or row.get("max_time", 0) > 0
             l_panel = ""
@@ -396,7 +400,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             slow_json = json.dumps(row.get('max_peek_attr') or {}, indent=2)
 
             # Build optional columns based on view type
-            # 🔍 Plan Badge System (v4.6.4): Visual tagging for Search/Vector operations
+            # 🔍 Plan Badge System: Visual tagging for Search/Vector operations
             plan_raw = row.get('plan_summary', 'N/A')
             plan_html = plan_raw
             if "SEARCH" in str(plan_raw):
@@ -420,6 +424,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
+
+            # Prepare pretty payload for drill-down views
+            p_raw = row.get('max_example_raw')
+            payload_pretty = "N/A"
+            if p_raw:
+                try: payload_pretty = json.dumps(json.loads(p_raw), indent=2) if isinstance(p_raw, str) else json.dumps(p_raw, indent=2)
+                except: payload_pretty = str(p_raw)
 
             if is_failure_summary:
                 e_code = row.get("code", "N/A")
@@ -455,7 +466,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'unknown').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = ""
             else:
-                # 🧪 Standard Workload Row (v5.0.8 Restoration)
+                # 🧪 Standard Workload Row ( Restoration)
                 last_seen = str(row.get('max_ts', 'N/A'))
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
@@ -503,9 +514,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     </div>
 
                     <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">REPRESENTATIVE FORENSIC PAYLOAD</div>
-                    <div style="background:#000; padding:1.5rem; border-radius:12px; font-family:'JetBrains Mono', monospace; font-size:0.75rem; color:var(--text-secondary); white-space:pre-wrap; border:1px solid var(--border); border-left:4px solid var(--error); position:relative">
+                    <div style="position:relative">
                         <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard('payload-msg-{start_idx + i}', this)">COPY</button>
-                        <div id="payload-msg-{start_idx + i}">{row.get('max_example_raw', 'N/A')}</div>
+                        <pre id="payload-msg-{start_idx + i}" class="payload-pre" style="background:#000; padding:1.5rem; border-radius:12px; font-size:0.72rem; color:var(--text-secondary); border:1px solid var(--border); border-left:4px solid var(--error); max-height:450px; overflow:auto">{payload_pretty}</pre>
                     </div>
                     
                     <div style="margin-top:1.5rem; display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-secondary)">
@@ -570,7 +581,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     timeout_forensic_rows_html = render_summary_rows(timeout_summary, 2000, is_timeout_view=True)
     failure_summary_html = render_summary_rows(ecs, 3000, is_failure_summary=True)
 
-    # 📚 Forensic Knowledge Base: Diagnostic Decoder (v5.0.7)
+    # 📚 Forensic Knowledge Base: Diagnostic Decoder
     diag_rows = []
     for r in rules_glossary:
         # 🕵️ Senior Logic: Extract the best 'Internal Trigger' description
@@ -583,7 +594,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             </tr>
         """)
 
-    # 📐 Metric Source Registry (v3.2.0): Fully Dynamic Reference Grid
+    # 📐 Metric Source Registry: Fully Dynamic Reference Grid
     metric_rows = []
     # Group registry by category for the reference tab
     for cat in METRIC_CATEGORIES:

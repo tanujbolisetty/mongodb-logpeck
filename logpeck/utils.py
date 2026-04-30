@@ -20,7 +20,7 @@ def format_duration(ms: float) -> str:
     human-readable context while preserving technical accuracy.
     """
     if ms == 0: return "0ms"
-    # Pico / Nano / Micro / Milli scaling (v4.0.0 Support)
+    # Pico / Nano / Micro / Milli scaling ( Support)
     if ms < 0.000001: return f"{int(ms * 1000000000)}ps"
     if ms < 0.001: return f"{int(ms * 1000000)}ns"
     if ms < 1: return f"{int(ms * 1000)}µs"

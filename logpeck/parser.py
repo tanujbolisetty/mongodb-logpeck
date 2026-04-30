@@ -13,20 +13,17 @@ import json
 import re
 import hashlib
 from typing import Dict, Any, List, Optional, Set
-from .specification import ERROR_CODE_MAP, FIELD_DISPLAY, METRIC_MARKERS
+from .specification import (
+    ERROR_CODE_MAP, FIELD_DISPLAY, METRIC_MARKERS,
+    RE_HEURISTIC_NS_PATTERNS, COMMON_COMMAND_KEYS, CRUD_OP_MAP,
+    SEARCH_PROBES, NESTED_METRIC_MAPPING,
+    SYSTEM_COMPONENTS, SYSTEM_NAMESPACES, SYSTEM_APP_NAMES,
+    EXCLUDED_SYSTEM_FIELDS, SEARCH_STRUCTURAL_FIELDS
+)
 
-# 🕵️ Heuristic Forensic Patterns (v1.3.5)
-# ------------------------------------------------------------------------------
-# These patterns are used when the standard 'attr.ns' field is missing or generic
-# (e.g. '$cmd'). They scan 'attr.msg' or failing error strings for db.coll signatures.
-RE_HEURISTIC_NS = [
-    re.compile(r'on ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
-    re.compile(r'ns: ["\']?([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
-    re.compile(r'namespace: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
-    re.compile(r'for ns: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
-    re.compile(r'collection: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'),
-    re.compile(r'target: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)')
-]
+# 🕵️ Heuristic Forensic Patterns
+# Compiled at module load from specification.py patterns.
+RE_HEURISTIC_NS = [re.compile(p) for p in RE_HEURISTIC_NS_PATTERNS]
 
 def heuristic_extract_ns(text: str) -> Optional[str]:
     """
@@ -41,12 +38,6 @@ def heuristic_extract_ns(text: str) -> Optional[str]:
         if match: return match.group(1)
     return None
 
-# Import Governance: Centralized configuration registries
-from .specification import (
-    SYSTEM_COMPONENTS, SYSTEM_NAMESPACES, SYSTEM_APP_NAMES,
-    EXCLUDED_SYSTEM_FIELDS, SEARCH_STRUCTURAL_FIELDS
-)
-
 
 def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
     """
@@ -60,12 +51,12 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
     Logic Note: We prioritize "Rich Values" (dicts/lists) over simple booleans 
     to ensure we capture actually meaningful filter samples for the forensic report.
     """
-    # 🧪 Depth Boost (v2.7.10): Standard MongoDB is 8-10, but complex 
+    # 🧪 Depth Boost: Standard MongoDB is 8-10, but complex 
     # Atlas Search / $facet pipelines can exceed 20 levels.
     if depth > 32 or not obj: return  
     
     if isinstance(obj, dict):
-        # 🧪 Atlas Search Path Extraction (v1.1.50)
+        # 🧪 Atlas Search Path Extraction
         # Search pipelines often use { "path": "myField" } inside operators.
         if "path" in obj and isinstance(obj["path"], (str, list)):
             paths = [obj["path"]] if isinstance(obj["path"], str) else obj["path"]
@@ -73,7 +64,7 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
                 if not isinstance(field_name, str): continue
                 # Ignore structural fields like 'analyzer' or 'score'
                 if field_name not in SEARCH_STRUCTURAL_FIELDS:
-                    # 🧪 Intelligent Value Harvesting (v1.1.53)
+                    # 🧪 Intelligent Value Harvesting
                     # Try to capture a sample value to show in the "Sample Values" tooltip.
                     val = obj.get("query") or obj.get("value")
                     if val is None:
@@ -148,7 +139,7 @@ def extract_query_params(cmd_obj: dict, op: str) -> Dict[str, Any]:
                 _harvest_params(stage.get("$match"), params)
                 _harvest_params(stage.get("$search"), params)
     elif op in ["update", "tx-update", "u"]:
-        # 🧬 CRUD Coarsening (v2.6.16): Only fingerprint the LOOKUP part, skip payload data
+        # 🧬 CRUD Coarsening: Only fingerprint the LOOKUP part, skip payload data
         for field in ["filter", "q"]:
             val = cmd_obj.get(field)
             if val: _harvest_params(val, params)
@@ -190,27 +181,22 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     msg = msg or ""
     attr_type = attr.get("type")
     
-    # 🏺 Common Command Keys Probe (v1.3.17)
-    # Registry of keys that carry the target collection name in the command object.
-    COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count", "distinct", "findAndModify", "getMore", "$search"]
-    
     crud = attr.get("CRUD")
     if attr_type and attr_type != "command":
         raw_op = attr_type
     elif isinstance(crud, dict):
         raw_op = crud.get("op")
         ns = crud.get("ns") or ns
-        # Map abbreviations to standard ops (v2.3.5)
-        OP_MAP = {"u": "update", "i": "insert", "d": "delete"}
-        if raw_op in OP_MAP: raw_op = OP_MAP[raw_op]
-        # Infer op if missing but fields are present (v2.3.6)
+        # Map abbreviations to standard ops
+        if raw_op in CRUD_OP_MAP: raw_op = CRUD_OP_MAP[raw_op]
+        # Infer op if missing but fields are present
         if not raw_op:
             if "diff" in crud or "o2" in crud: raw_op = "update"
             elif "o" in crud: raw_op = "insert"
     else:
-        # 🧪 Op Triage (v2.0.2): Fallback to message for system events (Elections, Network, Heartbeats)
+        # 🧪 Op Triage: Fallback to message for system events (Elections, Network, Heartbeats)
         if cmd_obj:
-            # 🕵️ Error Priority (v2.6.19): If the command failed, the error is the event.
+            # 🕵️ Error Priority: If the command failed, the error is the event.
             err = cmd_obj.get("error") or attr.get("error")
             if err and isinstance(err, str) and ("MaxTimeMS" in err or "exceeded time limit" in err):
                 raw_op = "MaxTimeMSExpired"
@@ -222,7 +208,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         else:
             raw_op = "unknown"
     
-    # 🕵️ Special System Event Harvesting (v2.7.3)
+    # 🕵️ Special System Event Harvesting
     # Target: Connection Metadata & Authentication lines to recover Identity Anchors
     if msg == "client metadata":
         raw_op = "client metadata"
@@ -233,18 +219,18 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         # Database in auth line is the target of the auth (often admin), but user is the key anchor
         if "user" in attr: attr["user"] = attr["user"]
     
-    # 🕵️ Forensic Attribute Recovery (v2.7.5)
+    # 🕵️ Forensic Attribute Recovery
     # Recover namespace from attributes (common in housekeeping logs like TTL index)
     if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
         ns = attr.get("namespace") or ns
 
-    # 🧬 Recovery Anchor (v4.4.0)
+    # 🧬 Recovery Anchor
     # Signal if this entry has high-confidence data blocks (CRUD)
     has_crud = isinstance(attr.get("CRUD"), dict)
 
-    # 🕵️ Transaction & Command Namespace Resolution (v2.7.6)
+    # 🕵️ Transaction & Command Namespace Resolution
     params = attr.get("parameters", {})
-    # v4.5.5: Strengthened detection to include Logical Sessions and Autocommit markers
+    #: Strengthened detection to include Logical Sessions and Autocommit markers
     is_tx = (str(ns).endswith(".$cmd") or 
              "txnNumber" in attr or 
              "autocommit" in attr or
@@ -277,7 +263,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
         if pattern.lower() in str(raw_op).lower() or (msg and pattern.lower() in msg.lower()):
             op = simple_name # Preserve case from specification
 
-    # 🕵️ TTL Index Discovery (v1.3.18)
+    # 🕵️ TTL Index Discovery
     # Refined: Move override after loop to ensure background deletions aren't masked by 'delete' pattern.
     if ("numDeleted" in attr or "ndeleted" in attr) and "index" in attr and "lsid" not in attr:
         op = "TTL Index"
@@ -324,7 +310,7 @@ def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> D
     """
     canonical = {}
     
-    # 1. Timestamp Induction (Ghost Stitching v3.2.7)
+    # 1. Timestamp Induction (Ghost Stitching)
     # Extracts the date from MongoDB's ISODate object or raw string.
     ts = entry.get("t", {}).get("$date") if isinstance(entry.get("t"), dict) else entry.get("t")
     canonical["t"] = ts or entry.get("time") or entry.get("ts") or last_ts
@@ -363,7 +349,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     - Forensic Counters (keysExamined, docsExamined, etc.)
     - Query Schema & Shape Hashing
     """
-    # 🧪 Unified Schema Induction (v3.2.8)
+    # 🧪 Unified Schema Induction
     # Standardize headers (Timestamp, Severity, Msg, Context) across all formats.
     header = induce_log_schema(entry, last_ts)
     attr = entry.get("attr")
@@ -372,41 +358,41 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
         attr = synthesize_flat_attr(entry)
         entry["attr"] = attr
             
-    # Handle both standard command logs and transactional CRUD blocks (v2.3.5)
+    # Handle both standard command logs and transactional CRUD blocks
     cmd_obj = attr.get("command") or attr.get("CRUD") or entry.get("command") or {}
     msg = header["msg"]
     ns_raw = attr.get("ns") or entry.get("ns") or "unknown"
     
     op, ns, has_crud = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
     
-    # 🆔 Identity Extraction (v4.6.3)
+    # 🆔 Identity Extraction
     identity = extract_identity(attr, entry, op)
 
-    # 🧬 Shape & Hash Extraction (v4.6.3)
+    # 🧬 Shape & Hash Extraction
     q_hash = extract_query_hash(attr, entry, op)
     
-    # ⏱️ Duration Discovery (v5.0.8 Hardening)
+    # ⏱️ Duration Discovery ( Hardening)
     # Support multiple formats: durationMillis, durationMS, or flat 'ms' field.
     ms = attr.get("durationMillis") or attr.get("durationMS") or attr.get("ms") or \
          entry.get("durationMillis") or entry.get("durationMS") or entry.get("ms") or 0
     if not ms and "parameters" in attr: 
         ms = attr["parameters"].get("durationMillis", 0)
 
-    # 🕵️ Forensic Stats Extraction (v4.6.3)
+    # 🕵️ Forensic Stats Extraction
     forensic = extract_forensic_stats(attr, entry)
     
-    # 🚦 Wait Hierarchy Calculation (v4.6.3)
+    # 🚦 Wait Hierarchy Calculation
     waits_ms = calculate_waits(attr, entry, forensic, ms, op)
 
     schema_cmd = attr.get("originatingCommand") or cmd_obj
     schema_op = op if op.startswith("tx-") or op in ["update", "insert", "delete"] else (next(iter(schema_cmd)) if schema_cmd else op)
     
-    # 🕵️ Surgical Pattern Grep (v2.7.5)
+    # 🕵️ Surgical Pattern Grep
     cmd_str = str(cmd_obj)
     has_regex = "$regex" in cmd_str or "$regularExpression" in cmd_str
     has_lookup = "$lookup" in cmd_str
 
-    # 🔍 Search & AI Intent Extraction (v4.6.3)
+    # 🔍 Search & AI Intent Extraction
     plan_summary = extract_search_metadata(attr, entry, cmd_obj, op)
 
     metrics = {
@@ -438,9 +424,9 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
         if any(ns.startswith(p) for p in SYSTEM_NAMESPACES) or ".system." in ns or ns == "oplog.rs":
             return True
 
-    # 2. Transaction & Management Immunity (v2.7.4 Fix)
+    # 2. Transaction & Management Immunity ( Fix)
     # Never filter transactions or destructive admin commands as noise.
-    # v4.4.0: Explicitly protect CRUD operations and tx-prefixed commands.
+    #: Explicitly protect CRUD operations and tx-prefixed commands.
     if has_crud or str(op).startswith("tx-") or op == "transaction" or "drop" in str(op).lower() or "rename" in str(op).lower():
         return False
             
@@ -467,16 +453,7 @@ def synthesize_flat_attr(entry: Dict[str, Any]) -> Dict[str, Any]:
     Synthesizes a temporary attr block from top-level fields for lean logs.
     """
     attr = {}
-    SEARCH_PROBES = [
-        "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
-        "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
-        "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
-        "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
-        "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
-        "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
-        "storage", "locks", "queues", "mongot", "command", "originatingCommand",
-        "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
-    ]
+    attr = {}
     for k in SEARCH_PROBES:
         if k in entry: attr[k] = entry[k]
         
@@ -537,16 +514,11 @@ def extract_forensic_stats(attr: Dict[str, Any], entry: Dict[str, Any]) -> Dict[
         code = forensic.get("errCode")
         forensic["errName"] = ERROR_CODE_MAP.get(int(code) if str(code).isdigit() else 0) or str(code or "DirectError")
 
-    # Storage specials (v4.6.4)
+    # Storage specials
     if "shardNames" in attr: forensic["shards"] = len(attr["shardNames"])
     
     # Map dots to canonical metric IDs
-    NESTED_MAPPING = {
-        "attr.mongot.timeWaitingMillis": "mongot_wait",
-        "attr.storage.data.txnBytesDirty": "txnBytesDirty",
-        "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache"
-    }
-    for path, metric_id in NESTED_MAPPING.items():
+    for path, metric_id in NESTED_METRIC_MAPPING.items():
         val = get_nested_value(entry, path)
         if val is not None: forensic[metric_id] = val
         
@@ -588,7 +560,7 @@ def calculate_waits(attr: Dict[str, Any], entry: Dict[str, Any], forensic: Dict[
     work = attr.get("workingMillis")
     if work is not None: waits["execution"] = work
 
-    # 🧪 Wall-Clock Hardening (v2.3.1): Cap components at total latency
+    # 🧪 Wall-Clock Hardening: Cap components at total latency
     if ms > 0:
         for k in waits: waits[k] = min(waits[k], ms)
         
