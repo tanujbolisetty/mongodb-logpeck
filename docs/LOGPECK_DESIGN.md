@@ -617,6 +617,13 @@ When adding a new forensic metric or metadata field to `reporter.py`:
 2. **Search Anchor**: If the field is for deep forensics only (e.g. `Connection Context`), append it to the hidden `<span>` inside the first `<td>` of the `row-main`.
 3. **Case Sensitivity**: The engine uses `.toLowerCase()`. All anchors should be string-cast and space-separated within the index span.
 
+### **16.4 First-Match Sampling Logic (CLI)**
+To ensure maximum performance on multi-gigabyte log files, the `search` and `filter` CLI commands utilize a **Streaming Sampling** strategy:
+*   **Sequential Scan**: The engine performs a linear, single-pass scan of the log file.
+*   **First-N Retrieval**: Results are returned as soon as they are found. The `--limit` flag (default: 10) determines when the scan terminates.
+*   **Non-Ordered Results**: Unlike the Workload tabs (which perform a global aggregate/sort), `search` and `filter` results are ordered by their physical appearance in the log file, not by latency or impact.
+*   **Global Totals**: To see the true count of all matches across the entire file, the `--count` flag must be used, which bypasses the early-exit limit.
+
 ---
 
 ## 🎨 17. UI Token System & Design Architecture

@@ -305,7 +305,7 @@ def main():
     health_parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
     # Command: search
-    search_parser = subparsers.add_parser("search", help="Keyword forensic search")
+    search_parser = subparsers.add_parser("search", help="Keyword forensic search (Returns first matches found)")
     search_parser.add_argument("--file", required=True, help="Path to mongod.log")
     search_parser.add_argument("--keyword", required=True, help="Search term")
     search_parser.add_argument("--full", action="store_true", help="Show full query fingerprint")
@@ -316,7 +316,7 @@ def main():
     search_parser.add_argument("--grep", action="store_true", help="Stateless search: Search raw JSON string and skip identity reconstruction")
 
     # Command: filter
-    filter_parser = subparsers.add_parser("filter", help="Multidimension forensic filter")
+    filter_parser = subparsers.add_parser("filter", help="Multidimension forensic filter (Returns first matches found)")
     filter_parser.add_argument("--file", required=True, help="Path to mongod.log")
     filter_parser.add_argument("--filters", required=True, help="JSON filter e.g. '{\"ms\": {\"gt\": 500}}'")
     filter_parser.add_argument("--full", action="store_true", help="Show full query fingerprint")
