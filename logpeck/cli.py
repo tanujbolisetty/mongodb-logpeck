@@ -153,6 +153,17 @@ def get_subset_duration(results):
         return max(dur, 1.0)
     except: return 1.0
 
+def render_diagnostic_badges(tags):
+    """Professional CLI badge renderer using Rich colors."""
+    if not tags: return "[dim]BALANCED[/dim]"
+    badges = []
+    for t in tags:
+        label = t.get("label", "N/A")
+        severity = t.get("severity", "warning")
+        color = "bold red" if severity == "critical" else "bold yellow"
+        badges.append(f"[{color}]{label}[/{color}]")
+    return ", ".join(badges)
+
 def print_forensic_table(summary):
     """
     Prints a professional, multi-column forensics table matching the 'Slow Tab' format.
@@ -174,7 +185,6 @@ def print_forensic_table(summary):
         short_hash = f"\n[dim][{raw_hash[:8]}][/dim]" if raw_hash != "N/A" else ""
         op_display = f"{row['category']}{short_hash}"
 
-        # 🚑 Hardening: Enable diagnostic wrapping for multi-badge visibility
         last_seen = str(row.get('last_ts', 'N/A'))
         if len(last_seen) > 19: last_seen = last_seen[11:19]
         
@@ -460,17 +470,12 @@ def main():
                 health_table.add_column("Max", justify="right")
                 health_table.add_column("Count", justify="right")
                 
-                for q in sys_summary[:6]:
+                for h in sys_summary[:6]:
                     health_table.add_row(
-                        q["op_display"],
-                        format_duration(q["avg_time"]), 
-                        format_duration(q["max_time"]), 
-                        f"{q['aas_load']:.2f}",
-                        str(q["count"]),
-                        q["namespace"],
-                        q["app_name"],
-                        render_diagnostic_badges(q.get("clinical_stats", {}).get("tags", [])),
-                        q.get("last_seen", "N/A")
+                        h["category"], 
+                        format_duration(h["avg_time"]), 
+                        format_duration(h["max_time"]), 
+                        str(h["count"])
                     )
                 console.print(Panel(health_table, title="System Health Diagnostics", border_style="yellow"))
 
