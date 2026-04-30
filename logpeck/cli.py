@@ -170,14 +170,14 @@ def print_forensic_table(summary):
     """
     table = Table(header_style="bold magenta", show_lines=True)
     table.add_column("Op", min_width=12)
-    table.add_column("Avg", justify="right")
-    table.add_column("Max", justify="right")
-    table.add_column("AAS", justify="right", style="cyan")
-    table.add_column("Count", justify="right")
+    table.add_column("Avg")
+    table.add_column("Max")
+    table.add_column("AAS", style="cyan")
+    table.add_column("Count")
     table.add_column("Namespace", ratio=1)
     table.add_column("App", overflow="fold")
     table.add_column("Diagnostic", overflow="fold", ratio=1)
-    table.add_column("Last Seen", justify="right", style="dim")
+    table.add_column("Last Seen", style="dim")
     
     for row in summary:
         # 🧪 UI Polish: Append short shape-hash to Op for easier pattern tracking
@@ -210,11 +210,11 @@ def print_failure_forensic_table(summary):
     table = Table(header_style="bold red", show_lines=True)
     table.add_column("Code", style="bold red")
     table.add_column("Error", ratio=1)
-    table.add_column("Count", justify="right")
+    table.add_column("Count")
     table.add_column("Query Shape Hash", overflow="fold")
     table.add_column("Namespace", ratio=1)
     table.add_column("App", overflow="fold")
-    table.add_column("Last Seen", justify="right", style="dim")
+    table.add_column("Last Seen", style="dim")
     
     for row in summary:
         err = str(row.get('error_name') or row.get('error_code') or "TIMEOUT")
