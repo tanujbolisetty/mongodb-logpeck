@@ -109,10 +109,10 @@ def print_log_card(entry, full=False):
     if msg:
         console.print(f"  [italic]{msg[:130]}...[/italic]" if len(msg) > 130 else f"  [italic]{msg}[/italic]")
 
-    # Forensic Timeline: Surface all extracted time markers
+    # Forensic Timeline: Surface all extracted time markers in human-readable format
     waits = metrics.get("waits_ms", {})
     if waits:
-        wait_parts = [f"{k}={v}ms" for k, v in waits.items() if v > 0]
+        wait_parts = [f"{FIELD_DISPLAY.get(k, k).replace(' Effort', '').replace(' Contention', '').replace(' Wait', '').replace(' Time', '').replace(' Throttling', '').replace(' Ticket ', '')}={format_duration(v)}" for k, v in waits.items() if v > 0]
         if wait_parts:
             console.print(f"  [dim]Waits:[/dim] {', '.join(wait_parts)}")
 

@@ -74,7 +74,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         ("repl_ms", "#EF4444", "Replication Wait"),
         ("queue_ms", "#EC4899", "Ticket Queue"),
         ("lock_ms", "#8B5CF6", "Lock Contention"),
-        ("planning_ms", "#6366F1", "Planning")
+        ("planning_ms", "#6366F1", "Planning"),
+        ("search_ms", "#00ED64", "Search Wait")
     ]
     
     radar_bars = "".join([f'<div style="width:{_pct(k)}%; background:{color}; height:100%" title="{label}"></div>' for k, color, label in radar_segments if _pct(k) > 0])

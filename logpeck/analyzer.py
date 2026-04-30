@@ -489,6 +489,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     global_bottlenecks["lock_ms"] += l_ms
                     global_bottlenecks["repl_ms"] += repl_ms
                     global_bottlenecks["planning_ms"] += waits.get("planning", 0)
+                    global_bottlenecks["search_ms"] += waits.get("mongot_wait", 0)
                     
                     # 📊 Full Portfolio Instrumentation
                     op_registry[str(metrics.get("op", "unknown"))] += 1

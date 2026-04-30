@@ -548,13 +548,17 @@ def calculate_waits(attr: Dict[str, Any], entry: Dict[str, Any], forensic: Dict[
 
     # 3. Queue / Planning / Repl
     q_micros = get_nested_value(entry, "attr.queues.execution.totalTimeQueuedMicros") or 0
-    if q_micros > 0: waits["queued"] = round(q_micros / 1000.0, 2)
+    if q_micros > 0: waits["queue_wait"] = round(q_micros / 1000.0, 2)
     
     p_micros = attr.get("planningTimeMicros") or 0
     if p_micros > 0: waits["planning"] = round(p_micros / 1000.0, 2)
     
     flow = attr.get("flowControlMillis") or 0
     if flow > 0: waits["replication_wait"] = flow
+
+    # 3.5 Atlas Search
+    mongot = forensic.get("mongot_wait", 0)
+    if mongot > 0: waits["mongot_wait"] = mongot
 
     # 4. Pure Execution
     work = attr.get("workingMillis")

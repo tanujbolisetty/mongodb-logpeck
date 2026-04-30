@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "logpeck"
-version = "5.0.8"
+version = "5.0.12"
 authors = [
     { name = "Tanuj Kumar Bolisetty" }
 ]
@@ -29,3 +29,7 @@ peck = "logpeck.cli:main"
 
 [tool.setuptools]
 packages = ["logpeck"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+logpeck = ["*.json"]

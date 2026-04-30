@@ -47,7 +47,7 @@
     },
     {
       "id": "reslen",
-      "label": "Result Size (Bytes)",
+      "label": "Result Size",
       "category": "📊 READ FORENSICS",
       "unit": "bytes",
       "source": "attr.reslen",
@@ -128,7 +128,7 @@
     },
     {
       "id": "txnBytesDirty",
-      "label": "Cache Dirty (Bytes)",
+      "label": "Cache Dirty",
       "category": "🖋️ WRITE CHURN",
       "unit": "bytes",
       "source": "attr.storage.data.txnBytesDirty",
@@ -209,7 +209,7 @@
     },
     {
       "id": "planning",
-      "label": "Planning Time (µs)",
+      "label": "Planning Time",
       "category": "🧭 PLANNING",
       "unit": "us",
       "source": "attr.planningTimeMicros",
@@ -226,8 +226,8 @@
       "description": "Time waiting for results from other shards or remote nodes."
     },
     {
-      "id": "workingMillis",
-      "label": "Raw Execution (ms)",
+      "id": "execution",
+      "label": "Execution Time",
       "category": "⚙️ PURE EXECUTION",
       "unit": "ms",
       "source": "attr.workingMillis",
@@ -272,7 +272,7 @@
     },
     {
       "id": "cpuNanos",
-      "label": "CPU Time (ns)",
+      "label": "CPU Time",
       "category": "⚙️ PURE EXECUTION",
       "unit": "ns",
       "source": "attr.cpuNanos",
@@ -281,7 +281,7 @@
     },
     {
       "id": "timeActiveMicros",
-      "label": "Time Active (µs)",
+      "label": "Time Active",
       "category": "🔗 TRANSACTIONS",
       "unit": "us",
       "source": "attr.timeActiveMicros",
@@ -290,7 +290,7 @@
     },
     {
       "id": "timeInactiveMicros",
-      "label": "Time Inactive (µs)",
+      "label": "Time Inactive",
       "category": "🔗 TRANSACTIONS",
       "unit": "us",
       "source": "attr.timeInactiveMicros",
@@ -305,6 +305,15 @@
       "source": "attr.prepareReadConflictMillis",
       "markers": ["prepareReadConflictMillis"],
       "description": "Time spent waiting for a consistent snapshot of the data."
+    },
+    {
+      "id": "mongot_wait",
+      "label": "Search Wait",
+      "category": "LATENCY",
+      "unit": "ms",
+      "source": "attr.mongot.timeWaitingMillis",
+      "markers": ["timeWaitingMillis"],
+      "description": "Time spent waiting for the Atlas Search (mongot) process to return results."
     },
     {
       "id": "scan_efficiency",
