@@ -159,12 +159,12 @@ def print_forensic_table(summary):
     """
     table = Table(header_style="bold magenta", show_lines=True)
     table.add_column("Op", min_width=12)
-    table.add_column("Namespace", ratio=1)
-    table.add_column("App", overflow="fold")
     table.add_column("Avg", justify="right")
     table.add_column("Max", justify="right")
     table.add_column("AAS", justify="right", style="cyan")
     table.add_column("Count", justify="right")
+    table.add_column("Namespace", ratio=1)
+    table.add_column("App", overflow="fold")
     table.add_column("Diagnostic", overflow="fold", ratio=1)
     table.add_column("Last Seen", justify="right", style="dim")
     
@@ -195,12 +195,12 @@ def print_failure_forensic_table(summary):
     Removes performance metrics (Avg/Max) and Diagnostic, adds Error and Full Hash.
     """
     table = Table(header_style="bold red", show_lines=True)
-    table.add_column("Op", width=12)
-    table.add_column("Namespace", ratio=1)
-    table.add_column("App", overflow="fold")
-    table.add_column("Error", style="bold red")
+    table.add_column("Code", style="bold red")
+    table.add_column("Error", ratio=1)
     table.add_column("Count", justify="right")
     table.add_column("Query Shape Hash", overflow="fold")
+    table.add_column("Namespace", ratio=1)
+    table.add_column("App", overflow="fold")
     table.add_column("Last Seen", justify="right", style="dim")
     
     for row in summary:
