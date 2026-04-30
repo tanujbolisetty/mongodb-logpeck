@@ -724,7 +724,7 @@ The `failure-workload` command MUST prioritize error metadata over performance m
 1. **Code**: Bold high-contrast red.
 2. **Error**: Bold description.
 3. **Count**: Right-justified.
-4. **Query Shape Hash**: The full 64-char fingerprint (folded).
+4. **Query Shape Hash**: The **FULL** 64-char fingerprint (folded, not truncated).
 5. **Namespace**: Target collection.
 6. **App**: Originating client.
 7. **Last Seen**: Dimmed timestamp.
