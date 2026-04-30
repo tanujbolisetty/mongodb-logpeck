@@ -146,7 +146,7 @@ def print_log_card(entry, full=False):
     p_key = metrics.get("plan_cache_key", "N/A")
     
     if q_shape != "N/A" or q_hash != "N/A" or p_key != "N/A":
-        shape_display = q_shape if full else q_shape[:8]
+        shape_display = q_shape if full else (f"{q_shape[:8]}.." if len(q_shape) > 8 else q_shape)
         console.print(f"  [dim]IDs:[/dim] Shape[[green]{shape_display}[/green]] Query[[green]{q_hash}[/green]] Plan[[green]{p_key}[/green]]")
         console.print(f"  [dim](S: Shape Hash | Q: Query Hash | P: Plan Cache Key)[/dim]")
 
@@ -198,7 +198,8 @@ def print_forensic_table(summary):
         q_hash = str(row.get('query_hash') or "N/A")
         p_key = str(row.get('plan_cache_key') or "N/A")
         
-        short_hash = f"\n[dim]S:[{raw_hash[:8]}] Q:[{q_hash}] P:[{p_key}][/dim]" if raw_hash != "N/A" else ""
+        short_shape = f"{raw_hash[:8]}.." if raw_hash != "N/A" and len(raw_hash) > 8 else raw_hash
+        short_hash = f"\n[dim]S:[{short_shape}] Q:[{q_hash}] P:[{p_key}][/dim]" if raw_hash != "N/A" else ""
         op_display = f"{row['category']}{short_hash}"
 
         last_seen = str(row.get('last_ts', 'N/A'))
