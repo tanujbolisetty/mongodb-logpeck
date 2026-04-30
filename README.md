@@ -111,6 +111,9 @@ peck filter --file mongod.log --filters '{"plan": "COLLSCAN"}' --cards
 
 # Rapid volume check (Count only)
 peck filter --file mongod.log --filters '{"ms": {"gt": 1000}}' --count
+
+# Control display volume (Top 5 results)
+peck filter --file mongod.log --filters '{"ms": {"gt": 500}}' --limit 5
 ```
 
 ### 7. Forensic Search (Stateful vs. Stateless)
@@ -122,6 +125,9 @@ LogPeck offers two powerful ways to discover information:
 ```bash
 # Forensic: Find everything connected to the identity
 peck search --file mongod.log --keyword "compass"
+
+# Forensic: Find top 5 results connected to identity
+peck search --file mongod.log --keyword "compass" --limit 5
 
 # High-Precision: Find only literal matches
 peck search --file mongod.log --keyword "compass" --grep
