@@ -119,6 +119,9 @@ peck filter --file mongod.log --filters '{"ms": {"gt": 500}}' --limit 5
 peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"gt": 536045710}}' --cards
 ```
 
+> [!TIP]
+> **Metric Normalization**: LogPeck standardizes various MongoDB fields into short identifiers for easier filtering. For example, `ms` automatically maps to `durationMillis` (or `durationMS` in older logs). Use the **Reference Tab** in the dashboard to see all 40+ mapping definitions.
+
 ### 7. Forensic Search (Stateful vs. Stateless)
 LogPeck offers two powerful ways to discover information:
 
