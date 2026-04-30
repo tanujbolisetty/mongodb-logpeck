@@ -623,7 +623,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@600&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <style>
         :root {{
-            /* 🎨 Industrial Design Tokens (v1.1.5)
+            /* 🎨 Industrial Design Tokens 
                High-contrast dark mode with MongoDB-native emerald accent. */
             --bg: #0b111a; --card-bg: #151e29; --text-primary: #e1e7ef; --text-secondary: #94a3b8;
             --accent: #00ed64; --border: #1e293b; --header-bg: #112028;
@@ -943,7 +943,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             </div>
 
             <div class="card">
-                <div class="card-label" style="color:var(--accent)">🚦 Forensic Diagnostic Decoder (v1.3.10)</div>
+                <div class="card-label" style="color:var(--accent)">🚦 Forensic Diagnostic Decoder </div>
                 <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem">Expert-curated conditions and forensic significance for every query tag the engine generates.</p>
                 <table style="margin-top:1.5rem; width:100%; table-layout: auto">
                     <thead><tr><th style="width:180px">TAG</th><th>INTERNAL TRIGGER CONDITION</th><th>FORENSIC SIGNIFICANCE</th></tr></thead>
@@ -976,7 +976,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             </div>
 
             <div class="card" style="margin-top:2rem">
-                <div class="card-label" style="color:var(--accent)">🧬 Forensic Bottleneck Radar Methodology (v3.3.4)</div>
+                <div class="card-label" style="color:var(--accent)">🧬 Forensic Bottleneck Radar Methodology </div>
                 <p style="color:var(--text-secondary); margin-top:1rem; font-size:0.9rem">The Radar provides a <strong>weighted distribution</strong> of cluster-wide wait times across all analyzed operations. It is designed to identify the primary resource bottleneck (e.g., are we CPU-bound or Concurrency-bound?).</p>
                 <table style="margin-top:1.5rem; width:100%; table-layout: auto">
                     <thead><tr><th style="width:160px">RADAR SEGMENT</th><th style="width:250px">RAW LOG FIELD(S)</th><th>TECHNICAL BOTTLENECK CONTEXT</th></tr></thead>
@@ -990,7 +990,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     </tbody>
                 </table>
                 <div class="card" style="border-left:4px solid var(--accent)">
-                    <div class="card-label">🧬 CLINICAL WAIT DIAGNOSIS GUIDE (v3.3.3)</div>
+                    <div class="card-label">🧬 CLINICAL WAIT DIAGNOSIS GUIDE </div>
                     <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:10px">The hierarchy of operation latency in MongoDB Atlas.</p>
                     <table style="margin-top:15px; font-size:0.8rem">
                         <thead><tr><th>Hierarchy</th><th>Metric</th><th>Diagnosis</th><th>Remediation</th></tr></thead>

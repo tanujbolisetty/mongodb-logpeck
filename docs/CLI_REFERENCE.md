@@ -1,6 +1,6 @@
 # 🐦 LogPeck: Forensic CLI Reference
 
-This document provides a comprehensive technical guide to all command-line flags available in the `logpeck` forensic suite (v5.0.8).
+This document provides a comprehensive technical guide to all command-line flags available in the `logpeck` forensic suite.
 
 ---
 

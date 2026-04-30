@@ -1,4 +1,4 @@
-# 🐦 LogPeck — Core Design Specification (v5.0.8)
+# 🐦 LogPeck — Core Design Specification
 
 > **Status**: Production Blueprint (High-Fidelity)  
 > **Source of Truth**: [specification.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/specification.py) & [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py)  
@@ -35,14 +35,14 @@ While the engine prefers the `BSON` attribute parser, it utilizes these surgical
 | :--- | :--- | :--- |
 | **Connection ID** | `conn(\d+)` | Extracts the numeric `ctx` from unstructured string headers. |
 | **Namespace** | `([\w.-]+\.\$?\w+)` | Extracts the `DB.Collection` anchor when the `ns` attribute is missing. |
-| **Duration** | `(\d+)ms` | Captures wall-clock latency for non-standard log events (v5.0.8: includes 'ms' field support). |
-| **Join Pattern** | `$lookup` | (v5.0.8) Blind search for relational join stages in the command block. |
+| **Duration** | `(\d+)ms` | Captures wall-clock latency for non-standard log events. |
+| **Join Pattern** | `$lookup` | Blind search for relational join stages in the command block. |
 | **Oplog Source** | `oplog.rs` | Special handling for high-volume replication gossip. |
 
 ### 2.2 Attribute Sanitization Hierarchy
 To prevent "Pathological Attribute Bloat," the engine sanitizes the `attr` dictionary in this exact priority order:
 1. **Extraction**: Pulls numeric metrics into the `stats` bucket.
-2. **Standardization**: Forces all durations into milliseconds (ms). (v5.0.8: Probes `durationMillis`, `durationMS`, and `ms` across both `attr` and top-level fields).
+2. **Standardization**: Forces all durations into milliseconds (ms)..
 3. **Blacklisting**: Removes high-volume, low-signal keys (e.g., `appName` in every line) before storing forensic payloads.
 4. **Key Flattening**: Collapses `attr.locks` sub-trees into the flat `lock_wait` summary.
 
@@ -76,14 +76,14 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 
 The engine implements surgical logic to differentiate between business workloads and infrastructure noise.
 
-### 3.1 Tab Partitioning Strategy (v3.3.4 Final Release)
+### 3.1 Tab Partitioning Strategy
 LogPeck partitions query shapes into three dedicated diagnostic channels based on a strict priority hierarchy:
 
 | Priority | Tab Category | Routing Criteria |
 | :--- | :--- | :--- |
-| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. Also promotes any log with Severity `WARN`, `ERROR`, or `FATAL`. **Failures always win**; infrastructure errors are routed here. Includes a dedicated table for headless/orphan network anomalies with deep-harvested numerical codes. **v5.0.8: Mandatory 'LAST SEEN' column added for temporal context.** |
-| **2 (High)** | **🐢 Business Workload** | All successful user-level operations targeting business namespaces. This is the 2nd tab for primary developer visibility. **v5.0.8: Mandatory 'LAST SEEN' column and join detection tagging.** |
-| **3 (Med)** | **🛠️ System Query** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL, Heartbeats). **v5.0.8: Mandatory 'LAST SEEN' column.** |
+| **1 (Peak)** | **🚨 Failure Forensics** | Any operation containing `errCode`, `code`, or `MaxTimeMSExpired`. Also promotes any log with Severity `WARN`, `ERROR`, or `FATAL`. **Failures always win**; infrastructure errors are routed here. Includes a dedicated table for headless/orphan network anomalies with deep-harvested numerical codes. **Mandatory 'LAST SEEN' column added for temporal context.** |
+| **2 (High)** | **🐢 Business Workload** | All successful user-level operations targeting business namespaces. This is the 2nd tab for primary developer visibility. **Mandatory 'LAST SEEN' column and join detection tagging.** |
+| **3 (Med)** | **🛠️ System Query** | Operations targeting internal namespaces (`admin`, `local`, `config`) or identified as system maintenance (TTL, Heartbeats). **Mandatory 'LAST SEEN' column.** |
 
 ### 3.2 AAS Load % Math (Global Synchronization)
 To ensure proportionality, the **AAS Load %** (green progress bar) is calculated via a global denominator:
@@ -91,12 +91,12 @@ To ensure proportionality, the **AAS Load %** (green progress bar) is calculated
 - **Denominator**: `Global_Active_MS = SUM(Active_Time_Business) + SUM(Active_Time_System) + SUM(Active_Time_Failures)`.
 - **Result**: A 10% load bar in "Business" represents the same physical weight as a 10% bar in "System".
 
-### 3.2 Hierarchical Diagnostic Routing (v2.7.6)
+### 3.2 Hierarchical Diagnostic Routing
 Events are bucketed using the priority defined in Section 3.1 to ensure that infrastructure noise never masks workload performance issues or critical failures.
 
 ---
 
-### 🧬 CRUD Normalization (v2.7.6)
+### 🧬 CRUD Normalization
 All business workload operations are normalized into a standard forensic vocabulary:
 *   **Abbreviation Expansion**: `u`, `i`, `d` are expanded to `update`, `insert`, `delete`.
 *   **Transaction Prefixing**: Operations part of a multi-document transaction (tagged with `txnNumber`) are prefixed with `tx-` (e.g., `tx-update`).
@@ -110,7 +110,7 @@ All business workload operations are normalized into a standard forensic vocabul
 
 To handle complex operations, the engine implements targeted extraction logic and standardization for high-impact diagnostic categories.
 
-### 4.0 Operation Normalization (v2.7.6)
+### 4.0 Operation Normalization
 To ensure analytical consistency across raw log formats (Command vs CRUD blocks):
 - **Abbreviation Expansion**: Raw operations like `u`, `i`, and `d` are automatically expanded to `update`, `insert`, and `delete`.
 - **Transactional Enrichment**: All CRUD and command operations occurring within a session context (identified by `txnNumber`) are prefixed with `tx-` (e.g., `tx-update`, `tx-find`).
@@ -178,7 +178,7 @@ The engine evaluates query shapes against these clinical diagnostic rules:
 
 ---
 
-## 🎨 6. Clinical Intelligence & Color Philosophy (v4.3.0)
+## 🎨 6. Clinical Intelligence & Color Philosophy
 
 LogPeck implements a visual diagnostic language to differentiate between structural query pathogens and environmental resource victims.
 
@@ -211,7 +211,7 @@ To align Developers and SREs, diagnostic tags are prefixed based on their domain
 
 ---
 
-## 🚦 7. Error Resolution Engine (Truth Engine) (v2.7.8)
+## 🚦 7. Error Resolution Engine (Truth Engine)
 
 LogPeck implements an autonomous resolution layer to transform numeric MongoDB codes into human-readable diagnostics.
 
@@ -219,7 +219,7 @@ LogPeck implements an autonomous resolution layer to transform numeric MongoDB c
 - **Inventory**: Contains 488 official MongoDB error codes (1 to 13436065).
 - **Back-filling**: If a log entry contains an `errCode` but lacks an `errName`, the engine automatically populates the name from the internal registry during Pass 2 synthesis.
 
-### 7.3 Surgical Error Triage (Hardened v5.0.6)
+### 7.3 Surgical Error Triage (Hardened)
 To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard, the engine implements a surgical promotion protocol:
 - **Default Promotion**: Events with Severity `W` (Warning), `E` (Error), or `F` (Fatal) are automatically promoted.
 - **Operational Failure Recovery**: Logs with `ok: 0` or explicit error codes (e.g., `E11000`) are promoted even if logged at Severity `I` (Informational).
@@ -229,18 +229,18 @@ To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard,
 
 ---
 
-## 📊 8. Forensic UI Specification (v2.7.8)
+## 📊 8. Forensic UI Specification
 
 The Failure Forensics dashboard is designed for rapid diagnostic triage.
 
-### 13.1 Failure Forensic Columns (v5.0.8 Consolidation)
+### 13.1 Failure Forensic Columns
 The "Failure Forensics" tab is optimized for signal-to-noise ratio by consolidating multiple views into a three-part diagnostic hierarchy:
 
 1.  **Executive Failure Summary**: Aggregated by `Error Code`.
 2.  **Query Shape Failure Analysis**: Aggregated by `Query Shape` + `Error Code`.
 3.  **System & Network Errors**: Raw infrastructure anomalies.
 
-The "Error Event Timeline" (previously Section 2) has been deprecated in v5.0.8 to prevent UI clutter. Its critical chronological signal has been merged into the Query Shape table.
+The "Error Event Timeline" (previously Section 2) has been deprecated in to prevent UI clutter. Its critical chronological signal has been merged into the Query Shape table.
 
 #### 13.1.1 Query Shape Failure Analysis Table
 | Column | Width | Description |
@@ -264,7 +264,7 @@ The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation
 
 ---
 
-## 🧪 10. Forensic Hybrid Model (v3.3.7)
+## 🧪 10. Forensic Hybrid Model
 The engine utilizes a **Hybrid Anchor** philosophy to maximize forensic signal:
 - **Efficiency Metrics (Sample-based)**: Scan Efficiency, Index Selectivity, and Fetch Amplification are calculated from the **Slowest Payload** (Worst-case scenario) to explain why a specific query took the maximum time.
 - **Economic Metrics (Shape-based)**: Workload Amplification is calculated as an **Aggregate Average** across the entire query shape to represent the total I/O tax of the indexing strategy.
@@ -293,7 +293,7 @@ To reduce noise, the dashboard dynamically hides tiles that are irrelevant to th
 
 ---
 
-## 🚦 11. Clinical Wait Latency Hierarchy (v3.3.2)
+## 🚦 11. Clinical Wait Latency Hierarchy
 To prevent misdiagnosis, the engine distinguishes between three distinct "wait" concepts that occur at different stages of the operation lifecycle.
 
 ### 11.1 The Diagnostic Boundaries
@@ -310,7 +310,7 @@ The `Storage Effort` metric is a synthetic derivation designed to summarize phys
 
 ---
 
-## 🚦 12. Diagnostic Attribution Strategy (v4.1.6)
+## 🚦 12. Diagnostic Attribution Strategy
 
 LogPeck implements a **Hybrid Rule Engine** to ensure that diagnostic badges provide accurate forensic signals without infrastructure noise. This strategy differentiates between transient environmental pressures and permanent structural pathologies.
 
@@ -332,7 +332,7 @@ The [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-p
 
 ---
 
-## 🖥️ 13. Dashboard UI Specification (v4.6.4)
+## 🖥️ 13. Dashboard UI Specification
 
 > **Source of Truth**: [reporter.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/reporter.py)
 > **Purpose**: This section defines every visual element of the HTML dashboard. Any modification to the UI **MUST** be reflected here. Any future change **MUST NOT** remove or restructure existing elements — only add to them surgically.
@@ -521,7 +521,7 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 
 ---
 
-### 13.8 Plan Badge System (v4.6.4)
+### 13.8 Plan Badge System
 
 The PLAN column uses styled pill badges to visually distinguish Search and Vector operations:
 
@@ -570,7 +570,7 @@ This centralized utility ensures that the CLI output, dynamic Rule Engine tags (
 
 ---
 
-## 🔍 16. Forensic Search Engine & Discovery Architecture (v5.0.2)
+## 🔍 16. Forensic Search Engine & Discovery Architecture
 
 LogPeck implements a dual-mode search engine to balance diagnostic power with surgical precision.
 
@@ -642,7 +642,7 @@ The dashboard is a **Single-File Zero-Dependency** application:
 
 ---
 
-## 💾 4. Cross-Platform Integrity & Encoding (v5.0.6)
+## 💾 4. Cross-Platform Integrity & Encoding
 
 To ensure forensic reliability across Windows, macOS, and Linux, LogPeck enforces a strict UTF-8 encoding contract for all file operations.
 

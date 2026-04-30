@@ -222,7 +222,7 @@ def main():
     It parses sys.argv and dispatches to the appropriate analytical module.
     """
     parser = argparse.ArgumentParser(
-        description="🐦 LogPeck: Forensic MongoDB Log Analytics (v5.0.7)\n"
+        description="🐦 LogPeck: Forensic MongoDB Log Analytics \n"
                     "Hardened observability with Ticket/Lock/Repl wait-hierarchy logic and Clinical Mutation diagnostics.",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )

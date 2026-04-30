@@ -285,7 +285,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
 
 def normalize_conn_id(ctx: str) -> str:
     """
-    Standardizes connection IDs for stateful reconstruction (v2.0.0).
+    Standardizes connection IDs for stateful reconstruction .
     
     MongoDB uses varying formats like '[conn123]', 'conn123', or just '123'. 
     This normalizes everything to 'conn123' to allow consistent lookup 
@@ -416,7 +416,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
 def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", has_crud: bool = False) -> bool:
     """
-    Surgically identifies if an event is internal system noise (v2.0.1 Refinement).
+    Surgically identifies if an event is internal system noise .
     Filters by Namespace, App Name, OR Component.
     """
     # 1. Explicit System Namespace check (Priority 1)
@@ -449,7 +449,7 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
 
 def synthesize_flat_attr(entry: Dict[str, Any]) -> Dict[str, Any]:
     """
-    🧪 Flat-Block Hybrid Induction (v3.2.5).
+    🧪 Flat-Block Hybrid Induction .
     Synthesizes a temporary attr block from top-level fields for lean logs.
     """
     attr = {}
@@ -616,7 +616,7 @@ def extract_search_metadata(attr: Dict[str, Any], entry: Dict[str, Any], cmd_obj
 
 def discovery_harvest(obj: Any, marker_map: Dict[str, str], result: Optional[Dict[str, Any]] = None, depth: int = 0) -> Dict[str, Any]:
     """
-    The Universal Discovery Harvester (v3.2.0).
+    The Universal Discovery Harvester .
     Performs a Breadth-First Search (BFS) for keys listed in METRIC_MARKERS.
     """
     if result is None: result = {}

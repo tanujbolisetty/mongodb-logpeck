@@ -124,7 +124,7 @@ def read_logs_chunked(file_path: str):
 
 def build_forensic_context(log_file_path: str) -> Dict[str, Dict[str, str]]:
     """
-    The Pre-Scan Discovery Layer (v5.0.1).
+    The Pre-Scan Discovery Layer .
     
     Performs a high-speed context sweep of the log file to build a map 
     of Connection ID -> {Namespace, AppName}.
@@ -935,7 +935,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
         return res
 
     except Exception as ge:
-        print(f"!!! [CRITICAL v1.3.2] Global Engine Failure: {ge}")
+        print(f"!!! [CRITICAL ] Global Engine Failure: {ge}")
         import traceback; traceback.print_exc()
         return { "stats": {}, "connections": {}, "summary": [] }
 
@@ -1189,6 +1189,6 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
     return final_results
 
 def aggregate_forensic_results(entries: List[Dict], log_dur_sec: float = 1.0, rules: List = None) -> List[Dict]:
-    """🌪️ Unified Forensic Entry Point (v2.6.0)"""
+    """🌪️ Unified Forensic Entry Point """
     shape_stats = group_by_shape(entries)
     return finalize_forensic_summary(shape_stats, log_dur_sec, rules)
