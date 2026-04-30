@@ -1166,8 +1166,9 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "unknown",
             "plan_summary": str(max_d.get("plan_summary", "N/A")),
             # 🏺 Web Drill-Down Metadata (Mandatory Contract)
+            "namespace": str(q.get("namespace", "N/A")),
             "query_shape_hash": str(q.get("query_shape_hash", "N/A")),
-            "plan_cache_shape_hash": str(max_d.get("plan_cache_shape_hash", "N/A")),
+            "plan_cache_shape_hash": str(max_d.get("plan_cache_shape_hash") or q.get("query_shape_hash") or "N/A"),
             "query_hash": str(q.get("query_hash", "N/A")),
             "plan_cache_key": str(q.get("plan_cache_key", "N/A")),
             "query_schema": max_d.get("query_schema", []),

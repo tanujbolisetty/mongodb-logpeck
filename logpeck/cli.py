@@ -157,21 +157,21 @@ def print_forensic_table(summary):
     """
     Prints a professional, multi-column forensics table matching the 'Slow Tab' format.
     """
-    table = Table(header_style="bold magenta", expand=True, show_lines=True)
-    table.add_column("Op", width=18)
+    table = Table(header_style="bold magenta", show_lines=True)
+    table.add_column("Op", min_width=12)
     table.add_column("Namespace", ratio=1)
     table.add_column("App")
     table.add_column("Avg", justify="right")
     table.add_column("Max", justify="right")
     table.add_column("AAS", justify="right", style="cyan")
     table.add_column("Count", justify="right")
-    table.add_column("Diagnostic", overflow="fold")
+    table.add_column("Diagnostic", overflow="fold", ratio=1)
     table.add_column("Last Seen", justify="right", style="dim")
     
     for row in summary:
         # 🧪 UI Polish: Append short shape-hash to Op for easier pattern tracking
         raw_hash = str(row.get('plan_cache_shape_hash') or row.get('query_shape_hash') or "N/A")
-        short_hash = f" [dim][{raw_hash[:8]}][/dim]" if raw_hash != "N/A" else ""
+        short_hash = f"\n[dim][{raw_hash[:8]}][/dim]" if raw_hash != "N/A" else ""
         op_display = f"{row['category']}{short_hash}"
 
         # 🚑 Hardening: Enable diagnostic wrapping for multi-badge visibility
