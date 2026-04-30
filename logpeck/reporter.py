@@ -1062,7 +1062,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             const filter = input.value.toLowerCase();
             const table = document.getElementById(tableId);
             const rows = table.getElementsByClassName('row-main');
-            const details = table.getElementsByClassName('row-details');
+            const details = table.getElementsByClassName('details-row');
 
             for (let i = 0; i < rows.length; i++) {{
                 const mainText = rows[i].textContent.toLowerCase();
@@ -1094,11 +1094,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if (row.classList.contains('row-main')) {{
                     const mainText = row.textContent.toLowerCase();
                     const nextRow = row.nextElementSibling;
-                    const detailText = (nextRow && nextRow.classList.contains('row-details')) ? nextRow.textContent.toLowerCase() : "";
+                    const detailText = (nextRow && nextRow.classList.contains('details-row')) ? nextRow.textContent.toLowerCase() : "";
                     const isMatch = mainText.includes(filter) || detailText.includes(filter);
                     
                     row.style.display = isMatch ? "" : "none";
-                    if (nextRow && nextRow.classList.contains('row-details')) {{
+                    if (nextRow && nextRow.classList.contains('details-row')) {{
                         if (!isMatch) {{
                             nextRow.style.display = "none";
                         }} else if (nextRow.classList.contains('expanded')) {{
@@ -1108,7 +1108,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     continue;
                 }}
                 
-                if (row.classList.contains('row-details')) continue; // Handled by row-main logic
+                if (row.classList.contains('details-row')) continue; // Handled by row-main logic
 
                 row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
             }}

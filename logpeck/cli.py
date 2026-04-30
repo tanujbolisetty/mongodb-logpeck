@@ -432,7 +432,7 @@ def main():
             results = search_logs(args.file, args.keyword, limit=search_limit, count_only=args.count, grep_mode=args.grep)
             
             if args.count:
-                print(len(results))
+                print(results)
                 return
                 
             if args.json:
@@ -462,10 +462,10 @@ def main():
             
             # If counting, we bypass the limit to get the true total
             filter_limit = 0 if args.count else args.limit
-            results = filter_logs(args.file, f_obj, limit=filter_limit)
+            results = filter_logs(args.file, f_obj, limit=filter_limit, count_only=args.count)
             
             if args.count:
-                print(len(results))
+                print(results)
                 return
                 
             if args.json:
