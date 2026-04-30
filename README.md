@@ -43,8 +43,8 @@ peck dashboard --file mongod.log --html forensic_report.html
 Or perform surgical analysis directly in your terminal:
 
 ```bash
-# Find the slowest 10 business queries
-peck workload --file mongod.log --limit 10
+# Analyze business workload hotspots
+peck workload --file mongod.log
 
 # Analyze all systemic errors and timeouts
 peck failure-workload --file mongod.log
