@@ -157,22 +157,31 @@ def print_forensic_table(summary):
     """
     Prints a professional, multi-column forensics table matching the 'Slow Tab' format.
     """
-    table = Table(header_style="bold magenta")
-    table.add_column("Op", width=8); table.add_column("Namespace", ratio=1); table.add_column("App")
-    table.add_column("Avg", justify="right"); table.add_column("Max", justify="right")
+    table = Table(header_style="bold magenta", expand=True)
+    table.add_column("Op", width=18)
+    table.add_column("Namespace", ratio=1)
+    table.add_column("App")
+    table.add_column("Avg", justify="right")
+    table.add_column("Max", justify="right")
     table.add_column("AAS", justify="right", style="cyan")
     table.add_column("Count", justify="right")
-    table.add_column("Diagnostic", width=20); table.add_column("Last Seen", justify="right", style="dim")
+    table.add_column("Diagnostic", overflow="fold")
+    table.add_column("Last Seen", justify="right", style="dim")
     
     for row in summary:
+        # 🧪 UI Polish: Append short shape-hash to Op for easier pattern tracking
+        raw_hash = str(row.get('plan_cache_shape_hash') or row.get('query_shape_hash') or "N/A")
+        short_hash = f" [dim][{raw_hash[:8]}][/dim]" if raw_hash != "N/A" else ""
+        op_display = f"{row['category']}{short_hash}"
+
+        # 🚑 Hardening: Enable diagnostic wrapping for multi-badge visibility
         diag = ", ".join([str(t['label']) for t in row.get('diagnostic_tags', [])])
-        if len(diag) > 20: diag = diag[:17] + "..."
         
         last_seen = str(row.get('last_ts', 'N/A'))
         if len(last_seen) > 19: last_seen = last_seen[11:19]
         
         table.add_row(
-            str(row['category']), str(row['namespace']), str(row.get('app_name', 'unknown')),
+            op_display, str(row['namespace']), str(row.get('app_name', 'unknown')),
             format_duration(row['avg_time']), format_duration(row['max_time']), 
             f"{row.get('aas_load', 0):.2f}",
             str(row['count']), diag, last_seen
