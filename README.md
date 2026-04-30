@@ -21,15 +21,8 @@ Standard monitoring tells you *when* things are slow. **LogPeck tells you why.**
 ---
 
 ## 📦 Installation
-
-#### **Stable Version**
 ```bash
 pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git
-```
-
-#### **Advanced Beta Branch** (Includes latest Truth Engine and Search Index)
-```bash
-pip3 install git+https://github.com/tanujbolisetty/mongodb-logpeck.git@fix/forensic-engine-hardening
 ```
 
 > [!TIP]
