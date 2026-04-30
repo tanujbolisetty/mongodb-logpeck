@@ -2,6 +2,16 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.13] - 2026-04-30
+### Added
+- **Plan Hash CLI Visibility**: Injected short-hash identifiers (`[planCacheShapeHash]`) directly into the CLI "Op" column for immediate query pattern matching.
+- **Dynamic Terminal Wrapping**: Enabled `overflow="fold"` and row separators in the terminal table, ensuring long diagnostic badges and hashes are fully visible in smaller windows.
+- **Searchable Plan Hashes**: Synchronized the forensic search engine to include `planCacheShapeHash` as a primary searchable field.
+
+### Fixed
+- **Metric Extraction Hardening**: Explicitly promoted `planCacheShapeHash` to a first-class forensic metric for consistent filtering and reporting.
+- **Quick Start Accuracy**: Sanitized the README documentation to remove stale `--limit` examples from core workload commands.
+
 ## [5.0.10] - 2026-04-29
 ### Added
 - **Hardened Forensic Payload UI**: Standardized "Representative Forensic Payload" rendering with automatic pretty-printing and indentation across Failure and System Health tabs.
