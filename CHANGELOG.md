@@ -2,6 +2,17 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.10] - 2026-04-29
+### Added
+- **Hardened Forensic Payload UI**: Standardized "Representative Forensic Payload" rendering with automatic pretty-printing and indentation across Failure and System Health tabs.
+- **Payload Constraint System**: Implemented the `payload-pre` CSS class to enforce fixed-width constraints and scrolling for large technical payloads, eliminating horizontal dashboard overflow.
+- **Registry Consolidation**: Unified all forensic constants and ingestion registries into `specification.py` to ensure a Single Source of Truth for the parsing pipeline.
+
+### Fixed
+- **De-Versioning Sweep**: Executed a global sanitization of the codebase, removing stale, hardcoded version stamps from code comments and internal headers.
+- **Robust Detail Rendering**: Implemented safe-fail JSON parsing in `reporter.py` to prevent dashboard crashes when encountering unstructured or malformed log entries.
+- **Performance Optimization**: Refactored `parser.py` to use pre-compiled regex patterns and consolidated imports, reducing overhead during high-volume log sweeps.
+
 ## [5.0.8] - 2026-04-29
 ### Added
 - **Universal "LAST SEEN" Visibility**: Injected a mandatory `LAST SEEN` column across all forensic tables (Business, System, Failure, and Error Patterns) for immediate temporal context.
