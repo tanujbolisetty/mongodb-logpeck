@@ -175,16 +175,19 @@ def print_forensic_table(summary):
         op_display = f"{row['category']}{short_hash}"
 
         # 🚑 Hardening: Enable diagnostic wrapping for multi-badge visibility
-        diag = ", ".join([str(t['label']) for t in row.get('diagnostic_tags', [])])
-        
         last_seen = str(row.get('last_ts', 'N/A'))
         if len(last_seen) > 19: last_seen = last_seen[11:19]
         
         table.add_row(
-            op_display, str(row['namespace']), str(row.get('app_name', 'unknown')),
-            format_duration(row['avg_time']), format_duration(row['max_time']), 
-            f"{row.get('aas_load', 0):.2f}",
-            str(row['count']), diag, last_seen
+            op_display,
+            format_duration(row['avg_time']),
+            format_duration(row['max_time']),
+            f"{row['aas_load']:.2f}",
+            str(row['count']),
+            str(row['namespace']),
+            str(row.get('app_name', 'unknown')),
+            render_diagnostic_badges(row.get('clinical_stats', {}).get('tags', [])),
+            last_seen
         )
 
     console.print(table)
@@ -452,12 +455,17 @@ def main():
                 health_table.add_column("Max", justify="right")
                 health_table.add_column("Count", justify="right")
                 
-                for h in sys_summary[:6]:
+                for q in sys_summary[:6]:
                     health_table.add_row(
-                        h["category"], 
-                        format_duration(h["avg_time"]), 
-                        format_duration(h["max_time"]), 
-                        str(h["count"])
+                        q["op_display"],
+                        format_duration(q["avg_time"]), 
+                        format_duration(q["max_time"]), 
+                        f"{q['aas_load']:.2f}",
+                        str(q["count"]),
+                        q["namespace"],
+                        q["app_name"],
+                        render_diagnostic_badges(q.get("clinical_stats", {}).get("tags", [])),
+                        q.get("last_seen", "N/A")
                     )
                 console.print(Panel(health_table, title="System Health Diagnostics", border_style="yellow"))
 
