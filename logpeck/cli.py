@@ -53,7 +53,10 @@ def format_forensic_entry(entry):
         "msg": entry.get("msg", ""),
         "waits": {k: v for k, v in metrics.get("waits_ms", {}).items() if v > 0},
         "stats": metrics.get("forensic", {}),
-        "query": entry.get("query_params") or attr.get("command") or attr.get("originatingCommand")
+        "query": entry.get("query_params") or attr.get("command") or attr.get("originatingCommand"),
+        "query_shape_hash": metrics.get("query_shape_hash", "N/A"),
+        "query_hash": metrics.get("query_hash", "N/A"),
+        "plan_cache_key": metrics.get("plan_cache_key", "N/A")
     }
 
 def print_log_card(entry, full=False):
@@ -137,6 +140,15 @@ def print_log_card(entry, full=False):
         if not full and len(q_str) > 85: q_str = q_str[:82] + "..."
         console.print(f"  [dim]Query:[/dim] {q_str}")
 
+    # 🆔 IDs / Fingerprint (Achieves parity with Atlas UI)
+    q_shape = metrics.get("query_shape_hash", "N/A")
+    q_hash = metrics.get("query_hash", "N/A")
+    p_key = metrics.get("plan_cache_key", "N/A")
+    
+    if q_shape != "N/A" or q_hash != "N/A" or p_key != "N/A":
+        shape_display = q_shape if full else q_shape[:8]
+        console.print(f"  [dim]IDs:[/dim] Shape[[green]{shape_display}[/green]] Query[[green]{q_hash}[/green]] Plan[[green]{p_key}[/green]]")
+
 def get_subset_duration(results):
     """Calculates the time span (seconds) of a log entry subset for AAS accuracy."""
     if not results or len(results) < 2: return 1.0
@@ -180,9 +192,12 @@ def print_forensic_table(summary):
     table.add_column("Last Seen", style="dim")
     
     for row in summary:
-        # 🧪 UI Polish: Append short shape-hash to Op for easier pattern tracking
+        # 🧪 UI Polish: Append short shape-hash, query-hash, and plan-key for easier pattern tracking
         raw_hash = str(row.get('plan_cache_shape_hash') or row.get('query_shape_hash') or "N/A")
-        short_hash = f"\n[dim][{raw_hash[:8]}][/dim]" if raw_hash != "N/A" else ""
+        q_hash = str(row.get('query_hash') or "N/A")
+        p_key = str(row.get('plan_cache_key') or "N/A")
+        
+        short_hash = f"\n[dim]S:[{raw_hash[:8]}] Q:[{q_hash}] P:[{p_key}][/dim]" if raw_hash != "N/A" else ""
         op_display = f"{row['category']}{short_hash}"
 
         last_seen = str(row.get('last_ts', 'N/A'))
