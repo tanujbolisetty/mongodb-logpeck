@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "logpeck"
-version = "5.0.14"
+version = "5.0.15"
 authors = [
     { name = "Tanuj Kumar Bolisetty" }
 ]

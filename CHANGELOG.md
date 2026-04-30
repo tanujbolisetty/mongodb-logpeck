@@ -2,6 +2,16 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.15] - 2026-04-30
+### Added
+- **Universal Smart Truncation**: Implemented conditional ellipsis (`..`) for all forensic identifiers (S, Q, P) in CLI tables, ensuring technical honesty by signaling truncated hashes.
+- **Differentiated Truncation Policy**: Optimized visibility by providing **Full Forensic Hashes** (no truncation) in Log Cards (Search/Filter) while maintaining compact 8-character truncation in multi-column Workload tables.
+- **Forensic UI Legends**: Injected a dim legend note (`S: Shape | Q: Query | P: Plan`) into all forensic views for instant identifier clarity.
+
+### Fixed
+- **Sampling Transparency**: Updated CLI help strings to explicitly document "First-Match Sampling" behavior, managing performance expectations for streaming log analysis.
+- **Design Specification Alignment**: Synchronized `LOGPECK_DESIGN.md` with the new truncation and sampling standards to maintain architectural integrity.
+
 ## [5.0.14] - 2026-04-30
 ### Added
 - **Triple-Hash Forensic Visibility**: Integrated `queryHash` and `planCacheKey` alongside the `queryShapeHash` in all CLI views (Cards, Tables, and JSON).
