@@ -63,14 +63,23 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 | `workingMillis` | `attr.workingMillis` | Execution Time | ms |
 | `planning` | `attr.planningTimeMicros` | Planning Time | µs |
 | `lock_wait` | `SUM(attr.locks.*.timeAcquiringMicros)` | Lock Contention | ms |
-| `storage_wait` | `read` + `write` + `oplogSlot` | Storage Effort | ms |
+| `storage_wait` | `read` + `write` + `oplog` + `cache stalls` | Storage Effort | ms |
+| `mongot_wait` | `attr.mongot.timeWaitingMillis` | Search Wait | ms |
+| `cache_stall` | `attr.storage.timeWaitingMicros.cache` | Cache Pressure | µs |
+| `sharding_wait` | `attr.remoteOpWaitMillis` | Sharding Wait | ms |
+| `numYields` | `attr.numYields` | Lock Yields | count |
 | `cpuNanos` | `attr.cpuNanos` | CPU Time | ns |
 | `queue_wait` | `attr.totalTimeQueuedMicros` | Ticket Queue | ms |
 | `replication_wait`| `attr.flowControlMillis` | Replication Throttling | ms |
 | `txnBytesDirty` | `attr.storage.data.txnBytesDirty` | Cache Dirty | bytes |
 | `writeConflicts` | `attr.writeConflicts` | Write Conflicts | count |
+| `ninserted` | `attr.ninserted` | Docs Inserted | count |
+| `nModified` | `attr.nModified` | Docs Modified | count |
+| `ndeleted` | `attr.ndeleted` | Docs Deleted | count |
 | `queryHash` | `attr.queryHash` | Query Hash | hex |
 | `planCacheKey` | `attr.planCacheKey` | Plan Cache Key | hex |
+
+
 
 ---
 
@@ -268,12 +277,12 @@ The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation
 
 ## 🧪 10. Forensic Hybrid Model
 The engine utilizes a **Hybrid Anchor** philosophy to maximize forensic signal:
-- **Efficiency Metrics (Sample-based)**: Scan Efficiency, Index Selectivity, and Fetch Amplification are calculated from the **Slowest Payload** (Worst-case scenario) to explain why a specific query took the maximum time.
+- **Efficiency Metrics (Sample-based)**: Scan Efficiency, Index Selectivity, and Fetch Amplification are calculated from the **Slowest Payload** (Slowest sample scenario) to explain why a specific query took the maximum time.
 - **Economic Metrics (Shape-based)**: Workload Amplification is calculated as an **Aggregate Average** across the entire query shape to represent the total I/O tax of the indexing strategy.
 
 ### 10.1 Workload-Agnostic Denominator (Forensic Impact)
 All ratios use a **Success Index (Impact Sum)** as the denominator tailored to the anchor:
-- **Sample Impact**: `nreturned + nMatched + ninserted + ndeleted + upserted` (Worst Sample run).
+- **Sample Impact**: `nreturned + nMatched + ninserted + ndeleted + upserted` (Slowest Sample run).
 - **Shape Impact**: `Total(nreturned) + Total(nMatched) + ...` (Aggregated workload).
 
 ### 10.2 Adaptive Visibility Logic
@@ -284,14 +293,16 @@ To reduce noise, the dashboard dynamically hides tiles that are irrelevant to th
 
 | Metric | Anchor | Formula | Clinical Signal (Interpretation) |
 | :--- | :--- | :--- | :--- |
-| **Scan Efficiency** | Worst Sample | `docsExamined / Impact` | Values > 1000 signal a critical collection scan on the slow sample. |
-| **Index Selectivity** | Worst Sample | `keysExamined / Impact` | Measures index specificity of the bottleneck sample. |
-| **Fetch Amplification** | Worst Sample | `docsExamined / keysExamined` | Values > 2 indicate 'Document Bloat' in the slow run. |
+| **Scan Efficiency** | Slowest Sample | `docsExamined / Impact` | Values > 1000 signal a critical collection scan on the slow sample. |
+| **Index Selectivity** | Slowest Sample | `keysExamined / Impact` | Measures index specificity of the bottleneck sample. |
+| **Fetch Amplification** | Slowest Sample | `docsExamined / keysExamined` | Values > 2 indicate 'Document Bloat' in the slow run. |
 | **Workload Amplification**| Shape Aggregate | `Sum(Key_Mutations) / Sum(Doc_Mutations)` | Measures total index overhead / over-indexing for the shape. |
-| **Cache Pressure** | Worst Sample | `txnBytesDirty` | Measures WiredTiger cache bloat (>500MB is high risk). |
-| **Replication Backpressure**| Worst Sample | `FlowControl + WriteConcernWait` | Flags minority-ack lag or secondary saturation. |
-| **Storage Intensity** | Worst Sample | `(timeReading / totalTime) * 100` | Percentage of time spent on disk I/O. |
-| **Search Latency** | Worst Sample | `mongot_wait` | Measures Atlas Search backend (Lucene) bottleneck. |
+| **Cache Pressure** | Slowest Sample | `txnBytesDirty` | Measures WiredTiger cache bloat (>500MB is high risk). |
+| **Replication Backpressure**| Slowest Sample | `FlowControl + WriteConcernWait` | Flags minority-ack lag or secondary saturation. |
+| **Storage Intensity** | Slowest Sample | `(timeReading / totalTime) * 100` | Percentage of time spent on disk I/O. |
+| **Search Latency** | Slowest Sample | `mongot_wait` | Measures Atlas Search backend (Lucene) bottleneck. |
+| **Sharding Latency** | Slowest Sample | `sharding_wait` | Measures inter-node latency for sharded commands. |
+| **Yield Intensity** | Slowest Sample | `numYields` | High yield counts follow high I/O or extreme concurrency. |
 
 ---
 
@@ -321,13 +332,13 @@ LogPeck implements a **Hybrid Rule Engine** to ensure that diagnostic badges pro
 | Domain | Label Prefix | Evaluation Anchor | Metrics | Clinical Signal |
 | :--- | :--- | :--- | :--- | :--- |
 | **Environmental** | None | **Shape Aggregate** | I/O Bound, Queue Wait, Lock Wait | Chronic workload saturation. |
-| **Structural** | `[TRACE]` | **Worst-Case Sample** | Cache Poisoning, Index Amplification, Inefficient Index | Pathological code payload. |
+| **Structural** | `[TRACE]` | **Slowest Sample** | Cache Poisoning, Index Amplification, Inefficient Index | Pathological code payload. |
 
 ### 12.2 Architectural Rationale: Victim vs. Pathogen
 The fundamental purpose of this split is to distinguish between high-latency events caused by the cluster environment and those caused by the application logic itself.
 
 1.  **Workload-Centric (Environmental)**: These metrics are often victims of "noisy neighbor" effects or global resource contention. By evaluating these against the **Shape Aggregate**, we ensure a badge only triggers if the query pattern is *consistently* causing pressure. This prevents a well-tuned query from being incorrectly flagged because it was unlucky enough to be running during a backup.
-2.  **Trace-Centric (Structural)**: These metrics represent architectural failures (e.g., a single document update generating 132,000 index keys). These are **Diseased Payloads**. If the application is structurally capable of this behavior once, it is dangerous. Evaluating these against the **Worst-Case Sample [WC]** ensures these "cache nukes" are flagged even if they occur intermittently.
+2.  **Trace-Centric (Structural)**: These metrics represent architectural failures (e.g., a single document update generating 132,000 index keys). These are **Diseased Payloads**. If the application is structurally capable of this behavior once, it is dangerous. Evaluating these against the **Slowest Sample [WC]** ensures these "cache nukes" are flagged even if they occur intermittently.
 
 ### 12.3 Implementation Gate
 The [analyzer.py](file:///Users/Tanuj.Bolisetty/Documents/Agentic_learning/log-peck/logpeck/analyzer.py) must explicitly map these metrics to the correct evaluation domain before the Rules Engine executes.
@@ -443,6 +454,8 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 | 7 | Storage Intensity | `storage_intensity` | < 30% / 30-70% / > 70% |
 | 8 | Search Latency | `search_latency` | < 100ms / 100-500ms / > 500ms |
 | 9 | WT Cache Stall | `cache_stall` | < 1ms / 1-10ms / > 10ms |
+| 10 | Sharding Latency | `sharding_wait` | < 10ms / 10-100ms / > 100ms |
+| 11 | Yield Intensity | `numYields` | < 50 / 50-200 / > 200 |
 
 - **Fallback States**:
   - If all metrics are healthy → `✅ CLINICAL STATUS: OPTIMAL` (green border card)
@@ -456,11 +469,11 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 | Category | Metrics |
 | :--- | :--- |
 | 📊 READ FORENSICS | keysExamined, docsExamined |
-| LATENCY | storage_wait, queue_wait |
-| 🖋️ WRITE CHURN | keysInserted, nModified, nMatched, txnBytesDirty |
+| LATENCY | storage_wait, queue_wait, replication_wait, sharding_wait, mongot_wait |
+| 🖋️ WRITE CHURN | ninserted, nModified, ndeleted, nMatched, upserted, txnBytesDirty, writeConflicts |
 | 💾 STORAGE WAIT | timeReadingMicros, timeWritingMicros, timeWaitingMicros_cache, totalOplogSlotDurationMicros |
 | 🧭 PLANNING | planning |
-| ⚙️ PURE EXECUTION | workingMillis, cpuNanos |
+| ⚙️ PURE EXECUTION | workingMillis, cpuNanos, numYields |
 
 - **Zero-Value Suppression**: Rows where both fastest and slowest values are 0 are hidden
 - **Dual-Labeling**: Each metric shows the human label AND the raw log key in small gray text
