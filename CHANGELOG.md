@@ -2,6 +2,16 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.0.14] - 2026-04-30
+### Added
+- **Triple-Hash Forensic Visibility**: Integrated `queryHash` and `planCacheKey` alongside the `queryShapeHash` in all CLI views (Cards, Tables, and JSON).
+- **High-Fidelity CLI Parity**: Achieved absolute visual parity between terminal forensic reports and the Atlas Performance Advisor by surfacing critical execution fingerprints.
+- **Fingerprint Search Anchors**: Updated the CLI summary table to include short-hash signatures for Query and Plan identifiers, enabling rapid differentiation of multi-plan query shapes.
+
+### Fixed
+- **Version Sync**: Synchronized `version.py` and `pyproject.toml` to ensure consistent reporting across all analytical layers.
+- **JSON Parity**: Ensured all forensic hashes are included in the `--json` output for automated downstream pipelines.
+
 ## [5.0.13] - 2026-04-30
 ### Added
 - **Plan Hash CLI Visibility**: Injected short-hash identifiers (`[planCacheShapeHash]`) directly into the CLI "Op" column for immediate query pattern matching.

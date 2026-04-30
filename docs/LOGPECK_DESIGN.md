@@ -69,6 +69,8 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 | `replication_wait`| `attr.flowControlMillis` | Replication Throttling | ms |
 | `txnBytesDirty` | `attr.storage.data.txnBytesDirty` | Cache Dirty | bytes |
 | `writeConflicts` | `attr.writeConflicts` | Write Conflicts | count |
+| `queryHash` | `attr.queryHash` | Query Hash | hex |
+| `planCacheKey` | `attr.planCacheKey` | Plan Cache Key | hex |
 
 ---
 
@@ -700,9 +702,10 @@ To ensure visual parity with the dashboard while optimizing for terminal constra
 - **Grid Separation**: All forensic tables MUST use `show_lines=True` to provide clear row boundaries in high-density terminal environments.
 - **Header Styling**: Business/System tables use `bold magenta`; Failure tables use `bold red`.
 
-### 19.2 The "Short-Hash" Anchor
-- **Placement**: To save horizontal space, the `planCacheShapeHash` (truncated to 8 chars) MUST be displayed within square brackets `[ ]` on a new line directly below the Operation name in the first column.
-- **Formatting**: The hash MUST be styled as `dim` (gray) to maintain visual hierarchy, keeping the Operation name as the primary focus.
+### 19.2 The "Fingerprint" Anchor
+- **Placement**: To save horizontal space, a composite fingerprint including the `queryShapeHash` (truncated to 8 chars), `queryHash`, and `planCacheKey` MUST be displayed on a new line directly below the Operation name in the first column.
+- **Format**: `S:[Shape] Q:[Query] P:[Plan]`
+- **Formatting**: The fingerprint MUST be styled as `dim` (gray) to maintain visual hierarchy, keeping the Operation name as the primary focus.
 
 ### 19.3 Dynamic Column Wrapping
 - **App Column**: MUST use `overflow="fold"` to stack multiple client applications vertically, preventing horizontal table expansion.
