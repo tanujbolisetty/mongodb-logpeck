@@ -157,7 +157,7 @@ def print_forensic_table(summary):
     """
     Prints a professional, multi-column forensics table matching the 'Slow Tab' format.
     """
-    table = Table(header_style="bold magenta", expand=True)
+    table = Table(header_style="bold magenta", expand=True, show_lines=True)
     table.add_column("Op", width=18)
     table.add_column("Namespace", ratio=1)
     table.add_column("App")
