@@ -13,7 +13,7 @@ LogPeck implements a **2-Pass Analytical Engine** designed to handle the tempora
 
 ### 1.1 Pass 1: Light-Speed Context Sweep
 Before analysis, the engine performs a linear scan to build the **MSH Matrix** (Metadata-Session-Hostname):
-- **Identity Synthesis**: Captures event IDs `22943` (Accepted) and `22944` (Closed) to map `ctx` (Connection ID) to `appName`, `user`, `clientIP`, and `driver`.
+- **Identity Synthesis**: Captures lifecycle markers (e.g., `Connection accepted`, `client metadata`) to map `ctx` (Connection ID) to `appName`, `user`, `clientIP`, and `driver`.
 - **Session Mapping**: Harvests `lsid` (Logical Session ID) to map transient operations to their originating business namespaces.
 - **Cursor Registration**: Maps `cursorId` to its original `queryShapeHash` to ensure `getMore` operations inherit the forensic context of the parent query.
 
@@ -141,15 +141,15 @@ The **Metadata-Session-Hostname (MSH)** matrix is the "Memory" of the forensic e
 ### 5.1 State Transitions
 The matrix tracks three distinct life-stages of a connection:
 
-1. **STAGE 1: Accepted (Entry ID 22943)**
+1. **STAGE 1: Accepted (`Connection accepted`)**
    - Registers the `ctx` (e.g., `conn123`) and maps it to the `remote` client IP.
    - Status: *Anonymous Connection*.
 
-2. **STAGE 2: Authentication (Entry ID 20249/20250)**
+2. **STAGE 2: Authentication (`Successfully authenticated`)**
    - Overlays the `user` and `mechanisms` onto the `ctx`.
    - Status: *Identified Principal*.
 
-3. **STAGE 3: Metadata Handshake (Entry ID 22944)**
+3. **STAGE 3: Metadata Handshake (`client metadata`)**
    - Attaches the `appName` and `driver` version strings.
    - Status: *Full Forensic Identity*.
 

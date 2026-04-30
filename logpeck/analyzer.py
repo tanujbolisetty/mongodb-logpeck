@@ -158,7 +158,7 @@ def build_forensic_context(log_file_path: str) -> Dict[str, Dict[str, str]]:
                     if ctx not in ctx_registry:
                         ctx_registry[ctx] = {"ns": "unknown", "app": "unknown"}
 
-                    # Capture Identity (from metadata handshake 22944)
+                    # Capture Identity (from client metadata handshake)
                     app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "unknown")
                     if app != "unknown":
                         ctx_registry[ctx]["app"] = app
