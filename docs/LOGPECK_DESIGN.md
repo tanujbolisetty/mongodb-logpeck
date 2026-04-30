@@ -713,7 +713,9 @@ To ensure visual parity with the dashboard while optimizing for terminal constra
 - **Placement**: To save horizontal space, a composite fingerprint including the `queryShapeHash` (truncated to 8 chars), `queryHash`, and `planCacheKey` MUST be displayed on a new line directly below the Operation name in the first column.
 - **Format**: `S:[Shape] Q:[Query] P:[Plan]`
 - **Formatting**: The fingerprint MUST be styled as `dim` (gray) to maintain visual hierarchy, keeping the Operation name as the primary focus.
-- **Truncation Indicator**: Any truncated hash MUST append an ellipsis (`..`) to indicate that the identifier is actually a full-length hash.
+- **Smart Truncation**: All identifiers (Shape, Query, Plan) MUST be conditionally truncated:
+    - If length > 8: Display 8-char prefix + `..` ellipsis.
+    - If length ≤ 8: Display the full identifier without ellipsis.
 - **Legend**: All forensic tables and cards MUST include a dim legend note at the bottom: `S: Shape Hash | Q: Query Hash | P: Plan Cache Key`.
 
 ### 19.3 Dynamic Column Wrapping
