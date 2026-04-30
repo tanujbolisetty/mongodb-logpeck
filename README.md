@@ -91,7 +91,29 @@ Analyze systemic failures, timeouts, and error hotspots.
 peck failure-workload --file mongod.log.gz
 ```
 
-### 5. Forensic Search (Stateful vs. Stateless)
+### 5. Connection Portfolio & Client Analysis
+Identify connection churn, authentication failures, and app attribution.
+```bash
+peck connections --file mongod.log.gz
+```
+
+### 6. Surgical Filtering
+Structured multi-dimensional forensics using logical `AND` chaining.
+```bash
+# Filter by latency (> 500ms)
+peck filter --file mongod.log --filters '{"ms": {"gt": 500}}'
+
+# Filter by namespace and operation
+peck filter --file mongod.log --filters '{"ns": "production.orders", "op": "update"}'
+
+# Filter by plan (COLLSCAN)
+peck filter --file mongod.log --filters '{"plan": "COLLSCAN"}' --cards
+
+# Rapid volume check (Count only)
+peck filter --file mongod.log --filters '{"ms": {"gt": 1000}}' --count
+```
+
+### 7. Forensic Search (Stateful vs. Stateless)
 LogPeck offers two powerful ways to discover information:
 
 - **Forensic Search (Default)**: Reconstructs identity. Searching for "Compass" finds every slow query run by Compass, even if "Compass" isn't on that specific log line.
@@ -104,18 +126,6 @@ peck search --file mongod.log --keyword "compass"
 # High-Precision: Find only literal matches
 peck search --file mongod.log --keyword "compass" --grep
 ```
-
-### 6. Connection Portfolio & Client Analysis
-Identify connection churn, authentication failures, and app attribution.
-```bash
-peck connections --file mongod.log.gz
-```
-
-### 7. Surgical Filtering & Search
-- **`peck search`**: Professional keyword search (IPs, Hash, User, Driver) across the entire log.
-- **`peck filter`**: Structured multi-dimensional forensics using logical `AND` chaining.
-- **`--count`**: Add this flag to `search` or `filter` to rapidly get the total match volume without a full report.
-- **`--limit`**: Control results processed (default: 10).
 
 ---
 
