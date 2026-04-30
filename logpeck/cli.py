@@ -214,8 +214,13 @@ def print_failure_forensic_table(summary):
         if len(last_seen) > 19: last_seen = last_seen[11:19]
         
         table.add_row(
-            str(row['category']), str(row['namespace']), str(row.get('app_name', 'unknown')),
-            err, str(row['count']), q_hash, last_seen
+            str(row.get('error_code') or "N/A"),
+            f"[bold]{row.get('error_name', 'Unknown Error')}[/bold]",
+            str(row['count']),
+            q_hash,
+            str(row['namespace']),
+            str(row.get('app_name', 'unknown')),
+            last_seen
         )
 
     console.print(table)
