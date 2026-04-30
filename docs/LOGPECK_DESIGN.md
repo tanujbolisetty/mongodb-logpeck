@@ -658,7 +658,19 @@ Batch reports generated using the `--folder` mode inject a `SOURCE LOG AUDIT` co
 
 To maintain the production-grade integrity of the LogPeck dashboard, all frontend modifications MUST adhere to these strict mandates:
 
-### 18.1 Table Alignment & Column Integrity
+### 18.1 JavaScript Hardening (The JS_BLOCK Policy)
+- **Decoupled Scripting**: To prevent Python f-string `SyntaxError` regressions, all significant JavaScript blocks MUST be defined as literal strings (e.g., `JS_BLOCK = """..."""`) outside the main `final_html` f-string.
+- **Brace Integrity**: Decoupling allows JS to use standard single braces `{}` without doubling, making the code maintainable and preventing the Python parser from attempting to evaluate JS logic as Python expressions.
+- **Placeholder Injection**: The JS block is injected into the final template using a single `{JS_BLOCK}` placeholder.
+
+### 18.2 CSS Class Synchronization & Search Indexing
+- **Search Dependency**: The frontend search engine (`filterTable`, `filterRows`) relies on strict CSS class naming to correlate parent rows with their forensic detail cards.
+- **Mandatory Class Naming**: 
+    - **Main Rows**: MUST use `class="row-main"`.
+    - **Detail Rows**: MUST use `class="details-row"`.
+- **Search Visibility Logic**: When a `row-main` is hidden by a search filter, its corresponding `details-row` MUST also be hidden automatically by the search logic to prevent orphaned forensic data from cluttering the UI.
+
+### 18.3 Table Alignment & Column Integrity
 - **Mandatory 6-Column Failure Summary**: The `Executive Failure Summary` MUST always have 6 columns (CODE, ERROR / DESCRIPTION, OCCURRENCES, AVG DELAY, PRIMARY NAMESPACE, MOST IMPACTED APP).
 - **No Index Column in Summaries**: The `#` column is reserved for forensic drill-down tables only. It MUST NOT be present in executive summary tables.
 - **Header Naming**: Use `OCCURRENCES` instead of `COUNT` for failure patterns to align with forensic terminology.
