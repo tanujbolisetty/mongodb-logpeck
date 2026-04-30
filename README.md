@@ -114,6 +114,9 @@ peck filter --file mongod.log --filters '{"ms": {"gt": 1000}}' --count
 
 # Control display volume (Top 5 results)
 peck filter --file mongod.log --filters '{"ms": {"gt": 500}}' --limit 5
+
+# Deep-path filtering (For non-standard or nested fields)
+peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"gt": 536045710}}' --cards
 ```
 
 ### 7. Forensic Search (Stateful vs. Stateless)
