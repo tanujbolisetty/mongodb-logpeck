@@ -189,6 +189,34 @@ def print_forensic_table(summary):
 
     console.print(table)
 
+def print_failure_forensic_table(summary):
+    """
+    Prints a failure-optimized table for the Fails Tab parity.
+    Removes performance metrics (Avg/Max) and Diagnostic, adds Error and Full Hash.
+    """
+    table = Table(header_style="bold red", show_lines=True)
+    table.add_column("Op", width=12)
+    table.add_column("Namespace", ratio=1)
+    table.add_column("App")
+    table.add_column("Error", style="bold red")
+    table.add_column("Count", justify="right")
+    table.add_column("Query Shape Hash", overflow="fold")
+    table.add_column("Last Seen", justify="right", style="dim")
+    
+    for row in summary:
+        err = str(row.get('error_name') or row.get('error_code') or "TIMEOUT")
+        q_hash = str(row.get('query_shape_hash') or "N/A")
+        
+        last_seen = str(row.get('last_ts', 'N/A'))
+        if len(last_seen) > 19: last_seen = last_seen[11:19]
+        
+        table.add_row(
+            str(row['category']), str(row['namespace']), str(row.get('app_name', 'unknown')),
+            err, str(row['count']), q_hash, last_seen
+        )
+
+    console.print(table)
+
 def print_failure_summary_table(summary):
     """
     Prints the Executive Failure Summary (Table 1) for the CLI.
@@ -531,7 +559,7 @@ def main():
             tos = result.get("timeout_summary", [])
             if tos:
                 console.print("\n[bold]🔬 Query Shape Failure Analysis[/bold]")
-                print_forensic_table(tos)
+                print_failure_forensic_table(tos)
                 
             # Tier 3: System Errors
             sys_errs = stats.get("system_error_patterns", [])
