@@ -614,6 +614,98 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 </div>
             """)
 
+    JS_BLOCK = """
+    <script>
+        function toggleDetails(id) { 
+            const el = document.getElementById(id); 
+            if(!el) return; 
+            const isVisible = (el.style.display === 'table-row' || el.style.display === 'block');
+            el.style.display = isVisible ? 'none' : (el.tagName === 'TR' ? 'table-row' : 'block'); 
+            if (!isVisible) el.classList.add('expanded'); else el.classList.remove('expanded');
+        }
+        function openTab(name, el) { 
+            document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; }); 
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); 
+            var target = document.getElementById(name); 
+            if(target) { target.classList.add('active'); target.style.display = 'block'; } 
+            el.classList.add('active'); 
+        }
+        function filterTable(tableId, inputId) {
+            const input = document.getElementById(inputId);
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById(tableId);
+            const rows = table.getElementsByClassName('row-main');
+            const details = table.getElementsByClassName('details-row');
+
+            for (let i = 0; i < rows.length; i++) {
+                const mainText = rows[i].textContent.toLowerCase();
+                const detailText = details[i] ? details[i].textContent.toLowerCase() : "";
+                const isMatch = mainText.includes(filter) || detailText.includes(filter);
+                
+                rows[i].style.display = isMatch ? "" : "none";
+                
+                if (details[i]) {
+                    if (!isMatch) {
+                        details[i].style.display = "none";
+                    } else if (details[i].classList.contains('expanded')) {
+                        details[i].style.display = "table-row";
+                    }
+                }
+            }
+        }
+        function filterRows(inputId, containerId) {
+            const input = document.getElementById(inputId), filter = input.value.toLowerCase(), container = document.getElementById(containerId);
+            if(!container) return;
+            const trs = container.getElementsByTagName("tr");
+            for (let i = 0; i < trs.length; i++) {
+                const row = trs[i];
+                if (row.closest('.details-content')) continue;
+                if (row.classList.contains('cat-header') || row.parentElement.tagName === 'THEAD') continue;
+                
+                if (row.classList.contains('row-main')) {
+                    const mainText = row.textContent.toLowerCase();
+                    const nextRow = row.nextElementSibling;
+                    const detailText = (nextRow && nextRow.classList.contains('details-row')) ? nextRow.textContent.toLowerCase() : "";
+                    const isMatch = mainText.includes(filter) || detailText.includes(filter);
+                    
+                    row.style.display = isMatch ? "" : "none";
+                    if (nextRow && nextRow.classList.contains('details-row')) {
+                        if (!isMatch) {
+                            nextRow.style.display = "none";
+                        } else if (nextRow.classList.contains('expanded')) {
+                            nextRow.style.display = "table-row";
+                        }
+                    }
+                    continue;
+                }
+                if (row.classList.contains('details-row')) continue;
+                row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+            }
+        }
+        function filterByTier(minMs, tableId) {
+            document.querySelectorAll('#' + tableId + ' .row-main').forEach(row => {
+                const maxMsText = row.cells[3].textContent;
+                const ms = parseFloat(maxMsText) * (maxMsText.includes('s') && !maxMsText.includes('ms') ? 1000 : 1);
+                const matches = ms >= minMs;
+                row.style.display = matches ? "" : "none";
+                if (!matches) {
+                    const dId = row.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                    if (dId && document.getElementById(dId)) document.getElementById(dId).style.display = 'none';
+                }
+            });
+        }
+        function collapseAll() { document.querySelectorAll('.details-row').forEach(r => r.style.display = 'none'); }
+        function copyToClipboard(id, btn) {
+            const text = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const original = btn.textContent;
+                btn.textContent = 'COPIED!'; btn.style.background = '#059669';
+                setTimeout(() => { btn.textContent = original; btn.style.background = ''; }, 2000);
+            });
+        }
+    </script>
+    """
+
     final_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1047,94 +1139,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         </div>
     </div>
 
-
-    <script>
-        function toggleDetails(id) {{ 
-            const el = document.getElementById(id); 
-            if(!el) return; 
-            const isVisible = (el.style.display === 'table-row' || el.style.display === 'block');
-            el.style.display = isVisible ? 'none' : (el.tagName === 'TR' ? 'table-row' : 'block'); 
-            if (!isVisible) el.classList.add('expanded'); else el.classList.remove('expanded');
-        }}
-        function openTab(name, el) {{ document.querySelectorAll('.tab-content').forEach(t => {{ t.classList.remove('active'); t.style.display = 'none'; }}); document.querySelectorAll('.tab').forEach(t => t.classList.remove('active')); var target = document.getElementById(name); if(target) {{ target.classList.add('active'); target.style.display = 'block'; }} el.classList.add('active'); }}
-        function filterTable(tableId, inputId) {{
-            const input = document.getElementById(inputId);
-            const filter = input.value.toLowerCase();
-            const table = document.getElementById(tableId);
-            const rows = table.getElementsByClassName('row-main');
-            const details = table.getElementsByClassName('details-row');
-
-            for (let i = 0; i < rows.length; i++) {{
-                const mainText = rows[i].textContent.toLowerCase();
-                const detailText = details[i] ? details[i].textContent.toLowerCase() : "";
-                const isMatch = mainText.includes(filter) || detailText.includes(filter);
-                
-                rows[i].style.display = isMatch ? "" : "none";
-                
-                if (details[i]) {{
-                    if (!isMatch) {{
-                        details[i].style.display = "none";
-                    }} else if (details[i].classList.contains('expanded')) {{
-                        details[i].style.display = "table-row";
-                    }}
-                }}
-            }}
-        }}
-        function filterRows(inputId, containerId) {{
-            const input = document.getElementById(inputId), filter = input.value.toLowerCase(), container = document.getElementById(containerId);
-            if(!container) return;
-            const trs = container.getElementsByTagName("tr");
-            for (let i = 0; i < trs.length; i++) {{
-                const row = trs[i];
-                // Skip rows inside detail cards from being HIDDEN by the search
-                if (row.closest('.details-content')) continue;
-                
-                if (row.classList.contains('cat-header') || row.parentElement.tagName === 'THEAD') continue;
-                
-                if (row.classList.contains('row-main')) {{
-                    const mainText = row.textContent.toLowerCase();
-                    const nextRow = row.nextElementSibling;
-                    const detailText = (nextRow && nextRow.classList.contains('details-row')) ? nextRow.textContent.toLowerCase() : "";
-                    const isMatch = mainText.includes(filter) || detailText.includes(filter);
-                    
-                    row.style.display = isMatch ? "" : "none";
-                    if (nextRow && nextRow.classList.contains('details-row')) {{
-                        if (!isMatch) {{
-                            nextRow.style.display = "none";
-                        }} else if (nextRow.classList.contains('expanded')) {{
-                            nextRow.style.display = "table-row";
-                        }}
-                    }}
-                    continue;
-                }}
-                
-                if (row.classList.contains('details-row')) continue; // Handled by row-main logic
-
-                row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
-            }}
-        }}
-        function filterByTier(minMs, tableId) {{
-            document.querySelectorAll('#' + tableId + ' .row-main').forEach(row => {{
-                const maxMsText = row.cells[3].textContent;
-                const ms = parseFloat(maxMsText) * (maxMsText.includes('s') && !maxMsText.includes('ms') ? 1000 : 1);
-                const matches = ms >= minMs;
-                row.style.display = matches ? "" : "none";
-                if (!matches) {{
-                    const dId = row.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
-                    if (dId && document.getElementById(dId)) document.getElementById(dId).style.display = 'none';
-                }}
-            }});
-        }}
-        function collapseAll() {{ document.querySelectorAll('.details-row').forEach(r => r.style.display = 'none'); }}
-        function copyToClipboard(id, btn) {{
-            const text = document.getElementById(id).textContent;
-            navigator.clipboard.writeText(text).then(() => {{
-                const original = btn.textContent;
-                btn.textContent = 'COPIED!'; btn.style.background = '#059669';
-                setTimeout(() => {{ btn.textContent = original; btn.style.background = ''; }}, 2000);
-            }});
-        }}
-    </script>
+    {JS_BLOCK}
     <div class="footer">Generated by <strong>logpeck v{VERSION}</strong> | Forensic MongoDB Log Analytics</div>
 </body>
 </html>"""
