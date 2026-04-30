@@ -98,9 +98,7 @@ peck connections --file mongod.log.gz
 ```
 
 ### 6. Surgical Filtering
-Structured multi-dimensional forensics using logical `AND` chaining. 
-> [!NOTE]
-> **Streaming Sampling**: The `filter` command returns the **first matches found** in the log file up to the specified `--limit`. It does not perform a global sort (e.g., it is not showing the "top" slow queries).
+Structured multi-dimensional forensics using logical `AND` chaining.
 ```bash
 # Filter by latency (> 500ms)
 peck filter --file mongod.log --filters '{"ms": {"gt": 500}}'
@@ -126,9 +124,6 @@ peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"g
 
 ### 7. Forensic Search (Stateful vs. Stateless)
 LogPeck offers two powerful ways to discover information:
-
-> [!NOTE]
-> **Streaming Sampling**: The `search` command returns the **first matches found** in the log file up to the specified `--limit`.
 
 - **Forensic Search (Default)**: Reconstructs identity. Searching for "Compass" finds every slow query run by Compass, even if "Compass" isn't on that specific log line.
 - **High-Precision Search (`--grep`)**: A stateless, full-text match. Mimics standard `grep` speed and precision by searching the entire raw JSON entry.
@@ -157,8 +152,8 @@ Use the table below to find the surgical CLI command equivalent for each profess
 | **4. Failure Forensics** | `peck failure-workload` | Analyzes systemic timeouts and error codes. | `--latency`, `--json` |
 | **5. Connection Analytics** | `peck connections` | Profiles client apps and connection churn. | `--json` |
 | **6. Reference** | (Automatic) | Registry of metrics and rules. | N/A |
-| **-** | `peck search` | Surgical keyword search (First-Match sampling). | `--keyword`, `--grep`, `--full`, `--limit`, `--count` |
-| **-** | `peck filter` | Multi-dimensional filter (First-Match sampling). | `--filters`, `--full`, `--limit`, `--count` |
+| **-** | `peck search` | Surgical keyword forensic search. | `--keyword`, `--grep`, `--full`, `--limit`, `--count` |
+| **-** | `peck filter` | Multi-dimensional forensic filtering. | `--filters`, `--full`, `--limit`, `--count` |
 | **-** | `peck dashboard` | Generates the full 6-tab HTML dashboard. | `--file`, `--folder`, `--latency`, `--html` |
 
 ---

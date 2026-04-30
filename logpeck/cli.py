@@ -166,6 +166,14 @@ def get_subset_duration(results):
         return max(dur, 1.0)
     except: return 1.0
 
+def format_metric_label(key: str) -> str:
+    """Standardizes metric labels for compact CLI display."""
+    from .specification import FIELD_DISPLAY
+    label = FIELD_DISPLAY.get(key, key)
+    # Shorten common terms for CLI density
+    label = label.replace("Examined", "Exm").replace("Inserted", "Ins").replace("Matched", "Mtch")
+    return label
+
 def render_diagnostic_badges(tags):
     """Professional CLI badge renderer using Rich colors."""
     if not tags: return "[dim]BALANCED[/dim]"
