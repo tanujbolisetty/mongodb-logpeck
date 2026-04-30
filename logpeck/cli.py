@@ -196,7 +196,7 @@ def print_forensic_table(summary):
             str(row['count']),
             str(row['namespace']),
             str(row.get('app_name', 'unknown')),
-            render_diagnostic_badges(row.get('clinical_stats', {}).get('tags', [])),
+            render_diagnostic_badges(row.get('diagnostic_tags', [])),
             last_seen
         )
 
