@@ -148,6 +148,7 @@ def print_log_card(entry, full=False):
     if q_shape != "N/A" or q_hash != "N/A" or p_key != "N/A":
         shape_display = q_shape if full else q_shape[:8]
         console.print(f"  [dim]IDs:[/dim] Shape[[green]{shape_display}[/green]] Query[[green]{q_hash}[/green]] Plan[[green]{p_key}[/green]]")
+        console.print(f"  [dim](S: Shape Hash | Q: Query Hash | P: Plan Cache Key)[/dim]")
 
 def get_subset_duration(results):
     """Calculates the time span (seconds) of a log entry subset for AAS accuracy."""
@@ -216,6 +217,7 @@ def print_forensic_table(summary):
         )
 
     console.print(table)
+    console.print("[dim]Legend: S: Shape Hash | Q: Query Hash | P: Plan Cache Key[/dim]")
 
 def print_failure_forensic_table(summary):
     """
@@ -249,6 +251,7 @@ def print_failure_forensic_table(summary):
         )
 
     console.print(table)
+    console.print("[dim]Legend: S: Shape Hash | Q: Query Hash | P: Plan Cache Key[/dim]")
 
 def print_failure_summary_table(summary):
     """
