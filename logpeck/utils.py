@@ -28,7 +28,18 @@ def format_duration(ms: float) -> str:
     
     sec = ms / 1000
     if sec < 60: return f"{sec:.1f}s"
-    return f"{int(sec // 60)}m {int(sec % 60)}s"
+    if sec < 3600: return f"{int(sec // 60)}m {int(sec % 60)}s"
+    
+    hours = int(sec // 3600)
+    minutes = int((sec % 3600) // 60)
+    seconds = int(sec % 60)
+    
+    if hours < 24:
+        return f"{hours}h {minutes}m {seconds}s"
+    
+    days = int(hours // 24)
+    hours = int(hours % 24)
+    return f"{days}d {hours}h {minutes}m"
 
 def format_bytes(b: float) -> str:
     """
