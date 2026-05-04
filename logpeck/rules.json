@@ -1,5 +1,4 @@
 {
-  "version": "4.3.2",
   "description": "LogPeck Master Diagnostic Rules - Expert Forensic Edition",
   "rules": [
     {
@@ -9,7 +8,7 @@
       "technical_path": "attr.planSummary",
       "op": "contains",
       "value": "COLLSCAN",
-      "label": "🚨 [TRACE] COLLSCAN (Missing Index)",
+      "label": "🚨 [TRACE] Collection Scan (COLLSCAN)",
       "severity": "critical",
       "description": "Targeted collection has no index for this query shape. MongoDB must scan every document to satisfy the result set, causing massive CPU and I/O overhead."
     },
@@ -19,7 +18,7 @@
       "field": "plan_summary",
       "technical_path": "attr.planSummary (SCAN + SORT check)",
       "condition": "SORT in plan_summary and IXSCAN not in plan_summary",
-      "label": "🚨 [TRACE] In-Memory Sort",
+      "label": "🚨 [TRACE] Unindexed In-Memory Sort",
       "severity": "critical",
       "description": "Result set was sorted in memory without the help of an index. This is extremely slow for large datasets and carries a high risk of 'Sort exceeded memory limit' errors."
     },
@@ -30,7 +29,7 @@
       "denominator": "total_ms",
       "technical_path": "attr.planningTimeMicros / attr.durationMillis",
       "threshold": 0.15,
-      "label": "⚠️ High Planning ({value:.0f}%)",
+      "label": "⚠️ [WORKLOAD] High Planning ({value:.0f}%)",
       "severity": "warning",
       "description": "The query optimizer is spending a disproportionate amount of time choosing an execution plan. Often caused by index complexity, high plan cache churn, or lack of hint usage."
     },
@@ -41,7 +40,7 @@
       "denominator": "total_ms",
       "technical_path": "attr.storage.data.time(Reading|Writing)Micros / attr.durationMillis",
       "threshold": 0.30,
-      "label": "⚠️ I/O Bound ({value:.0f}%)",
+      "label": "⚠️ [WORKLOAD] I/O Bound ({value:.0f}%)",
       "severity": "warning",
       "description": "Operation spent over 30% of its time waiting for disk. This indicates heavy physical read/write activity, possible disk throttling, or a 'cold cache' situation."
     },
@@ -58,7 +57,7 @@
         "count",
         "distinct"
       ],
-      "label": "⚠️ [TRACE] Inefficient Index (Ratio: {value:.0f}:1)",
+      "label": "⚠️ [TRACE] Inefficient Index ({value:.0f}:1)",
       "severity": "warning",
       "description": "The index used for this query is not selective enough. MongoDB is scanning many index keys to return very few documents, indicating suboptimal index field ordering."
     },
@@ -69,7 +68,7 @@
       "denominator": "count",
       "technical_path": "attr.numYields",
       "threshold": 50,
-      "label": "🚨 High Yields ({value:.0f}/op)",
+      "label": "🚨 [WORKLOAD] High Lock Yields ({value:.0f}/op)",
       "severity": "critical",
       "description": "The operation yielded its lock frequently to other threads. High yield counts often follow high I/O wait times or indicate extreme concurrency stress on the cluster."
     },
@@ -81,7 +80,7 @@
       "technical_path": "Statistical Outlier (max vs avg durationMillis)",
       "threshold": 10,
       "min_count": 10,
-      "label": "🚨 Latency Cliff ({value:.1f}x Avg)",
+      "label": "🚨 [TRACE] Latency Cliff ({value:.1f}x Avg)",
       "severity": "critical",
       "description": "Extreme performance variance detected. The slowest sample is significantly slower than the average, indicating intermittent blocking, resource spikes, or lock queuing."
     },
@@ -92,7 +91,7 @@
       "technical_path": "attr.writeConflicts",
       "op": "gt",
       "value": 0,
-      "label": "🚨 Write Conflicts",
+      "label": "🚨 [TRACE] Write Conflicts",
       "severity": "critical",
       "description": "Optimistic concurrency failure. Multiple operations attempted to write to the same document or range simultaneously, forcing the database to retry the operation."
     },
@@ -103,7 +102,7 @@
       "denominator": "total_ms",
       "technical_path": "attr.cpuNanos / attr.durationMillis",
       "threshold": 0.8,
-      "label": "🚨 CPU Bound ({value:.0f}%)",
+      "label": "🚨 [WORKLOAD] CPU Bound ({value:.0f}%)",
       "severity": "critical",
       "description": "The operation spent nearly all its time in compute. This is typical for complex aggregations, heavy data encoding/decoding, or cryptographic operations."
     },
@@ -120,7 +119,7 @@
         "count",
         "distinct"
       ],
-      "label": "📉 [TRACE] REDUCTION PIPELINE (Ratio: {value:.0f}:1)",
+      "label": "📉 [TRACE] Reduction Pipeline ({value:.0f}:1)",
       "severity": "info",
       "description": "Stage-heavy aggregation that examines many documents in early stages before collapsing into few results. Often indicates a missing or late $match stage, or a full-collection aggregation (e.g. $group with COLLSCAN)."
     },
@@ -131,7 +130,7 @@
       "denominator": "total_active_ms",
       "technical_path": "attr.timeInactiveMicros",
       "threshold": 0.5,
-      "label": "🐌 IDLE TRANSACTION",
+      "label": "🐌 [TRACE] Inactive Transaction Wait",
       "severity": "info",
       "description": "The multi-statement transaction was open but inactive for more than 50% of its duration. This usually indicates the transaction is waiting on external application logic."
     },
@@ -153,7 +152,7 @@
       "denominator": "total_ms",
       "technical_path": "attr.totalOplogSlotDurationMicros / attr.durationMillis",
       "threshold": 0.3,
-      "label": "🚨 OPLOG WAIT ({value:.0f}%)",
+      "label": "🚨 [WORKLOAD] OPLOG WAIT ({value:.0f}%)",
       "severity": "critical",
       "description": "Concurrency bottleneck during write operations. Indicates high parallel write pressure or slow oplog application on secondary nodes."
     },
@@ -165,7 +164,7 @@
       "min_numerator": 200,
       "technical_path": "attr.queues.execution.totalTimeQueuedMicros / attr.durationMillis",
       "threshold": 0.5,
-      "label": "🚨 EXECUTION QUEUE ({value:.0f}%)",
+      "label": "🚨 [WORKLOAD] EXECUTION QUEUE ({value:.0f}%)",
       "severity": "critical",
       "description": "Significant ticket queueing detected. The query spent most of its life waiting for an available execution slot, indicating the cluster has reached its concurrency limit."
     },
@@ -177,7 +176,7 @@
       "min_numerator": 100,
       "technical_path": "attr.timeAcquiringMicros / attr.durationMillis",
       "threshold": 0.4,
-      "label": "🔥 LOCK CONTENTION ({value:.0f}%)",
+      "label": "🔥 [WORKLOAD] LOCK CONTENTION ({value:.0f}%)",
       "severity": "critical",
       "description": "High resource contention. The query spent a significant portion of its life waiting to acquire internal collection or document locks."
     },
@@ -189,7 +188,7 @@
       "min_numerator": 100,
       "technical_path": "attr.storage.data.timeReadingMicros (Replication)",
       "threshold": 0.3,
-      "label": "🐌 REPL THROTTLED ({value:.0f}%)",
+      "label": "🐌 [WORKLOAD] Replication Throttling ({value:.0f}%)",
       "severity": "warning",
       "description": "Operation was throttled due to replication lag or secondary sync delays."
     },
@@ -200,7 +199,7 @@
       "technical_path": "attr.errCode: 50 | attr.errName: MaxTimeMSExpired",
       "op": "gt",
       "value": 0,
-      "label": "🚨 TIMEOUT",
+      "label": "🚨 [TRACE] MaxTimeMS Timeout",
       "severity": "critical",
       "description": "Operation was terminated by the server because it exceeded its 'maxTimeMS' limit. Results are likely incomplete or failed entirely."
     },
@@ -214,7 +213,7 @@
       "include_ops": [
         "aggregate"
       ],
-      "label": "🚨 SEARCH BOTTLENECK ({value:.0f}%)",
+      "label": "🚨 [WORKLOAD] Search Bottleneck ({value:.0f}%)",
       "severity": "critical",
       "description": "Atlas Search bottleneck. The database engine spent over 70% of its time waiting for results from the 'mongot' search process."
     },
@@ -225,7 +224,7 @@
       "technical_path": "cmd_obj string search ($regex | $regularExpression)",
       "op": "gt",
       "value": 0,
-      "label": "🚨 REGEX SCAN",
+      "label": "🚨 [TRACE] Regex Scan",
       "severity": "warning",
       "description": "The query uses a regular expression filter. Regex matches, especially those with the 'i' (case-insensitive) flag or non-anchored patterns, are CPU-intensive and cannot always fully leverage indexes."
     },
@@ -236,7 +235,7 @@
       "technical_path": "cmd_obj string search ($lookup)",
       "op": "gt",
       "value": 0,
-      "label": "🔗 JOIN (LOOKUP)",
+      "label": "🔗 [TRACE] Aggregation Join ($lookup)",
       "severity": "warning",
       "description": "The query uses a $lookup stage. Joins are non-standard in MongoDB and can cause significant performance degradation if not optimized with indexes on the 'from' collection."
     },
@@ -404,7 +403,7 @@
       "technical_path": "attr.storage.data.txnBytesDirty",
       "op": "gt",
       "value": 100,
-      "label": "🚨 [TRACE] CACHE POISONING (>100 MB)",
+      "label": "🚨 [TRACE] Excessive Dirty Cache (>100 MB)",
       "severity": "critical",
       "description": "The transaction dirtied a massive amount of WiredTiger cache memory. This can severely degrade global cluster performance by forcing aggressive evictions."
     },
@@ -415,7 +414,7 @@
       "technical_path": "attr.storage.timeWaitingMicros.cache",
       "op": "gt",
       "value": 1,
-      "label": "🚨 [TRACE] WiredTiger Cache Stall ({value_duration})",
+      "label": "🚨 [TRACE] Cache Pressure Stall ({value_duration})",
       "severity": "critical",
       "description": "WiredTiger cache pressure detected. The operation was stalled while waiting for dirty data to be evicted to disk, indicating that the cache is full and I/O cannot keep up with write volume."
     },
@@ -426,7 +425,7 @@
       "technical_path": "attr.keysInserted / attr.ninserted",
       "op": "gt",
       "value": 1000,
-      "label": "🚨 INDEX AMPLIFICATION",
+      "label": "🚨 [TRACE] Index Amplification",
       "severity": "warning",
       "description": "Massive index amplification detected. A single document mutation generated over 1,000 index keys, usually indicating an uncontrolled Multikey (Array) Index."
     }
