@@ -2,6 +2,13 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.2.2] - 2026-05-06
+### Fixed
+- **Atlas Search Extraction Hardening**: Suppressed structural `value` leaks in forensic query parameter extraction.
+- **Recursive Array Traversal**: Added array-aware harvesting to ensure fields inside `$and`, `$or`, and `compound` search operators are correctly captured.
+- **Structural Guard Integrity**: Expanded the `SEARCH_STRUCTURAL_FIELDS` registry to isolate business fields from operator syntax.
+
+
 ## [5.2.1] - 2026-05-06
 ### Fixed
 - **Forensic Timestamp Hardening:** Resolved "UNKNOWN" timestamp regressions in Business and System workloads by ensuring normalized timestamp injection at the ingestion point.

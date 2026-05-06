@@ -55,6 +55,11 @@ def _harvest_params(obj: Any, params_found: Dict[str, Any], depth=0):
     # Atlas Search / $facet pipelines can exceed 20 levels.
     if depth > 32 or not obj: return  
     
+    if isinstance(obj, list):
+        for item in obj:
+            _harvest_params(item, params_found, depth + 1)
+        return
+
     if isinstance(obj, dict):
         # 🧪 Atlas Search Path Extraction
         # Search pipelines often use { "path": "myField" } inside operators.

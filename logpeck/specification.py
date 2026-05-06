@@ -174,7 +174,7 @@ SEARCH_STRUCTURAL_FIELDS = {
     "regex", "autocomplete", "moreLikeThis", "phrase", "queryString", "search",
     "index", "facet", "operator", "analyzer", "score", "fuzzy", "prefix", "term",
     "span", "highlight", "synonyms", "tokenOrder", "multi", "queryVector", "filter",
-    "gte", "lte", "gt", "lt", "constant", "geoShape", "embeddedDocument",
+    "gte", "lte", "gt", "lt", "constant", "geoShape", "embeddedDocument", "value",
     "o", "o2", "u", "i", "d", "diff", "upsert", "multi", "updates", "deletes", "CRUD"
 }
 
