@@ -107,7 +107,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     severity_wave_html = render_wave(stats.get("severities", {}), {"ERROR": "var(--error)", "WARN": "var(--warn)", "INFO": "var(--accent)"})
     component_wave_html = render_wave(stats.get("components", {}))
     # 🕵️ Forensic Suppression: Filter out admin, local, config, and system namespaces to resolve signal-to-noise issues.
-    ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "unknown" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
+    ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "N/A" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
     msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
     timeout_table_html = "" # Consolidated into Query Shape Analysis
@@ -189,7 +189,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             tags = row.get("diagnostic_tags", [])
             chip_list = [f"<span class='tag-{str(t.get('severity', 'info')).lower()}'>{t.get('label', 'UNKNOWN')}</span>" for t in tags]
             chips = f'<div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">{" ".join(chip_list)}</div>'
-            ns_display = row.get('namespace', 'unknown')
+            ns_display = row.get('namespace', 'N/A')
             if row.get("inferred_ns"): ns_display += ' <span style="opacity:0.6;font-style:italic">(Inferred)</span>'
             
             dist = row.get("latency_distribution", {}); tiers = [100, 250, 500, 1000, 2000, 5000, 10000]; t_colors = ["var(--tier1)", "var(--tier2)", "var(--tier3)", "var(--tier4)", "var(--tier5)", "var(--tier6)", "var(--tier7)"]; total_d = sum(dist.values()) or 1
@@ -415,14 +415,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 colspan_val = "6"
                 aas_load_col = ""
             elif is_system_view:
-                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
+                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
             elif is_timeout_view:
                 colspan_val = "7"
                 aas_load_col = ""
             else:
-                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'unknown')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
+                extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
                 colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
 
@@ -464,7 +464,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
                 ns = row.get('namespace', 'N/A')
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'unknown').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = ""
             else:
                 # 🧪 Standard Workload Row ( Restoration)
@@ -472,7 +472,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
                 ns = row.get('namespace', 'N/A')
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--accent)">{row.get('category', 'unknown').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--accent)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
 
             
             schema_col = ""
@@ -522,7 +522,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     
                     <div style="margin-top:1.5rem; display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-secondary)">
                         <div><strong style="color:var(--text-primary)">LAST SEEN:</strong> {row.get('last_ts', 'N/A')}</div>
-                        <div><strong style="color:var(--text-primary)">AFFECTED APP:</strong> {row.get('app_name', 'unknown')}</div>
+                        <div><strong style="color:var(--text-primary)">AFFECTED APP:</strong> {row.get('app_name', 'N/A')}</div>
                     </div>
                 </div></td></tr>'''
             else:
@@ -555,7 +555,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <div class="card-label" style="display:flex; align-items:center; gap:20px;">
                                 <span>💨 Fastest Payload</span>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('min_ts', 'unknown')}</div>
+                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('min_ts', 'N/A')}</div>
                                     <button class="btn-copy" onclick="copyToClipboard('payload-fast-{start_idx + i}', this)">COPY JSON</button>
                                 </div>
                             </div>
@@ -565,7 +565,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <div class="card-label" style="display:flex; align-items:center; gap:20px;">
                                 <span>🐢 Slowest Payload</span>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('max_ts', 'unknown')}</div>
+                                    <div style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--text-secondary); background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px">TS: {row.get('max_ts', 'N/A')}</div>
                                     <button class="btn-copy" onclick="copyToClipboard('payload-slow-{start_idx + i}', this)">COPY JSON</button>
                                 </div>
                             </div>

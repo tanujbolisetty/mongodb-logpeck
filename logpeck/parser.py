@@ -206,7 +206,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
             # Sanitize/Crop if it is a system event to maintain high resolution
             raw_op = msg
         else:
-            raw_op = "unknown"
+            raw_op = "N/A"
     
     # 🕵️ Special System Event Harvesting
     # Target: Connection Metadata & Authentication lines to recover Identity Anchors
@@ -221,7 +221,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     
     # 🕵️ Forensic Attribute Recovery
     # Recover namespace from attributes (common in housekeeping logs like TTL index)
-    if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
+    if not ns or ns == "N/A" or str(ns).endswith(".$cmd"):
         ns = attr.get("namespace") or ns
 
     # 🧬 Recovery Anchor
@@ -238,7 +238,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
              has_crud or 
              "txnNumber" in params)
     
-    if is_tx or ns == "unknown" or not ns:
+    if is_tx or ns == "N/A" or not ns:
         coll = None
         for k in COMMON_COMMAND_KEYS:
             if k in cmd_obj and isinstance(cmd_obj[k], str):
@@ -275,7 +275,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
             tx_op = "delete" if op.lower() in ["remove", "deletes"] else op
             op = f"tx-{tx_op}"
 
-    if not ns or ns == "unknown" or str(ns).endswith(".$cmd"):
+    if not ns or ns == "N/A" or str(ns).endswith(".$cmd"):
         h_ns = heuristic_extract_ns(msg)
         if not h_ns and "error" in attr:
             h_ns = heuristic_extract_ns(str(attr["error"]))
@@ -291,10 +291,10 @@ def normalize_conn_id(ctx: str) -> str:
     This normalizes everything to 'conn123' to allow consistent lookup 
     across different log entries in the same session.
     """
-    if not ctx: return "unknown"
+    if not ctx: return "N/A"
     # Clean brackets and prefix
     raw = str(ctx).strip("[]").replace("conn", "").strip()
-    return f"conn{raw}" if raw else "unknown"
+    return f"conn{raw}" if raw else "N/A"
 
 def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -312,8 +312,13 @@ def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> D
     
     # 1. Timestamp Induction (Ghost Stitching)
     # Extracts the date from MongoDB's ISODate object or raw string.
-    ts = entry.get("t", {}).get("$date") if isinstance(entry.get("t"), dict) else entry.get("t")
-    canonical["t"] = ts or entry.get("time") or entry.get("ts") or last_ts
+    raw_t = entry.get("t")
+    ts = raw_t.get("$date") if isinstance(raw_t, dict) else raw_t
+    
+    # 🧬 Normalization: Ensure we have a string representation
+    ts_str = str(ts) if ts else None
+    
+    canonical["t"] = ts_str or entry.get("time") or entry.get("ts") or last_ts
     
     # 2. Severity Induction (I=Info, D=Debug, E=Error, W=Warning)
     s = entry.get("s") or entry.get("severity") or entry.get("level")
@@ -327,15 +332,15 @@ def induce_log_schema(entry: Dict[str, Any], last_ts: Optional[str] = None) -> D
     if not msg:
         if entry.get("type") == "command": msg = "Slow query"
         elif "error" in entry: msg = "Infrastructure Failure"
-        else: msg = "unknown"
+        else: msg = "N/A"
     canonical["msg"] = msg
     
     # 4. Context Induction (Connection / Thread / Host)
-    ctx = entry.get("ctx") or entry.get("host") or entry.get("target") or entry.get("connectionId") or "unknown"
+    ctx = entry.get("ctx") or entry.get("host") or entry.get("target") or entry.get("connectionId") or "N/A"
     canonical["ctx"] = normalize_conn_id(str(ctx))
     
     # 5. Component/Category Induction (COMMAND, ACCESS, NETWORK, etc.)
-    canonical["c"] = entry.get("c") or entry.get("component") or entry.get("category") or "unknown"
+    canonical["c"] = entry.get("c") or entry.get("component") or entry.get("category") or "N/A"
     
     return canonical
 
@@ -352,6 +357,11 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # 🧪 Unified Schema Induction
     # Standardize headers (Timestamp, Severity, Msg, Context) across all formats.
     header = induce_log_schema(entry, last_ts)
+    
+    # 🧬 Timestamp Persistence: Inject the normalized timestamp back into the entry 
+    # to ensure all downstream forensic samples (and reports) have valid attribution.
+    if header.get("t"): entry["t"] = header["t"]
+    
     attr = entry.get("attr")
     
     if not isinstance(attr, dict):
@@ -361,7 +371,7 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # Handle both standard command logs and transactional CRUD blocks
     cmd_obj = attr.get("command") or attr.get("CRUD") or entry.get("command") or {}
     msg = header["msg"]
-    ns_raw = attr.get("ns") or entry.get("ns") or "unknown"
+    ns_raw = attr.get("ns") or entry.get("ns") or "N/A"
     
     op, ns, has_crud = detect_op_and_ns(attr, cmd_obj, msg, ns_raw)
     
@@ -400,8 +410,8 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
 
     metrics = {
         "ms": ms, "ns": ns, "op": op, "query_shape_hash": q_hash,
-        "query_hash": attr.get("queryHash") or entry.get("queryHash") or "unknown",
-        "plan_cache_key": attr.get("planCacheKey") or entry.get("planCacheKey") or "unknown",
+        "query_hash": attr.get("queryHash") or entry.get("queryHash") or "N/A",
+        "plan_cache_key": attr.get("planCacheKey") or entry.get("planCacheKey") or "N/A",
         "query_schema": extract_query_schema(schema_cmd, schema_op),
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
@@ -424,7 +434,7 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
     Filters by Namespace, App Name, OR Component.
     """
     # 1. Explicit System Namespace check (Priority 1)
-    if ns and ns != "unknown":
+    if ns and ns != "N/A":
         if any(ns.startswith(p) for p in SYSTEM_NAMESPACES) or ".system." in ns or ns == "oplog.rs":
             return True
 
@@ -446,7 +456,7 @@ def is_system_query(ns: str, app: str = "", component: str = "", op: str = "", h
         return True
 
     # 3. Business Namespace check (Priority 3)
-    if ns and ns != "unknown":
+    if ns and ns != "N/A":
         return False
         
     return False
@@ -472,16 +482,16 @@ def synthesize_flat_attr(entry: Dict[str, Any]) -> Dict[str, Any]:
 def extract_identity(attr: Dict[str, Any], entry: Dict[str, Any], op: str) -> Dict[str, str]:
     """Identifies the application, user, IP, and operation ID anchors."""
     orig_cmd = attr.get("originatingCommand", {})
-    ip_raw = str(attr.get("remote") or attr.get("client") or "unknown")
+    ip_raw = str(attr.get("remote") or attr.get("client") or "N/A")
     
     # 🧪 Atlas Identity Restoration: 
     # Check for appName in multiple locations including nested doc.application.name
     app_nested = get_nested_value({"attr": attr}, "attr.doc.application.name")
-    app_name = str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or app_nested or "unknown")
+    app_name = str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or app_nested or "N/A")
 
     return {
         "appName": app_name,
-        "user": str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "unknown"),
+        "user": str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "N/A"),
         "client_ip": str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw),
         "op_id": str(attr.get("opId") or entry.get("opId") or "N/A")
     }

@@ -47,8 +47,8 @@ def format_forensic_entry(entry):
     return {
         "timestamp": ts_str,
         "severity": metrics.get("severity", "I"),
-        "op": (metrics.get("op") or "unknown").upper(),
-        "ns": metrics.get("ns") or "unknown",
+        "op": (metrics.get("op") or "N/A").upper(),
+        "ns": metrics.get("ns") or "N/A",
         "duration_ms": metrics.get("ms", 0),
         "msg": entry.get("msg", ""),
         "waits": {k: v for k, v in metrics.get("waits_ms", {}).items() if v > 0},
@@ -86,10 +86,10 @@ def print_log_card(entry, full=False):
     duration = metrics.get("ms") or attr.get("durationMillis")
     ns = metrics.get("ns")
     if not ns or ns == "None":
-        ns = "unknown"
+        ns = "N/A"
     ts = entry.get("t")
     sev = metrics.get("severity") or "I"
-    op = metrics.get("op") or "unknown"
+    op = metrics.get("op") or "N/A"
     from rich.markup import escape
     
     # TS Formatting (Defensive against both dict/string variants)
@@ -212,7 +212,7 @@ def print_forensic_table(summary):
         q_hash = str(row.get('query_hash') or "N/A")
         p_key = str(row.get('plan_cache_key') or "N/A")
 
-        def clean_h(h): return "" if str(h).lower() in ["n/a", "unknown"] else str(h)
+        def clean_h(h): return "" if str(h).lower() in ["n/a"] else str(h)
         c_s, c_q, c_p = clean_h(raw_hash), clean_h(q_hash), clean_h(p_key)
 
         short_s = f"{c_s[:8]}.." if len(c_s) > 8 else (c_s or "")
@@ -234,7 +234,7 @@ def print_forensic_table(summary):
             f"{row['aas_load']:.2f}",
             str(row['count']),
             str(row['namespace']),
-            str(row.get('app_name', 'unknown')),
+            str(row.get('app_name', 'N/A')),
             render_diagnostic_badges(row.get('diagnostic_tags', [])),
             last_seen
         )
@@ -259,7 +259,7 @@ def print_failure_forensic_table(summary):
     for row in summary:
         err = str(row.get('error_name') or row.get('error_code') or "TIMEOUT")
         q_hash_raw = str(row.get('query_shape_hash') or "N/A")
-        q_hash = "N/A" if q_hash_raw.lower() == "unknown" else q_hash_raw
+        q_hash = q_hash_raw
         
         last_seen = str(row.get('last_ts', 'N/A'))
         if len(last_seen) > 19: last_seen = last_seen[11:19]
@@ -270,7 +270,7 @@ def print_failure_forensic_table(summary):
             str(row['count']),
             q_hash,
             str(row['namespace']),
-            str(row.get('app_name', 'unknown')),
+            str(row.get('app_name', 'N/A')),
             last_seen
         )
 

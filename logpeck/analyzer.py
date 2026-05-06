@@ -159,17 +159,17 @@ def build_forensic_context(log_file_path: str) -> Dict[str, Dict[str, str]]:
                     if not isinstance(attr, dict): continue
                     
                     if ctx not in ctx_registry:
-                        ctx_registry[ctx] = {"ns": "unknown", "app": "unknown"}
+                        ctx_registry[ctx] = {"ns": "N/A", "app": "N/A"}
 
                     # Capture Identity (from client metadata handshake)
-                    app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "unknown")
-                    if app != "unknown":
+                    app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "N/A")
+                    if app != "N/A":
                         ctx_registry[ctx]["app"] = app
 
                     # Identify the namespace (db.collection) active on this context
                     p_cmd = attr.get("command") or attr.get("originatingCommand") or attr.get("doc", {}).get("q")
                     raw_ns = attr.get("ns")
-                    if raw_ns and raw_ns != "unknown":
+                    if raw_ns and raw_ns != "N/A":
                         _, res_ns, _ = detect_op_and_ns(attr, p_cmd or {}, str(obj.get("msg", "")), raw_ns)
                         ctx_registry[ctx]["ns"] = str(res_ns)
                 except: continue
@@ -249,9 +249,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     if total_parsed % 500000 == 0: print(f"  ↳ {total_parsed:,} lines processed...", file=sys.stderr)
                     
                     s = header.get("s", "I"); sev = str(SEVERITY_MAP.get(s, s)); severity_stats[sev] += 1
-                    c = header.get("c", "unknown"); component_stats[c] += 1
-                    msg = header.get("msg", "unknown"); norm_msg = RE_OBJECT_ID.sub('...', msg) if "ObjectId(" in msg else msg
-                    ctx = header.get("ctx", "unknown")
+                    c = header.get("c", "N/A"); component_stats[c] += 1
+                    msg = header.get("msg", "N/A"); norm_msg = RE_OBJECT_ID.sub('...', msg) if "ObjectId(" in msg else msg
+                    ctx = header.get("ctx", "N/A")
                     
                     # 💡 Context-Aware Error Tracking
                     m_key = (sev, str(norm_msg[:80]))
@@ -262,15 +262,15 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # 🧪 Early Forensic Matrix Extraction
                     metrics = extract_log_metrics(entry, include_full_command=True, last_ts=last_known_ts)
                     attr = metrics.get("attr") or entry.get("attr", {})
-                    op = metrics.get("op") or "unknown"
+                    op = metrics.get("op") or "N/A"
                     
                     # 🏺 Forensic Injection into MSH Matrix (: Metadata Priority)
                     if msg in EXCLUDED_EVENT_MSGS:
                         if msg == "Connection accepted": total_accepted += 1
                         if msg == "Connection ended": total_closed += 1
-                        user = str(attr.get("user") or "unknown")
-                        app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "unknown")
-                        ip_raw = str(attr.get("remote", attr.get("client", "unknown")))
+                        user = str(attr.get("user") or "N/A")
+                        app = str(attr.get("appName") or attr.get("doc", {}).get("application", {}).get("name") or "N/A")
+                        ip_raw = str(attr.get("remote", attr.get("client", "N/A")))
                         ip = str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw)
                         md = {}
                         cm_obj = attr.get("clientMetadata")
@@ -278,20 +278,20 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         if isinstance(cm_obj, dict): md = cm_obj.get("driver", {})
                         if not md and isinstance(d_obj, dict): md = d_obj
                         
-                        d_str = "unknown"
+                        d_str = "N/A"
                         if md and isinstance(md, dict):
-                            m_n = str(md.get('name', 'unknown'))
-                            m_v = str(md.get('version', 'unknown'))
-                            if m_n != "unknown":
-                                d_str = f"{m_n} v{m_v}" if m_v != "unknown" else m_n
-                                if app != "unknown": global_app_driver_map[app] = d_str
+                            m_n = str(md.get('name', 'N/A'))
+                            m_v = str(md.get('version', 'N/A'))
+                            if m_n != "N/A":
+                                d_str = f"{m_n} v{m_v}" if m_v != "N/A" else m_n
+                                if app != "N/A": global_app_driver_map[app] = d_str
                         
-                        if ctx not in conn_metadata: conn_metadata[ctx] = {"app": "unknown", "user": "unknown", "ip": "unknown", "driver": "unknown"}
-                        if app != "unknown": conn_metadata[ctx]["app"] = app
-                        if user != "unknown": conn_metadata[ctx]["user"] = user
-                        if ip != "unknown": conn_metadata[ctx]["ip"] = ip
-                        if d_str != "unknown": conn_metadata[ctx]["driver"] = d_str
-                        if d_str != "unknown":
+                        if ctx not in conn_metadata: conn_metadata[ctx] = {"app": "N/A", "user": "N/A", "ip": "N/A", "driver": "N/A"}
+                        if app != "N/A": conn_metadata[ctx]["app"] = app
+                        if user != "N/A": conn_metadata[ctx]["user"] = user
+                        if ip != "N/A": conn_metadata[ctx]["ip"] = ip
+                        if d_str != "N/A": conn_metadata[ctx]["driver"] = d_str
+                        if d_str != "N/A":
                             if ctx not in conn_registry: conn_registry[ctx] = {}
                             conn_registry[ctx]["driver"] = d_str
                         continue
@@ -353,11 +353,11 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         ns_guess = attr.get("ns")
                         if not ns_guess or str(ns_guess).endswith(".$cmd"):
                             p_cmd = attr.get("command") or attr.get("originatingCommand") or {}
-                            _, res_ns, _ = detect_op_and_ns(attr, p_cmd, msg, ns_guess or "unknown")
+                            _, res_ns, _ = detect_op_and_ns(attr, p_cmd, msg, ns_guess or "N/A")
                             ns_guess = res_ns
                         
                         # 🧪 Heuristic Fallback: Try to extract NS from the message text if still missing
-                        if not ns_guess or ns_guess == "unknown" or ns_guess == "N/A":
+                        if not ns_guess or ns_guess == "N/A" or ns_guess == "N/A":
                             ns_guess = str(heuristic_extract_ns(search_space) or last_ns_cache.get(ctx) or "N/A")
                         else:
                             ns_guess = str(ns_guess)
@@ -401,12 +401,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             if preview == "N/A": 
                                 preview = last_op_cache.get(ctx, "N/A")
                             timeout_patterns[key] = {
-                                "count": 0, "ts": str(ts), "msg": str(display_err[:120]), "ns": ns_guess, "op": "unknown",
+                                "count": 0, "ts": str(ts), "msg": str(display_err[:120]), "ns": ns_guess, "op": "N/A",
                                 "preview": preview,
                                 "remote": str(attr.get("remote", "-")), "ctx": str(entry.get("ctx", "-")),
                                 "error_code": e_code,
                                 "total_ms": 0, "max_ms": 0,
-                                "app_name": str(attr.get("appName") or conn_registry.get(ctx, {}).get("app") or "unknown")
+                                "app_name": str(attr.get("appName") or conn_registry.get(ctx, {}).get("app") or "N/A")
                             }
                         timeout_patterns[key]["count"] += 1
                         timeout_patterns[key]["total_ms"] += dur_ms
@@ -417,13 +417,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # 🧬 Orphan Routing Logic (Senior Implementation)
                     # Route timeouts with no query shape to Table 3 (System & Network Errors)
                     # to resolve detail-visibility gaps for background executor events.
-                    is_orphan_timeout = is_timeout_op and h_b in ["unknown", "N/A", "N/D"]
+                    is_orphan_timeout = is_timeout_op and h_b in ["N/A", "N/A", "N/D"]
 
                     if (is_error_op and not is_timeout_op) or is_orphan_timeout:
                         # 🧬 High-Resolution Systemic Error Extraction
                         # Extract the most meaningful label for the summary, but keep the payload raw.
                         e_cat = attr.get("category") or header.get("c")
-                        if not e_cat or str(e_cat).strip().lower() in ["", "unknown", "n/a", "-"]:
+                        if not e_cat or str(e_cat).strip().lower() in ["", "N/A", "n/a", "-"]:
                             e_cat = "TIMEOUT" if is_orphan_timeout else "SYSTEM"
                         
                         # Preferred extraction order for the "Summary" column
@@ -478,8 +478,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     if msg == "Slow query": total_slow_count += 1
                     
                     # 🕵️ Identity & Bottleneck Discovery
-                    curr_op = metrics.get("op", "unknown")
-                    curr_ns = metrics.get("ns", "unknown")
+                    curr_op = metrics.get("op", "N/A")
+                    curr_ns = metrics.get("ns", "N/A")
                     
                     duration = metrics.get("ms", 0)
                     waits = metrics.get("waits_ms", {})
@@ -504,7 +504,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     global_bottlenecks["search_ms"] += waits.get("mongot_wait", 0)
                     
                     # 📊 Full Portfolio Instrumentation
-                    op_registry[str(metrics.get("op", "unknown"))] += 1
+                    op_registry[str(metrics.get("op", "N/A"))] += 1
                     for fk, fv in metrics.get("forensic", {}).items():
                         if isinstance(fv, (int, float)):
                             global_forensic_sums[fk] += fv
@@ -516,13 +516,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     
                     # 🔗 Stateful Session Reconstruction
                     if lsid:
-                        ns_val = str(metrics.get("ns", "unknown"))
-                        app_val = str(metrics.get("app_name", "unknown"))
+                        ns_val = str(metrics.get("ns", "N/A"))
+                        app_val = str(metrics.get("app_name", "N/A"))
                         # 🔗 Stateful Session Reconstruction ( Hardening)
                         # Remove the "not in" guard to allow the MOST RECENT business collection to be the anchor.
-                        if ns_val != "unknown" and not ns_val.endswith(".$cmd"): 
+                        if ns_val != "N/A" and not ns_val.endswith(".$cmd"): 
                             session_ns_map[lsid] = ns_val
-                        if app_val != "unknown": 
+                        if app_val != "N/A": 
                             session_app_map[lsid] = app_val
                     
                     is_inferred = False
@@ -537,7 +537,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         elif metrics.get("op") == "getmore" and c_id_str in cursor_hash_map:
                             metrics["query_shape_hash"] = cursor_hash_map[c_id_str]
                     if lsid:
-                        if (str(metrics.get("ns", "unknown")) == "unknown" or str(metrics.get("ns", "")).endswith(".$cmd")) and lsid in session_ns_map:
+                        if (str(metrics.get("ns", "N/A")) == "N/A" or str(metrics.get("ns", "")).endswith(".$cmd")) and lsid in session_ns_map:
                             metrics["ns"] = session_ns_map[lsid]; is_inferred = True
                         
                         # 🔗 Stateful Operation Reconstruction
@@ -550,55 +550,55 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                                 metrics["query_shape_hash"] = op_id_hash_map[str(op_id)]
                         
                         # 🏮 Identity Propagation: Fallback to Session Map -> Then Connection Metadata
-                        if str(metrics.get("app_name", "unknown")) == "unknown":
+                        if str(metrics.get("app_name", "N/A")) == "N/A":
                             if lsid in session_app_map:
                                 metrics["app_name"] = str(session_app_map[lsid])
-                            elif ctx in conn_metadata and conn_metadata[ctx]["app"] != "unknown":
+                            elif ctx in conn_metadata and conn_metadata[ctx]["app"] != "N/A":
                                 metrics["app_name"] = conn_metadata[ctx]["app"]
                         
-                        if str(metrics.get("user", "unknown")) == "unknown":
-                            if ctx in conn_metadata and conn_metadata[ctx]["user"] != "unknown":
+                        if str(metrics.get("user", "N/A")) == "N/A":
+                            if ctx in conn_metadata and conn_metadata[ctx]["user"] != "N/A":
                                 metrics["user"] = conn_metadata[ctx]["user"]
 
                     # 🏮 Identity Discovery
                     if ctx not in conn_metadata: 
-                        conn_metadata[ctx] = {"app": "unknown", "user": "unknown", "ip": "unknown", "driver": "unknown"}
+                        conn_metadata[ctx] = {"app": "N/A", "user": "N/A", "ip": "N/A", "driver": "N/A"}
                     
-                    m_ip = str(metrics.get("client_ip", "unknown"))
-                    if m_ip != "unknown": conn_metadata[ctx]["ip"] = m_ip
+                    m_ip = str(metrics.get("client_ip", "N/A"))
+                    if m_ip != "N/A": conn_metadata[ctx]["ip"] = m_ip
                     
-                    m_app = str(metrics.get("app_name", "unknown"))
-                    if m_app != "unknown": 
+                    m_app = str(metrics.get("app_name", "N/A"))
+                    if m_app != "N/A": 
                         conn_metadata[ctx]["app"] = m_app
                     
-                    m_user = str(metrics.get("user", "unknown"))
-                    if m_user != "unknown": 
+                    m_user = str(metrics.get("user", "N/A"))
+                    if m_user != "N/A": 
                         conn_metadata[ctx]["user"] = m_user
 
                     # 🧬 MSH Identity Back-filling
                     if ctx in conn_metadata:
                         msh = conn_metadata[ctx]
-                        if str(metrics.get("app_name", "unknown")) == "unknown" and msh["app"] != "unknown":
+                        if str(metrics.get("app_name", "N/A")) == "N/A" and msh["app"] != "N/A":
                             metrics["app_name"] = msh["app"]
-                        if str(metrics.get("user", "unknown")) == "unknown" and msh["user"] != "unknown":
+                        if str(metrics.get("user", "N/A")) == "N/A" and msh["user"] != "N/A":
                             metrics["user"] = msh["user"]
-                        if str(metrics.get("client_ip", "unknown")) == "unknown" and msh["ip"] != "unknown":
+                        if str(metrics.get("client_ip", "N/A")) == "N/A" and msh["ip"] != "N/A":
                             metrics["client_ip"] = msh["ip"]
 
-                    ns = str(metrics.get("ns", "unknown"))
+                    ns = str(metrics.get("ns", "N/A"))
                     
                     # 🧬 Forensic Context Back-filling
                     # Cache the most recent valid namespace for this connection to help 
                     # attribute anonymous failure events later in the trace.
-                    if ns != "unknown" and not ns.endswith(".$cmd"):
+                    if ns != "N/A" and not ns.endswith(".$cmd"):
                         last_ns_cache[ctx] = ns
                         
                     namespace_stats[ns] += 1
-                    a_n = str(metrics.get("app_name", "unknown"))
+                    a_n = str(metrics.get("app_name", "N/A"))
                     app_registry[a_n] += 1
-                    u_n = str(metrics.get("user", "unknown"))
+                    u_n = str(metrics.get("user", "N/A"))
                     user_registry[u_n] += 1
-                    i_n = str(metrics.get("client_ip", "unknown"))
+                    i_n = str(metrics.get("client_ip", "N/A"))
                     ip_registry[i_n] += 1
 
                     # 🏥 System Health Event Discovery (NEW)
@@ -630,7 +630,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     
                     # 🚀 Soft Noise Elevation Policy: Standard system components (FTDC, REPL) bypass noise filter if slow.
                     if duration >= threshold_ms or is_system_op or is_timeout_op or is_error_op:
-                        op = str(metrics.get("op", "unknown"))
+                        op = str(metrics.get("op", "N/A"))
                         
                         # 🏷️ Apply Simplified Op/App Names for System Events
                         if is_system_op:
@@ -648,7 +648,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         # 🏷️ Namespace Normalization
                         # We only use "N/A" for truly anonymous platform events.
                         # For System Query Forensics (admin, config, local), we PRESERVE the namespace.
-                        if not ns or ns == "unknown":
+                        if not ns or ns == "N/A":
                             ns = "N/A"
                             metrics["ns"] = "N/A"
                         
@@ -657,7 +657,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         # 🧪 Failure Granularity: Split failures by Error Code
                         err_c = None
                         if is_timeout_op or is_error_op:
-                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "unknown")
+                            err_c = attr.get("errCode") or attr.get("code") or (50 if is_timeout_op else "N/A")
                             h = str(f"{op}-{ns}-{h_b}-{err_c}")
                         else:
                             h = str(f"{op}-{ns}-{h_b}")
@@ -711,7 +711,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                                 ec_o["max_ms"] = duration
                                 ec_o["max_metrics"] = metrics
                                 ec_o["max_peek_attr"] = attr
-                                ec_o["max_example_raw"] = str(entry).strip()
+                                ec_o["max_example_raw"] = entry
 
                         if h not in target_stats:
                             target_stats[h] = {
@@ -802,7 +802,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         # loop in finalize_forensic_summary.
                         if s_o["max_example_raw"] is None or duration > s_o["max_ms"]:
                             s_o["max_ms"] = duration
-                            s_o["max_example_raw"] = str(entry).strip()
+                            s_o["max_example_raw"] = entry
                             s_o["max_metrics"] = metrics
                             s_o["max_peek_attr"] = attr
                             s_o["query_hash"] = metrics.get("query_hash", "N/A")
@@ -818,7 +818,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         
                         if s_o["min_example_raw"] is None or duration < s_o["min_ms"]:
                             s_o["min_ms"] = duration
-                            s_o["min_example_raw"] = str(entry).strip()
+                            s_o["min_example_raw"] = entry
                             s_o["min_metrics"] = metrics
                             s_o["min_peek_attr"] = attr
 
@@ -867,7 +867,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
         # 🧪 STRICT FILTERING: Only show failures tied to identified query shapes
         filtered_timeout_stats = {
             h: s for h, s in timeout_shape_stats.items() 
-            if s.get("query_shape_hash") not in ["N/A", "unknown", "N/D"]
+            if s.get("query_shape_hash") not in ["N/A", "N/A", "N/D"]
         }
         timeout_summary = finalize_forensic_summary(
             shape_stats=filtered_timeout_stats,
@@ -905,8 +905,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     if sk[0] not in ["INFO", "I"]
                 ][:12], 
                 "timeout_patterns": sorted(timeout_patterns.values(), key=lambda x: x["count"], reverse=True)[:8], 
-                "namespaces": {str(k): v for k, v in namespace_stats.most_common(12) if k != "unknown" and ".$cmd" not in k},
-                "error_namespaces": {str(k): v for k, v in error_namespace_stats.most_common(16) if k != "unknown" and ".$cmd" not in k},
+                "namespaces": {str(k): v for k, v in namespace_stats.most_common(12) if k != "N/A" and ".$cmd" not in k},
+                "error_namespaces": {str(k): v for k, v in error_namespace_stats.most_common(16) if k != "N/A" and ".$cmd" not in k},
                 "error_code_summary": [
                     {
                         "code": k,
@@ -928,12 +928,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
             }, 
             "connections": {
                 "total_connections": max(len(conn_registry), len(namespace_stats.keys())),
-                "top_apps": {str(k): v for k, v in Counter([str(c.get("app", "unknown")) for c in conn_registry.values()] + list(app_registry.elements())).most_common(10) if k != "unknown"},
-                "top_ips": {str(k): v for k, v in Counter([str(c.get("ip", "unknown")) for c in conn_registry.values()] + list(ip_registry.elements())).most_common(10) if k != "unknown"},
-                "top_users": {str(k): v for k, v in Counter([str(c.get("user", "unknown")) for c in conn_registry.values()] + list(user_registry.elements())).most_common(10) if k != "unknown"},
+                "top_apps": {str(k): v for k, v in Counter([str(c.get("app", "N/A")) for c in conn_registry.values()] + list(app_registry.elements())).most_common(10) if k != "N/A"},
+                "top_ips": {str(k): v for k, v in Counter([str(c.get("ip", "N/A")) for c in conn_registry.values()] + list(ip_registry.elements())).most_common(10) if k != "N/A"},
+                "top_users": {str(k): v for k, v in Counter([str(c.get("user", "N/A")) for c in conn_registry.values()] + list(user_registry.elements())).most_common(10) if k != "N/A"},
                 "app_driver_mapping": [
-                    {"app": str(app), "driver": str(global_app_driver_map.get(app, "unknown")), "count": count}
-                    for app, count in app_registry.items() if app != "unknown"
+                    {"app": str(app), "driver": str(global_app_driver_map.get(app, "N/A")), "count": count}
+                    for app, count in app_registry.items() if app != "N/A"
                 ],
                 "churn_rate": round(len(conn_registry)/max(log_dur_sec, 1), 2) if log_dur_sec > 0 else 0,
                 "auth_fail_count": auth_fail_count,
@@ -962,9 +962,9 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
         metrics = entry.get("metrics") or extract_log_metrics(entry)
         if not metrics: continue
         
-        op = str(metrics.get("op", "unknown"))
-        ns = str(metrics.get("ns", "unknown"))
-        h_b = str(metrics.get("query_shape_hash") or metrics.get("query_hash") or "unknown")
+        op = str(metrics.get("op", "N/A"))
+        ns = str(metrics.get("ns", "N/A"))
+        h_b = str(metrics.get("query_shape_hash") or metrics.get("query_hash") or "N/A")
         duration = metrics.get("ms", 0)
         waits = metrics.get("waits_ms", {})
         is_system_op = metrics.get("is_system", False)
@@ -1022,8 +1022,8 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
         # 🧬 Full-Stack Storage read micros recovery
         s["total_storage_read_micros"] += (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
         
-        app = metrics.get("app_name", "unknown")
-        if app != "unknown": s["app_names"].add(app)
+        app = metrics.get("app_name", "N/A")
+        if app != "N/A": s["app_names"].add(app)
         
         if s["max_example_raw"] is None or duration >= s["max_ms"]:
             s["max_example_raw"] = entry
@@ -1071,19 +1071,24 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         
         # Extract timestamps from raw logs if possible, otherwise use unknown
         def _extract_ts(entry_raw):
-            if not entry_raw: return "unknown"
+            if not entry_raw: return "N/A"
             if isinstance(entry_raw, dict):
-                t = entry_raw.get("t", {}).get("$date") if isinstance(entry_raw.get("t"), dict) else entry_raw.get("t")
-                return str(t) if t else "unknown"
+                # Check for standard normalized 't' (injected by parser) or fallback variants
+                t = entry_raw.get("t")
+                if isinstance(t, dict): t = t.get("$date")
+                t = t or entry_raw.get("time") or entry_raw.get("ts")
+                return str(t) if t else "N/A"
             try:
                 raw_str = str(entry_raw)
                 j_idx = raw_str.find('{')
                 if j_idx != -1:
                     obj = json.loads(raw_str[j_idx:])
-                    t = obj.get("t", {}).get("$date") if isinstance(obj.get("t"), dict) else obj.get("t")
-                    return str(t) if t else "unknown"
+                    t = obj.get("t")
+                    if isinstance(t, dict): t = t.get("$date")
+                    t = t or obj.get("time") or obj.get("ts")
+                    return str(t) if t else "N/A"
             except: pass
-            return "unknown"
+            return "N/A"
 
         max_ts = _extract_ts(max_entry)
         min_ts = _extract_ts(min_entry)
@@ -1203,7 +1208,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "storage_intensity": stats["storage_intensity"],
             "search_latency": stats["search_latency"],
             "diagnostic_tags": tags if tags else [{"label": "BALANCED", "severity": "success"}],
-            "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "unknown",
+            "app_name": ", ".join(list(q["app_names"])[:3]) if q["app_names"] else "N/A",
             "plan_summary": str(max_d.get("plan_summary", "N/A")),
             # 🏺 Web Drill-Down Metadata (Mandatory Contract)
             "namespace": str(q.get("ns", "N/A")),

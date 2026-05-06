@@ -50,7 +50,7 @@ def search_logs(
         ctx = normalize_conn_id(entry.get("ctx", ""))
         msg = str(entry.get("msg", ""))
         
-        ctx_info = context_cache.get(ctx, {"ns": "unknown", "app": "unknown"})
+        ctx_info = context_cache.get(ctx, {"ns": "N/A", "app": "N/A"})
         
         # Build discovery search space
         if grep_mode:
@@ -82,10 +82,10 @@ def search_logs(
                 # 🦷 Forensic Backfilling: Extract metrics and merge reconstructed state
                 metrics = extract_log_metrics(entry) or {}
                 res_ns = metrics.get("ns")
-                if (not res_ns or res_ns in ["unknown", "$cmd", "None"]):
+                if (not res_ns or res_ns in ["N/A", "$cmd", "None"]):
                     metrics["ns"] = ctx_info["ns"]
                 
-                if not metrics.get("ns"): metrics["ns"] = "unknown"
+                if not metrics.get("ns"): metrics["ns"] = "N/A"
                 
                 # Add app identity to metrics for display
                 metrics["appName"] = ctx_info["app"]
@@ -118,14 +118,14 @@ def filter_logs(
     
     for entry in read_logs_chunked(log_file_path):
         ctx = normalize_conn_id(entry.get("ctx", ""))
-        ctx_info = context_cache.get(ctx, {"ns": "unknown", "app": "unknown"})
+        ctx_info = context_cache.get(ctx, {"ns": "N/A", "app": "N/A"})
         metrics = extract_log_metrics(entry, include_full_command=True) or {}
         
         # 🦷 Forensic Backfilling
-        if (not metrics.get("ns") or metrics.get("ns") in ["unknown", "$cmd", "None"]):
+        if (not metrics.get("ns") or metrics.get("ns") in ["N/A", "$cmd", "None"]):
             metrics["ns"] = ctx_info["ns"]
         
-        if not metrics.get("ns"): metrics["ns"] = "unknown"
+        if not metrics.get("ns"): metrics["ns"] = "N/A"
         metrics["appName"] = ctx_info["app"]
 
         match = True

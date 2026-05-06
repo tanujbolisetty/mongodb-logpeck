@@ -168,7 +168,7 @@ The matrix tracks three distinct life-stages of a connection:
 When a "Business Query" (Pass 2) arrives with only a `ctx`, the engine recursively crawls the MSH Matrix:
 - **Direct Match**: Returns the cached identity.
 - **Session Fallback**: If `lsid` is present, it attempts to bridge the identity from other active connections in the same session.
-- **Global Inferred**: If all else fails, it tags the operation as `unknown` but preserves the `remote` IP harvested in Stage 1.
+- **Global Inferred**: If all else fails, it tags the operation as `N/A` but preserves the `remote` IP harvested in Stage 1.
 
 ---
 
@@ -485,7 +485,7 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 - For `insert` operations: this panel is empty (no query filter exists)
 
 **Section F: Fastest & Slowest Payloads (Side-by-Side)**
-- Grid displays the raw JSON payloads (`max_peek_attr`, `min_peek_attr`)
+- **Payload Integrity**: Grid displays the raw JSON payloads (`max_peek_attr`, `min_peek_attr`). Payloads are cached as high-fidelity dictionaries (not strings) to guarantee valid JSON rendering and accurate timestamp attribution.
 - Includes "TS: [timestamp]" pills and a "COPY JSON" button
 - **Responsive Constraints**: JSON container blocks are rigorously scoped to exactly 50% max capacity (`max-width: 100%` inside a `1fr` column) with strict `white-space: pre-wrap` overrides. This ensures unbroken scalar strings (like Base64 encoded blobs) wrap natively instead of introducing layout-breaking horizontal scrollbars on the parent container.
 - Dark background (#000000), monospace font, max-height 450px with scroll

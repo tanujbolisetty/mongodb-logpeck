@@ -2,6 +2,13 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.2.1] - 2026-05-06
+### Fixed
+- **Forensic Timestamp Hardening:** Resolved "UNKNOWN" timestamp regressions in Business and System workloads by ensuring normalized timestamp injection at the ingestion point.
+- **Valid JSON Examples:** Switched example caching from `str(dict)` to raw dictionaries to ensure valid JSON rendering and "Copy JSON" functionality in the dashboard.
+- **Professional Fallbacks:** Standardized all missing forensic metadata (Query Hash, AppName, Plan Cache Key, User, IP) to use `N/A` instead of `unknown` for improved dashboard and CLI legibility.
+- **Robust TS Extraction:** Enhanced `_extract_ts` to support legacy and lean log formats (`time`, `ts`, `$date`).
+
 ## [5.2.0] - 2026-05-06
 ### Added
 - **Unified Architectural Hardening**: Consolidated system classification, identity recovery, and workload categorization into the core `parser.py`, ensuring 100% logic parity across all analysis modes (Stream vs. Batch).
