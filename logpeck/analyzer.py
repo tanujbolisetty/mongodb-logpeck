@@ -230,13 +230,13 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
     try:
         f_opener = gzip.open(log_file_path, 'rt', encoding='utf-8') if log_file_path.endswith('.gz') else open(log_file_path, 'r', encoding='utf-8')
         with f_opener as f:
-            for entry in f:
+            for line in f:
                 total_parsed += 1
                 try:
                     # 🕵️ Surgical JSON Extraction: Skip plaintext timestamp prefixes
-                    j_idx = entry.find('{')
+                    j_idx = line.find('{')
                     if j_idx == -1: continue
-                    obj = json.loads(entry[j_idx:])
+                    obj = json.loads(line[j_idx:])
                     
                     # 🧪 Unified Schema Induction
                     header = induce_log_schema(obj, last_known_ts)
@@ -423,7 +423,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         # 🧬 High-Resolution Systemic Error Extraction
                         # Extract the most meaningful label for the summary, but keep the payload raw.
                         e_cat = attr.get("category") or header.get("c")
-                        if not e_cat or str(e_cat).strip() == "":
+                        if not e_cat or str(e_cat).strip().lower() in ["", "unknown", "n/a", "-"]:
                             e_cat = "TIMEOUT" if is_orphan_timeout else "SYSTEM"
                         
                         # Preferred extraction order for the "Summary" column
@@ -437,8 +437,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         
                         # 🧪 Technical Forensic Payload: Deeply harvest codes from nested blocks
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason", "msg"]}
-                        if "_raw" in entry:
-                            err_payload["_raw"] = entry["_raw"]
+                        err_payload["_raw"] = line.strip()
                         
                         # Promote numerical codes from nested error objects if present
                         sys_code = harvest_error_code(attr, is_timeout=is_timeout_op)
