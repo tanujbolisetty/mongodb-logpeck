@@ -414,7 +414,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
 
                         error_namespace_stats[ns_guess] += 1
                     
-                    if is_error_op and not is_timeout_op:
+                    # 🧬 Orphan Routing Logic (Senior Implementation)
+                    # Route timeouts with no query shape to Table 3 (System & Network Errors)
+                    # to resolve detail-visibility gaps for background executor events.
+                    is_orphan_timeout = is_timeout_op and h_b in ["unknown", "N/A", "N/D"]
+
+                    if (is_error_op and not is_timeout_op) or is_orphan_timeout:
                         # 🧬 High-Resolution Systemic Error Extraction
                         # Extract the most meaningful label for the summary, but keep the payload raw.
                         e_cat = attr.get("category") or header.get("c") or "SYSTEM"
@@ -432,7 +437,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason"]}
                         
                         # Promote numerical codes from nested error objects if present
-                        sys_code = harvest_error_code(attr, is_timeout=False)
+                        sys_code = harvest_error_code(attr, is_timeout=is_timeout_op)
                         
                         # Promote specific names for high-frequency errors
                         if sys_code == 11000 or "E11000" in str(e_msg):
@@ -443,7 +448,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             e_msg = f"ConnectionPoolExpired: {e_msg}"
 
                         # Hardened Payload Guard: Skip if empty forensic evidence exists for informational logs
-                        if not err_payload and (sev in ["INFO", "I"] or not is_error_op):
+                        # (Allow orphaned timeouts through even if payload is sparse)
+                        if not err_payload and (sev in ["INFO", "I"] or not is_error_op) and not is_orphan_timeout:
                             continue
                         
                         # Ensure we don't have empty messages
