@@ -468,7 +468,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 extra_cols = ""
             else:
                 # 🧪 Standard Workload Row ( Restoration)
-                last_seen = str(row.get('max_ts', 'N/A'))
+                last_seen = str(row.get('last_ts') or row.get('max_ts') or 'N/A')
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
                 ns = row.get('namespace', 'N/A')

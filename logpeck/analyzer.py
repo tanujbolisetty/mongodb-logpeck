@@ -1047,6 +1047,9 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
         # Extract timestamps from raw logs if possible, otherwise use unknown
         def _extract_ts(entry_raw):
             if not entry_raw: return "unknown"
+            if isinstance(entry_raw, dict):
+                t = entry_raw.get("t", {}).get("$date") if isinstance(entry_raw.get("t"), dict) else entry_raw.get("t")
+                return str(t) if t else "unknown"
             try:
                 raw_str = str(entry_raw)
                 j_idx = raw_str.find('{')
