@@ -437,7 +437,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         
                         # 🧪 Technical Forensic Payload: Deeply harvest codes from nested blocks
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason", "msg"]}
-                        err_payload["_raw"] = line.strip()
+                        err_payload["_raw"] = obj
                         
                         # Promote numerical codes from nested error objects if present
                         sys_code = harvest_error_code(attr, is_timeout=is_timeout_op)
