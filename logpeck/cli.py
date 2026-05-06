@@ -212,11 +212,16 @@ def print_forensic_table(summary):
         q_hash = str(row.get('query_hash') or "N/A")
         p_key = str(row.get('plan_cache_key') or "N/A")
 
-        short_s = f"{raw_hash[:8]}.." if raw_hash != "N/A" and len(raw_hash) > 8 else raw_hash
-        short_q = f"{q_hash[:8]}.." if q_hash != "N/A" and len(q_hash) > 8 else q_hash
-        short_p = f"{p_key[:8]}.." if p_key != "N/A" and len(p_key) > 8 else p_key
+        def clean_h(h): return "" if str(h).lower() in ["n/a", "unknown"] else str(h)
+        c_s, c_q, c_p = clean_h(raw_hash), clean_h(q_hash), clean_h(p_key)
+
+        short_s = f"{c_s[:8]}.." if len(c_s) > 8 else (c_s or "")
+        short_q = f"{c_q[:8]}.." if len(c_q) > 8 else (c_q or "")
+        short_p = f"{c_p[:8]}.." if len(c_p) > 8 else (c_p or "")
         
-        short_hash = f"\n[dim]S:[{short_s}] Q:[{short_q}] P:[{short_p}][/dim]" if raw_hash != "N/A" else ""
+        short_hash = ""
+        if c_s or c_q or c_p:
+            short_hash = f"\n[dim]S:[{short_s or '-'}] Q:[{short_q or '-'}] P:[{short_p or '-'}] [/dim]"
         op_display = f"{row['category']}{short_hash}"
 
         last_seen = str(row.get('last_ts', 'N/A'))
@@ -253,7 +258,8 @@ def print_failure_forensic_table(summary):
     
     for row in summary:
         err = str(row.get('error_name') or row.get('error_code') or "TIMEOUT")
-        q_hash = str(row.get('query_shape_hash') or "N/A")
+        q_hash_raw = str(row.get('query_shape_hash') or "N/A")
+        q_hash = "N/A" if q_hash_raw.lower() == "unknown" else q_hash_raw
         
         last_seen = str(row.get('last_ts', 'N/A'))
         if len(last_seen) > 19: last_seen = last_seen[11:19]

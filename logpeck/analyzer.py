@@ -27,7 +27,7 @@ import sys
 from collections import Counter
 from typing import List, Optional, Dict, Any, Tuple
 from .parser import (
-    parse_log_line, extract_log_metrics, is_system_query, heuristic_extract_ns, 
+    parse_log_line, extract_log_metrics, heuristic_extract_ns, 
     detect_op_and_ns, normalize_conn_id, induce_log_schema, get_nested_value
 )
 from .specification import (
@@ -615,9 +615,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         continue
                     
                     # 🧬 Diagnostic Routing: 
-                    # 1. Identify noise (System namespaces, components, or internal apps)
-                    # Recovery: In, we pass 'has_crud' to prevent misclassification of transactions as noise.
-                    is_noise = is_system_query(ns, app=a_n, component=c, op=curr_op, has_crud=metrics.get("has_crud", False))
+                    # Use the unified system classification from the parser.
+                    is_noise = metrics.get("is_system", False)
                     
                     # 2. Hard Suppression check: 0ms Noise is Silenced
                     if is_noise and duration == 0 and not is_error_op and not is_timeout_op:
@@ -968,20 +967,28 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
         h_b = str(metrics.get("query_shape_hash") or metrics.get("query_hash") or "unknown")
         duration = metrics.get("ms", 0)
         waits = metrics.get("waits_ms", {})
+        is_system_op = metrics.get("is_system", False)
         
         h = f"{op}-{ns}-{h_b}"
         if h not in shape_stats:
             shape_stats[h] = {
                 "count":0, "total_ms":0, "max_ms":0, "min_ms":float('inf'), 
                 "ns":ns, "op":op, "query_shape_hash":h_b, "total_active_ms":0, 
+                "is_system": is_system_op,
                 "total_io_ms":0, "total_app_wait_ms":0, "total_oplog_wait_ms":0,
                 "total_queue_wait_ms": 0, "total_lock_wait_ms": 0, "total_replication_wait_ms": 0,
+                "total_planning_ms": 0, "total_yields": 0, "total_write_conflicts": 0,
+                "total_keys_examined": 0, "total_docs_examined": 0, "total_nreturned": 0,
+                "total_ninserted": 0, "total_nModified": 0, "total_ndeleted": 0, "total_nMatched": 0,
+                "total_keysInserted": 0, "total_keysUpdated": 0, "total_keysDeleted": 0,
+                "total_storage_read_micros": 0,
                 "total_cpu_ms": 0,
                 "app_names": set(), "max_example_raw": None, 
                 "histogram": {b:0 for b in LATENCY_BUCKETS}
             }
         
         s = shape_stats[h]
+        s["is_system"] = s["is_system"] or is_system_op
         s["count"] += 1
         s["total_ms"] += duration
         s["max_ms"] = max(s["max_ms"], duration)
@@ -995,7 +1002,25 @@ def group_by_shape(entries: List[Dict]) -> Dict[str, Dict]:
         s["total_queue_wait_ms"] += waits.get("queued", 0)
         s["total_lock_wait_ms"] += waits.get("lock_wait", 0)
         s["total_replication_wait_ms"] += waits.get("replication_wait", 0)
-        s["total_cpu_ms"] += (metrics.get("forensic", {}).get("cpuNanos", 0) / 1000000.0)
+        s["total_planning_ms"] += waits.get("planning", 0)
+        
+        f_data = metrics.get("forensic", {})
+        s["total_cpu_ms"] += (f_data.get("cpuNanos", 0) / 1000000.0)
+        s["total_yields"] += f_data.get("numYields", 0)
+        s["total_write_conflicts"] += f_data.get("writeConflicts", 0)
+        s["total_keys_examined"] += f_data.get("keysExamined", 0)
+        s["total_docs_examined"] += f_data.get("docsExamined", 0)
+        s["total_nreturned"] += f_data.get("nreturned", 0)
+        s["total_ninserted"] += f_data.get("ninserted", 0)
+        s["total_nModified"] += f_data.get("nModified", 0)
+        s["total_ndeleted"] += f_data.get("ndeleted", 0)
+        s["total_nMatched"] += f_data.get("nMatched", 0)
+        s["total_keysInserted"] += f_data.get("keysInserted", 0)
+        s["total_keysUpdated"] += f_data.get("keysUpdated", 0)
+        s["total_keysDeleted"] += f_data.get("keysDeleted", 0)
+        
+        # 🧬 Full-Stack Storage read micros recovery
+        s["total_storage_read_micros"] += (get_nested_value(entry, "attr.storage.data.timeReadingMicros") or 0) + (get_nested_value(entry, "attr.storage.index.timeReadingMicros") or 0)
         
         app = metrics.get("app_name", "unknown")
         if app != "unknown": s["app_names"].add(app)

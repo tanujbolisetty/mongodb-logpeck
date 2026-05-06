@@ -2,7 +2,21 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
-## [5.0.15] - 2026-04-30
+## [5.2.0] - 2026-05-06
+### Added
+- **Unified Architectural Hardening**: Consolidated system classification, identity recovery, and workload categorization into the core `parser.py`, ensuring 100% logic parity across all analysis modes (Stream vs. Batch).
+- **High-Fidelity Identity Reconstruction**: Enhanced Application Name recovery to support nested Atlas metadata (`doc.application.name`), eliminating "unknown" attribution for modern log formats.
+- **Synchronized Forensic Aggregation**: Refactored `group_by_shape` to maintain absolute data parity with the primary dashboard. Added support for **Upserts**, **Search Latencies**, **Transaction Churn**, and **Timeout Counts** in re-aggregated reports.
+- **Robust CLI Metadata Rendering**: Hardened terminal hash rendering to gracefully handle missing structural fingerprints, ensuring clean output even for sparse infrastructure events.
+
+### Fixed
+- **Workload Timestamp Regression**: Corrected the "Last Seen" logic in Business Workload reporting to prioritize `last_ts`, restoring temporal accuracy in the dashboard UI.
+- **Metadata Fallback Standardization**: Synchronized "unknown" vs. "N/A" behavior across CLI and Web components for professional report consistency.
+
+## [5.1.8] - 2026-05-06
+### Fixed
+- **Workload Timestamp Alignment**: Restored 'Last Seen' visibility in Business Workload by prioritizing `last_ts` across all forensic summaries.
+
 ### Added
 - **Universal Smart Truncation**: Implemented conditional ellipsis (`..`) for all forensic identifiers (S, Q, P) in CLI tables, ensuring technical honesty by signaling truncated hashes.
 - **Differentiated Truncation Policy**: Optimized visibility by providing **Full Forensic Hashes** (no truncation) in Log Cards (Search/Filter) while maintaining compact 8-character truncation in multi-column Workload tables.

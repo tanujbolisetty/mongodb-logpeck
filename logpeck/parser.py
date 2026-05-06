@@ -395,15 +395,19 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     # 🔍 Search & AI Intent Extraction
     plan_summary = extract_search_metadata(attr, entry, cmd_obj, op)
 
+    # 🕵️ System Classification
+    is_sys = is_system_query(ns, identity["appName"], header.get("c", ""), op, has_crud)
+
     metrics = {
         "ms": ms, "ns": ns, "op": op, "query_shape_hash": q_hash,
-        "query_hash": attr.get("queryHash") or entry.get("queryHash") or "N/A",
-        "plan_cache_key": attr.get("planCacheKey") or entry.get("planCacheKey") or "N/A",
+        "query_hash": attr.get("queryHash") or entry.get("queryHash") or "unknown",
+        "plan_cache_key": attr.get("planCacheKey") or entry.get("planCacheKey") or "unknown",
         "query_schema": extract_query_schema(schema_cmd, schema_op),
         "query_params": extract_query_params(schema_cmd, schema_op),
         "has_regex": has_regex,
         "has_lookup": has_lookup,
         "has_crud": has_crud,
+        "is_system": is_sys,
         "plan_summary": plan_summary, 
         "app_name": identity["appName"],
         "user": identity["user"],
@@ -470,8 +474,13 @@ def extract_identity(attr: Dict[str, Any], entry: Dict[str, Any], op: str) -> Di
     orig_cmd = attr.get("originatingCommand", {})
     ip_raw = str(attr.get("remote") or attr.get("client") or "unknown")
     
+    # 🧪 Atlas Identity Restoration: 
+    # Check for appName in multiple locations including nested doc.application.name
+    app_nested = get_nested_value({"attr": attr}, "attr.doc.application.name")
+    app_name = str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or app_nested or "unknown")
+
     return {
-        "appName": str(attr.get("appName") or entry.get("appName") or orig_cmd.get("appName") or "unknown"),
+        "appName": app_name,
         "user": str(attr.get("user") or entry.get("user") or orig_cmd.get("user") or "unknown"),
         "client_ip": str(ip_raw.split(":")[0] if ":" in ip_raw else ip_raw),
         "op_id": str(attr.get("opId") or entry.get("opId") or "N/A")
