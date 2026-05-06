@@ -422,7 +422,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     if (is_error_op and not is_timeout_op) or is_orphan_timeout:
                         # 🧬 High-Resolution Systemic Error Extraction
                         # Extract the most meaningful label for the summary, but keep the payload raw.
-                        e_cat = attr.get("category") or header.get("c") or "SYSTEM"
+                        e_cat = attr.get("category") or header.get("c")
+                        if not e_cat or str(e_cat).strip() == "":
+                            e_cat = "TIMEOUT" if is_orphan_timeout else "SYSTEM"
                         
                         # Preferred extraction order for the "Summary" column
                         raw_err = attr.get("error") or attr.get("errmsg") or attr.get("message") or msg
@@ -434,7 +436,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         e_note = attr.get("note", "N/A")
                         
                         # 🧪 Technical Forensic Payload: Deeply harvest codes from nested blocks
-                        err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason"]}
+                        err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason", "msg"]}
+                        if "_raw" in entry:
+                            err_payload["_raw"] = entry["_raw"]
                         
                         # Promote numerical codes from nested error objects if present
                         sys_code = harvest_error_code(attr, is_timeout=is_timeout_op)
