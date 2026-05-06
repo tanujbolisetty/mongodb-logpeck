@@ -49,8 +49,8 @@ This document provides a comprehensive technical guide to all command-line flags
     *   Use `0` for unlimited output (Caution: can flood terminal).
 *   **`--count`**: Bypasses the results table entirely. 
     *   *Forensic Impact*: Rapidly calculates the total volume of matches in the log without processing full forensic cards.
-*   **`--full`**: Expands the result to show the **Full Query Fingerprint**.
-    *   *Forensic Impact*: Use this when you need the exact JSON query body to reproduce an issue in a test environment.
+*   **`--full`**: Expands the result to show the **Full Query Fingerprint** and the **Raw Log Line**.
+    *   *Forensic Impact*: Use this when you need the exact JSON query body or the original unparsed log line to reproduce an issue in a test environment. Automatically triggers individual card view for maximum detail.
 *   **`--cards`**: Switches the display from a summary table to individual "Forensic Cards" (one per log entry).
 
 ### 3. Dashboard Orchestration

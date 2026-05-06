@@ -121,9 +121,6 @@ EXCLUDED_EVENT_MSGS = {
 
     # --- Internal Storage / Executor Noise ---
     "Failed to gather storage statistics for slow operation",    # ~8/day
-    "Client's executor exceeded time limit",                     # ~285/day
-    #   ^ Fires when an internal background executor exceeds its time limit.
-    #     NOT a user-initiated operation failure.
 }
 
 # MongoDB log severity codes to human-readable labels.

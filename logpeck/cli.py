@@ -98,7 +98,7 @@ def print_log_card(entry, full=False):
     else:
         ts_str = str(ts or "N/A")
         
-    ts_short = ts_str[11:19] if "T" in ts_str else ts_str
+    ts_display = ts_str if full else (ts_str[11:19] if "T" in ts_str else ts_str)
     dur_str = f"({duration}ms)" if duration else ""
     
     console.print("-" * 80, style="dim")
@@ -106,11 +106,14 @@ def print_log_card(entry, full=False):
     ns_display = escape(f"[{ns}]")
     dur_display = f" {dur_str}" if dur_str else ""
     # Forensic Header: Prioritize identified Op over generic Component
-    console.print(f"[dim]{ts_short}[/dim]  [bold]{sev}[/bold]  [cyan]{op.upper():<14}[/cyan] [green]{ns_display}[/green]{dur_display}")
+    console.print(f"[dim]{ts_display}[/dim]  [bold]{sev}[/bold]  [cyan]{op.upper():<14}[/cyan] [green]{ns_display}[/green]{dur_display}")
     
     msg = entry.get("msg", "")
     if msg:
-        console.print(f"  [italic]{msg[:130]}...[/italic]" if len(msg) > 130 else f"  [italic]{msg}[/italic]")
+        if full:
+            console.print(f"  [italic]{msg}[/italic]")
+        else:
+            console.print(f"  [italic]{msg[:130]}...[/italic]" if len(msg) > 130 else f"  [italic]{msg}[/italic]")
 
     # Forensic Timeline: Surface all extracted time markers in human-readable format
     waits = metrics.get("waits_ms", {})
@@ -149,6 +152,9 @@ def print_log_card(entry, full=False):
         # Always show full hashes in Cards (Search/Filter results)
         console.print(f"  [dim]IDs:[/dim] Shape[[green]{q_shape}[/green]] Query[[green]{q_hash}[/green]] Plan[[green]{p_key}[/green]]")
         console.print(f"  [dim](S: Shape Hash | Q: Query Hash | P: Plan Cache Key)[/dim]")
+
+    if full and "_raw" in entry:
+        console.print(f"  [dim]Raw:[/dim] [italic]{entry['_raw']}[/italic]")
 
 def get_subset_duration(results):
     """Calculates the time span (seconds) of a log entry subset for AAS accuracy."""
@@ -529,7 +535,7 @@ def main():
                 console.print("[dim]No matches found.[/dim]")
                 return
 
-            if args.cards:
+            if args.cards or args.full:
                 console.print(f"\n[bold green]🔍 Forensic Search Results: '{args.keyword}'[/bold green]")
                 for entry in results:
                     print_log_card(entry, full=args.full)
@@ -562,7 +568,7 @@ def main():
                 console.print("[dim]No matches found.[/dim]")
                 return
 
-            if args.cards:
+            if args.cards or args.full:
                 console.print(f"\n[bold blue]🧪 Diagnostic Filter: {args.filters}[/bold blue]")
                 for entry in results:
                     print_log_card(entry, full=args.full)

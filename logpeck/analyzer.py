@@ -119,7 +119,10 @@ def read_logs_chunked(file_path: str):
     with opener as f:
         for line in f:
             entry = parse_log_line(line)
-            if entry: yield entry
+            if entry:
+                # 🦷 Capture raw line for 100% forensic fidelity in --full mode
+                entry["_raw"] = line.strip()
+                yield entry
 
 
 def build_forensic_context(log_file_path: str) -> Dict[str, Dict[str, str]]:

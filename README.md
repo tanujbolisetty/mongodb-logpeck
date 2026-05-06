@@ -132,8 +132,8 @@ LogPeck offers two powerful ways to discover information:
 # Forensic: Find everything connected to the identity
 peck search --file mongod.log --keyword "compass"
 
-# Forensic: Find top 5 results connected to identity
-peck search --file mongod.log --keyword "compass" --limit 5
+# High-Resolution: Show raw log lines and full timestamps
+peck search --file mongod.log --keyword "compass" --full
 
 # High-Precision: Find only literal matches
 peck search --file mongod.log --keyword "compass" --grep
