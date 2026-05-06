@@ -236,10 +236,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # 🕵️ Surgical JSON Extraction: Skip plaintext timestamp prefixes
                     j_idx = line.find('{')
                     if j_idx == -1: continue
-                    obj = json.loads(line[j_idx:])
+                    entry = json.loads(line[j_idx:])
                     
                     # 🧪 Unified Schema Induction
-                    header = induce_log_schema(obj, last_known_ts)
+                    header = induce_log_schema(entry, last_known_ts)
                     ts = header["t"]
                     if ts:
                         if not start_ts: start_ts = str(ts)
@@ -260,8 +260,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     message_registry[m_key]["count"] += 1
                     
                     # 🧪 Early Forensic Matrix Extraction
-                    metrics = extract_log_metrics(obj, include_full_command=True, last_ts=last_known_ts)
-                    attr = metrics.get("attr") or obj.get("attr", {})
+                    metrics = extract_log_metrics(entry, include_full_command=True, last_ts=last_known_ts)
+                    attr = metrics.get("attr") or entry.get("attr", {})
                     op = metrics.get("op") or "unknown"
                     
                     # 🏺 Forensic Injection into MSH Matrix (: Metadata Priority)
@@ -298,12 +298,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
 
                     # 🚦 Deep-Scan Diagnostic Triage
                     attr_safe = (attr or {})
-                    err_hint = str(attr_safe.get("error", obj.get("error", "")))
-                    if isinstance(attr_safe.get("error") or obj.get("error"), dict):
-                        e_obj = attr_safe.get("error") or obj.get("error")
+                    err_hint = str(attr_safe.get("error", entry.get("error", "")))
+                    if isinstance(attr_safe.get("error") or entry.get("error"), dict):
+                        e_obj = attr_safe.get("error") or entry.get("error")
                         err_hint = str(e_obj.get("errmsg", e_obj.get("errMsg", "")))
-                    attr_err = str(attr_safe.get("errmsg", attr_safe.get("errMsg", obj.get("errmsg", obj.get("errMsg", "")))))
-                    attr_name = str(attr_safe.get("errName", obj.get("errName", "")))
+                    attr_err = str(attr_safe.get("errmsg", attr_safe.get("errMsg", entry.get("errmsg", entry.get("errMsg", "")))))
+                    attr_name = str(attr_safe.get("errName", entry.get("errName", "")))
                     search_space = (msg + " " + err_hint + " " + attr_err + " " + attr_name).lower()
                     
                     # 🧪 Severity Triage:
@@ -311,7 +311,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # timeout signature or error code. Signatures are defined in
                     # specification.py (TIMEOUT_SIGNATURES, FAILURE_SIGNATURES).
                     is_timeout_op = any(sig in search_space for sig in TIMEOUT_SIGNATURES) or "planexecutor error" in search_space
-                    has_error_code = any(k in (attr or {}) or k in obj for k in ["errCode", "code"])
+                    has_error_code = any(k in (attr or {}) or k in entry for k in ["errCode", "code"])
                     
                     # Core Predicate: Real errors are Warning/Error/Fatal OR (Info + Explicit Code/Timeout)
                     is_error_op_base = (sev in ["ERROR", "FATAL", "WARN", "E", "F", "W"]) or \
@@ -334,9 +334,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     is_noise = any(n.lower() in msg.lower() for n in NOISE_BLACKLIST)
                     
                     if not is_noise:
-                        if any(k in (attr or {}) or k in obj for k in ["error", "errCode", "code"]) or str((attr or {}).get("ok", obj.get("ok"))) == "0":
+                        if any(k in (attr or {}) or k in entry for k in ["error", "errCode", "code"]) or str((attr or {}).get("ok", entry.get("ok"))) == "0":
                             is_error_op = True
-                        if "errorMessage" in obj or "errmsg" in obj:
+                        if "errorMessage" in entry or "errmsg" in entry:
                             is_error_op = True
                         if header.get("msg") == "Infrastructure Failure":
                             is_error_op = True
@@ -403,7 +403,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             timeout_patterns[key] = {
                                 "count": 0, "ts": str(ts), "msg": str(display_err[:120]), "ns": ns_guess, "op": "unknown",
                                 "preview": preview,
-                                "remote": str(attr.get("remote", "-")), "ctx": str(obj.get("ctx", "-")),
+                                "remote": str(attr.get("remote", "-")), "ctx": str(entry.get("ctx", "-")),
                                 "error_code": e_code,
                                 "total_ms": 0, "max_ms": 0,
                                 "app_name": str(attr.get("appName") or conn_registry.get(ctx, {}).get("app") or "unknown")
@@ -437,7 +437,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         
                         # 🧪 Technical Forensic Payload: Deeply harvest codes from nested blocks
                         err_payload = {k: v for k, v in attr.items() if k in ["what", "message", "category", "value", "code", "codeName", "errmsg", "note", "error", "reason", "msg"]}
-                        err_payload["_raw"] = obj
+                        err_payload["_raw"] = entry
                         
                         # Promote numerical codes from nested error objects if present
                         sys_code = harvest_error_code(attr, is_timeout=is_timeout_op)
