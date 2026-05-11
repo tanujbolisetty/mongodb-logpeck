@@ -245,7 +245,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     
                     insights.append(f'''
                     <div style="background:rgba(255,255,255,0.03); padding:1rem; border-radius:10px; border-left:3px solid {wa_clr}">
-                        <div class="card-label" style="font-size:0.6rem; opacity:0.6" title="Ratio of Index Keys written/modified per single Document mutated across the entire query shape.">INDEX AMPLIFICATION (Workload Aggregate)</div>
+                        <div class="card-label search-exclude" style="font-size:0.6rem; opacity:0.6" title="Ratio of Index Keys written/modified per single Document mutated across the entire query shape.">INDEX AMPLIFICATION (Workload Total)</div>
                         <div style="font-size:1.3rem; font-weight:800; color:{wa_clr}; margin:0.3rem 0">{wa:,.1f}</div>
                         <div style="font-size:0.6rem; color:var(--text-secondary); display:flex; gap:8px">
                             <span title="Average index keys inserted per document insertion.">ins_keys:{ins_a:,.1f}</span>
@@ -358,7 +358,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if show_raw_key and label != k:
                     raw_tag = f'<div style="font-family:\'JetBrains Mono\'; font-size:0.6rem; opacity:0.4; margin-top:2px">{k}</div>'
                 
-                return f'<tr><td class="f-label" title="Source: {source}">{label}{raw_tag}</td><td class="f-val {c1}">{f1}</td><td class="f-val {c2}">{f2}</td></tr>'
+                return f'<tr><td class="f-label search-exclude" title="Source: {source}">{label}{raw_tag}</td><td class="f-val {c1}">{f1}</td><td class="f-val {c2}">{f2}</td></tr>'
 
             def render_category(label, fields, row_data):
                 content = f'<tr class="cat-header"><td colspan="3">{label}</td></tr>'
@@ -479,7 +479,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             if schema_tags:
                 schema_col = f"""
                     <div style="flex:1; text-align:right">
-                        <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">DISCOVERED QUERY SCHEMA</div>
+                        <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">DISCOVERED QUERY SCHEMA</div>
                         <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; margin-top:0.4rem">{schema_tags}</div>
                     </div>"""
 
@@ -497,24 +497,24 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
                         <div style="flex:1.5">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">ERROR SIGNATURE</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">ERROR SIGNATURE</div>
                             <div style="color:var(--error); font-weight:700; font-size:0.95rem; margin-top:0.4rem">🚨 {row.get('error_name', 'MaxTimeMSExpired')} ({row.get('error_code', 50)})</div>
                         </div>
                         <div style="flex:1">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
                             <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
                         </div>
                         <div style="flex:1">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE</div>
                             <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
                         </div>
                         <div style="flex:1.2; text-align:right">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">SHAPE HASH</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">SHAPE HASH</div>
                             <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.8rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
                         </div>
                     </div>
 
-                    <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">REPRESENTATIVE FORENSIC PAYLOAD</div>
+                    <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">REPRESENTATIVE FORENSIC PAYLOAD</div>
                     <div style="position:relative">
                         <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard('payload-msg-{start_idx + i}', this)">COPY</button>
                         <pre id="payload-msg-{start_idx + i}" class="payload-pre" style="background:#000; padding:1.5rem; border-radius:12px; font-size:0.72rem; color:var(--text-secondary); border:1px solid var(--border); border-left:4px solid var(--error); max-height:450px; overflow:auto">{payload_pretty}</pre>
@@ -529,20 +529,20 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 rows += f'''<tr id="{did}" class="details-row"><td colspan="{colspan_val}"><div class="details-content">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:2rem; margin-bottom:2.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1.5rem;">
                         <div style="flex:1">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY SHAPE HASH</div>
                             <div style="color:{'var(--text-secondary)' if row.get('query_shape_hash') == 'N/A' else 'var(--accent)'}; font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_shape_hash', 'N/A')}</div>
                         </div>
                         <div style="width:100px">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">QUERY HASH</div>
                             <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('query_hash', 'N/A')}</div>
                         </div>
                         <div style="width:120px">
-                            <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE KEY</div>
+                            <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em">PLAN CACHE KEY</div>
                             <div style="color:var(--accent); font-family:'JetBrains Mono'; font-size:0.85rem; margin-top:0.4rem">{row.get('plan_cache_key', 'N/A')}</div>
                         </div>
                         {schema_col}
                     </div>
-                    <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
+                    <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">LATENCY FINGERPRINT (WORKLOAD WAVE)</div>
                     <div class="dist-bar" style="height:26px">{wave_html}</div>
                     <div class="legend-grid" style="margin-top:0.8rem">{legend_html}</div>
                     
@@ -640,7 +640,19 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
             for (let i = 0; i < rows.length; i++) {
                 const mainText = rows[i].textContent.toLowerCase();
-                const detailText = details[i] ? details[i].textContent.toLowerCase() : "";
+                
+                // Surgical Detail Extraction: Skip labels and hidden UI noise
+                let detailText = "";
+                if (details[i]) {
+                    const content = details[i].querySelector('.details-content');
+                    if (content) {
+                        // Clone content to safely remove excluded nodes before text extraction
+                        const clone = content.cloneNode(true);
+                        clone.querySelectorAll('.search-exclude').forEach(el => el.remove());
+                        detailText = clone.textContent.toLowerCase();
+                    }
+                }
+                
                 const isMatch = mainText.includes(filter) || detailText.includes(filter);
                 
                 rows[i].style.display = isMatch ? "" : "none";
@@ -666,7 +678,15 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if (row.classList.contains('row-main')) {
                     const mainText = row.textContent.toLowerCase();
                     const nextRow = row.nextElementSibling;
-                    const detailText = (nextRow && nextRow.classList.contains('details-row')) ? nextRow.textContent.toLowerCase() : "";
+                    let detailText = "";
+                    if (nextRow && nextRow.classList.contains('details-row')) {
+                        const content = nextRow.querySelector('.details-content');
+                        if (content) {
+                            const clone = content.cloneNode(true);
+                            clone.querySelectorAll('.search-exclude').forEach(el => el.remove());
+                            detailText = clone.textContent.toLowerCase();
+                        }
+                    }
                     const isMatch = mainText.includes(filter) || detailText.includes(filter);
                     
                     row.style.display = isMatch ? "" : "none";
