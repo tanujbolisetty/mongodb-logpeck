@@ -384,7 +384,6 @@ ERROR_CODE_MAP = {
     48: 'NamespaceExists',
     49: 'InvalidRoleModification',
     50: 'MaxTimeMSExpired',
-    279: 'ClientDisconnect',
     51: 'ManualInterventionRequired',
     52: 'DollarPrefixedFieldName',
     53: 'InvalidIdField',
