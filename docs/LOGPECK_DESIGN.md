@@ -143,6 +143,33 @@ To ensure analytical consistency across raw log formats (Command vs CRUD blocks)
 - **Pressure Markers**: The engine harvests `numYields` and `writeConflicts` for background and foreground index tasks.
 - **Wait-Time Attribution**: `lock_wait` and `planning` time are aggressively attributed to index shapes to surface resource contention caused by index builds or schema mutations.
 
+### 4.5 Version-Agnostic State Event Tracking (Restart & Shutdown)
+- **Problem**: MongoDB structured log `id`s are static message template identifiers tied to specific compiler/source lines. They change across minor version bumps and configurations, making numeric ID event tracking extremely brittle.
+- **Solution**: The engine uses version-agnostic text signature matching on `msg` fields — two canonical triggers only, no counters.
+
+#### Two Canonical Triggers
+
+| Message | Event Recorded | Rationale |
+| :--- | :--- | :--- |
+| `"mongod startup complete"` | 🟢 **Node Started** | Last message of every successful startup — node is fully up and serving traffic. |
+| `"shutdown complete"` | 🛑 **Node Shutdown** | Logged by the `CONTROL` component exactly **once** at the very end of every clean shutdown sequence, just before the process exits. |
+
+> [!NOTE]
+> **`"ReplicationCoordinator for shutdown"` is intentionally not used.** Despite sounding like a single shutdown event, it fires once per *interrupted operation or cursor* during shutdown — a busy node can generate hundreds of these messages in a single shutdown sequence, making it an unreliable per-shutdown trigger.
+
+> [!NOTE]
+> **`"MongoDB starting"` is intentionally not tracked.** It fires on every `mongod` process launch — clean restarts, rolling maintenance, Atlas auto-healing, and crash recovery. Without knowing *why* a prior attempt didn't complete, counting these would produce misleading metrics. The time gap between a Node Shutdown and the next Node Started event tells the full story.
+
+> [!TIP]
+> **State-Based Crash-Loop Filtering & Interleaving Guard**:
+> * **State Tracking:** During a rapid crash loop, the process supervisor might repeatedly restart `mongod`, causing the process to start up and immediately fail, logging `"shutdown complete"` dozens of times in a row without ever successfully reaching `"mongod startup complete"`. To filter out this noise and present a clean downtime period, the engine tracks transitions using a sequential state machine (`node_state = STARTED | SHUTDOWN`). Consecutive `"shutdown complete"` logs without an intervening successful `"mongod startup complete"` are ignored, ensuring that only the initial transition to offline status is recorded.
+> * **Interleaving Guard:** When a new `mongod` process starts up, MongoDB logs `"mongod startup complete"`. Because the old process's cleanup and exit can overlap with the new process's launch, the old process's `"shutdown complete"` message can be written up to a few hundred milliseconds *after* the new process's `"mongod startup complete"` message in the shared log stream. To prevent this interleaved log from falsely reverting the node's state back to `SHUTDOWN`, the engine implements a **5-second interleaving guard**: any `"shutdown complete"` event occurring within 5 seconds *after* the most recent `"mongod startup complete"` event is recognized as a trailing log from the prior process and is ignored.
+
+#### UI Presentation
+- 🛑 **Red dashed line** — Node Shutdown: timestamp from `"shutdown complete"` (UTC).
+- 🟢 **Green dashed line** — Node Started: timestamp from `"mongod startup complete"` (UTC).
+- Tooltips show timestamps only — clean, unambiguous, no retry annotation.
+
 ---
 
 ## 🧬 5. The MSH Matrix State Machine (Identity Stitching)

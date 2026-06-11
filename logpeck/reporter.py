@@ -50,7 +50,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     err_color = "var(--error)" if stats.get("log_error_count", 0) > 0 else "var(--text-primary)"
     health_summary_html = f'''
         <div class="card"><div class="card-label">Total Logs Parsed</div><div class="card-value">{stats.get("total_parsed", 0):,}</div></div>
-        <div class="card"><div class="card-label">Time Window</div><div class="card-value" style="font-size:0.9rem">{time_start} → {time_end}</div></div>
+        <div class="card"><div class="card-label">Time Window</div><div class="card-value" style="font-size:0.9rem">{time_start} → {time_end}<span style="display:block;font-size:0.6rem;color:var(--text-secondary);margin-top:4px;letter-spacing:0.08em">🕐 UTC</span></div></div>
         <div class="card"><div class="card-label">Slow Queries</div><div class="card-value">{stats.get("total_slow_count", 0)}</div></div>
         <div class="card"><div class="card-label">Avg Slow Duration</div><div class="card-value">{format_duration(stats.get("avg_slow_ms", 0))}</div></div>
         <div class="card"><div class="card-label">Max Slow Duration</div><div class="card-value" style="color:var(--error)">{latency_max}</div></div>
@@ -150,12 +150,37 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 tooltip_text = f"Window: {time_window}\nReads: 0\nWrites: 0\nSystem: 0\nFailures: 0"
                 bars_svg.append(f'<rect x="{x}" y="0" width="{bar_w}" height="{svg_h}" fill="transparent"><title>{tooltip_text}</title></rect>')
                 
+            shutdowns = b.get("shutdowns", [])
             restarts = b.get("restarts", [])
+            
+            # Offset indicators if both shutdown and restart occur within the same time bucket
+            if shutdowns and restarts:
+                x_shutdown = x + bar_w * 0.25
+                x_restart = x + bar_w * 0.75
+            else:
+                x_shutdown = x + bar_w / 2
+                x_restart = x + bar_w / 2
+                
+            if shutdowns:
+                times = [s.split("T")[1][:8] if "T" in s else s for s in shutdowns]
+                if len(times) > 5:
+                    s_tooltips = ", ".join(times[:3]) + " ... " + times[-1]
+                else:
+                    s_tooltips = ", ".join(times)
+                tooltip_text_shutdowns = f"🛑 Shutdown Completed (UTC):\n{s_tooltips}"
+                bars_svg.append(f'<line x1="{x_shutdown}" y1="0" x2="{x_shutdown}" y2="{svg_h}" stroke="var(--error)" stroke-width="1.5" stroke-dasharray="4,4"><title>{tooltip_text_shutdowns}</title></line>')
+                bars_svg.append(f'<circle cx="{x_shutdown}" cy="0" r="4" fill="var(--error)"><title>{tooltip_text_shutdowns}</title></circle>')
+                
             if restarts:
-                r_tooltips = ", ".join([r.split("T")[1][:8] if "T" in r else r for r in restarts])
-                tooltip_text_restarts = f"⚡ Node Started:\n{r_tooltips}"
-                bars_svg.append(f'<line x1="{x + bar_w/2}" y1="0" x2="{x + bar_w/2}" y2="{svg_h}" stroke="var(--error)" stroke-width="1.5" stroke-dasharray="4,4"><title>{tooltip_text_restarts}</title></line>')
-                bars_svg.append(f'<circle cx="{x + bar_w/2}" cy="0" r="4" fill="var(--error)"><title>{tooltip_text_restarts}</title></circle>')
+                # Restart events contain only the timestamp — show time only, no retry annotation.
+                parts = [r["ts"].split("T")[1][:8] if "T" in r["ts"] else r["ts"] for r in restarts]
+                if len(parts) > 5:
+                    r_tooltips = ", ".join(parts[:3]) + " ... " + parts[-1]
+                else:
+                    r_tooltips = ", ".join(parts)
+                tooltip_text_restarts = f"🟢 Node Started (UTC):\n{r_tooltips}"
+                bars_svg.append(f'<line x1="{x_restart}" y1="0" x2="{x_restart}" y2="{svg_h}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,4"><title>{tooltip_text_restarts}</title></line>')
+                bars_svg.append(f'<circle cx="{x_restart}" cy="0" r="4" fill="var(--accent)"><title>{tooltip_text_restarts}</title></circle>')
                 
             if i % label_interval == 0 or i == n_buckets - 1:
                 interval_str = stats.get('timeline_interval', 'N/A')
@@ -175,7 +200,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         timeline_html = f'''
         <div class="card" style="border-left: 4px solid #a855f7; margin-bottom: 2rem">
             <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
-                <span>📈 DETAILED WORKLOAD TIMELINE (SLOW QUERIES BY TIME)</span>
+                <span>📈 DETAILED WORKLOAD TIMELINE <span style="color:var(--text-secondary);font-weight:400">(SLOW QUERIES BY TIME)</span> <span style="background:rgba(16,185,129,0.15);color:var(--accent);font-size:0.6rem;font-weight:800;padding:2px 7px;border-radius:10px;border:1px solid rgba(16,185,129,0.3);letter-spacing:0.08em;vertical-align:middle">UTC</span></span>
                 <span style="font-size:0.6rem; color:var(--text-secondary)">BUCKET INTERVAL: {stats.get('timeline_interval', 'N/A')} | TOTAL BUCKETS: {n_buckets}</span>
             </div>
             <div style="margin: 1.5rem 0 1rem 0; overflow-x: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem 1rem 2rem 1rem">
@@ -192,7 +217,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div> Writes</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div> System</div>
                 <div class="legend-item"><div class="legend-dot" style="background:var(--error)"></div> Failures / Timeouts</div>
-                <div class="legend-item"><div style="border-left: 2px dashed var(--error); height: 12px; margin-right: 8px; display: inline-block; vertical-align: middle"></div> ⚡ Node Restart</div>
+                <div class="legend-item"><div style="border-left: 2px dashed var(--error); height: 12px; margin-right: 8px; display: inline-block; vertical-align: middle"></div> 🛑 Shutdown Completed</div>
+                <div class="legend-item"><div style="border-left: 2px dashed var(--accent); height: 12px; margin-right: 8px; display: inline-block; vertical-align: middle"></div> 🟢 Node Started</div>
             </div>
         </div>
         '''

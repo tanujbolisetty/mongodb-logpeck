@@ -2,6 +2,33 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.3.5] - 2026-06-11
+### Changed
+- 🧪 **State-Based Crash-Loop Filtering**: Implemented a sequential state machine (`node_state = STARTED | SHUTDOWN`) in `analyzer.py` to track actual availability transitions. Consecutive `"shutdown complete"` events without an intervening `"mongod startup complete"` are ignored, preventing rapid crash-loop logs (restarts that fail instantly) from cluttering the reports.
+- 🧹 **Tooltip & Legend Refinement**: Updated the timeline tooltip header to `"Shutdown Completed (UTC):"`, changed the legend item to `"Shutdown Completed"`, and removed the `({len(times)} events)` suffix from the tooltip text in `reporter.py` to prevent redundant counting.
+
+## [5.3.4] - 2026-06-11
+### Removed
+- 🧹 **Startup Retry Tracking**: Removed `current_failed_retries`, `_in_startup_cycle`, and the `"MongoDB starting"` detection branch from `analyzer.py`. `"MongoDB starting"` fires on every `mongod` process launch (clean restarts, rolling maintenance, crash recovery) — without knowing *why* a prior attempt didn't complete, counting these produced misleading metrics. Restart events now store `{ts}` only.
+- 🧹 **Retry Annotation in Tooltips**: Removed the `(after N retries)` annotation from the Node Started tooltip in `reporter.py`. Tooltip now shows clean UTC timestamps only.
+
+### Improved
+- 🧪 **UTC on All Lifecycle Tooltips**: Both `"🛑 Shutdown Began (UTC)"` and `"🟢 Node Started (UTC)"` tooltips now explicitly label timestamps as UTC.
+
+## [5.3.3] - 2026-06-11
+### Improved
+- 🧹 **Canonical Shutdown Trigger**: Replaced the 2-second time-window deduplication with a single authoritative message trigger. `"ReplicationCoordinator for shutdown"` is always the first message MongoDB logs when a shutdown begins — using it as the sole recording trigger guarantees exactly one shutdown event per sequence with no time arithmetic required. The subsequent messages (`"shutdown complete"`, `"shutdown: going to close"`, `"Now exiting"`) remain as state-reset signals only.
+
+## [5.3.2] - 2026-06-11
+### Fixed
+- 🧪 **UTC Label Visibility**: The UTC timezone indicator was embedded inline in the title text and visually indistinct. Replaced with a styled green pill badge (`UTC`) on the timeline header and a sub-label `🕐 UTC` below the Time Window timestamps for clear, unambiguous timezone attribution.
+- 🧹 **Duplicate Shutdown Events**: MongoDB fires multiple log messages within the same second during a single shutdown sequence (`"ReplicationCoordinator for shutdown"`, `"shutdown complete"`, `"Now exiting"`). Added a 2-second deduplication window using `_last_shutdown_ts` so only the first signal per shutdown cycle is recorded, preventing duplicate timestamps from appearing in the tooltip (e.g., `02:08:37, 02:08:37`).
+
+## [5.3.1] - 2026-06-11
+### Fixed
+- 🧹 **Retry Counter Accuracy**: Corrected an off-by-one error in the startup retry counter (`analyzer.py`). The initial `"MongoDB starting"` message — which fires for every startup attempt including the first successful one — was incorrectly counted as a retry. A `_in_startup_cycle` flag now ensures only subsequent `"MongoDB starting"` messages (appearing before a `"mongod startup complete"`) are counted as failed retries. Shutdown events now also correctly reset the cycle flag so each startup sequence is independently tracked.
+- 🧹 **Cycle Reset on Shutdown**: The `current_failed_retries` counter and `_in_startup_cycle` flag are now explicitly reset on any shutdown message (`"shutdown complete"`, `"Now exiting"`, etc.) to ensure clean state for the next startup sequence.
+
 ## [5.3.0] - 2026-06-11
 ### Added
 - 🧪 **Dynamic Time-Series Timeline Chart**: Added a stacked timeline chart to the Health dashboard categorizing slow queries into Reads, Writes, System, and Failures.

@@ -113,7 +113,7 @@ def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
         
     return code
 
-def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_events=None):
+def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_events=None, shutdown_events=None):
     from dateutil import parser as dp
     from datetime import timedelta
     
@@ -156,7 +156,8 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_ev
             "writes": 0,
             "system": 0,
             "failures": 0,
-            "restarts": []
+            "restarts": [],
+            "shutdowns": []
         })
         curr += timedelta(seconds=interval_sec)
         
@@ -167,7 +168,8 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_ev
             "writes": 0,
             "system": 0,
             "failures": 0,
-            "restarts": []
+            "restarts": [],
+            "shutdowns": []
         })
         
     if slow_events:
@@ -186,8 +188,9 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_ev
                 pass
                 
     if restart_events:
-        for r_ts_str in restart_events:
+        for r_evt in restart_events:
             try:
+                r_ts_str = r_evt["ts"]
                 r_dt = dp.isoparse(r_ts_str)
                 offset_sec = (r_dt - start_dt).total_seconds()
                 if offset_sec < 0:
@@ -196,7 +199,22 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_ev
                 if idx >= len(buckets):
                     idx = len(buckets) - 1
                 if idx >= 0:
-                    buckets[idx]["restarts"].append(r_ts_str)
+                    buckets[idx]["restarts"].append(r_evt)
+            except Exception:
+                pass
+                
+    if shutdown_events:
+        for s_ts_str in shutdown_events:
+            try:
+                s_dt = dp.isoparse(s_ts_str)
+                offset_sec = (s_dt - start_dt).total_seconds()
+                if offset_sec < 0:
+                    continue
+                idx = int(offset_sec // interval_sec)
+                if idx >= len(buckets):
+                    idx = len(buckets) - 1
+                if idx >= 0:
+                    buckets[idx]["shutdowns"].append(s_ts_str)
             except Exception:
                 pass
             
@@ -312,7 +330,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
     total_parsed = 0; total_filtered = 0; total_slow_count = 0; total_accepted = 0; total_closed = 0
     start_ts = None; end_ts = None
     slow_events = []
-    restart_events = []
+    restart_events = []  # List of dicts: {"ts": ts, "retries": count}
+    shutdown_events = []
+    node_state = None  # Tracks STARTED vs SHUTDOWN transitions to suppress crash-loop noise
 
     # 🕵️ PASS 1: Light-Speed Forensic Sweep
     # Purpose: Capture every slow query, stitch sessions/ips, and map cursors.
@@ -338,10 +358,61 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         end_ts = str(ts)
                         last_known_ts = ts
                     
-                    # Capture Node Restart (id 4615611 / msg "MongoDB starting")
-                    if entry.get("id") == 4615611 or entry.get("msg") == "MongoDB starting":
+                    # ══════════════════════════════════════════════════════════════
+                    # 🔄 NODE LIFECYCLE DETECTION (Version-Agnostic)
+                    # ══════════════════════════════════════════════════════════════
+                    # Two canonical triggers only — no counters, no retry tracking:
+                    #
+                    #  ✅ "mongod startup complete"
+                    #     Records a restart event (node is fully up and serving traffic).
+                    #     This is the LAST message of every successful startup sequence.
+                    #
+                    #  ✅ "shutdown complete"
+                    #     Records a shutdown event. This is logged by MongoDB's CONTROL
+                    #     component exactly ONCE at the very end of every clean shutdown
+                    #     sequence, just before the process exits.
+                    #
+                    #     WHY NOT "ReplicationCoordinator for shutdown"?
+                    #     That message fires once per INTERRUPTED OPERATION/CURSOR during
+                    #     shutdown — a busy node can generate hundreds of these in a single
+                    #     shutdown sequence, making it useless as a per-shutdown trigger.
+                    #
+                    # "MongoDB starting" is intentionally NOT tracked: it fires on every
+                    # process launch (clean restarts, rolling maintenance, crash recovery)
+                    # and without knowing WHY the prior attempt didn't complete, counting
+                    # it would produce misleading metrics. The gap between Node Shutdown
+                    # and Node Started timestamps tells the full story.
+                    # ══════════════════════════════════════════════════════════════
+                    raw_msg = str(entry.get("msg", ""))
+                    if "mongod startup complete" in raw_msg:
+                        # ✅ Node is fully up and serving traffic.
                         if ts:
-                            restart_events.append(str(ts))
+                            restart_events.append({"ts": str(ts)})
+                            node_state = "STARTED"
+                    elif "shutdown complete" in raw_msg:
+                        # ✅ Node shutdown is complete — fires exactly once per shutdown.
+                        # We use a state transition filter (STARTED -> SHUTDOWN) to ignore
+                        # consecutive shutdown logs that occur during crash loops without 
+                        # an intervening successful startup.
+                        if ts:
+                            if node_state != "SHUTDOWN":
+                                # Guard against log interleaving: if a shutdown completes within
+                                # 5 seconds of a successful startup, it belongs to the previous
+                                # process finishing its exit sequence.
+                                from dateutil import parser as dp
+                                is_interleaved = False
+                                if restart_events:
+                                    last_startup_str = restart_events[-1]["ts"]
+                                    try:
+                                        diff = (dp.isoparse(str(ts)) - dp.isoparse(last_startup_str)).total_seconds()
+                                        if 0 <= diff < 5:
+                                            is_interleaved = True
+                                    except:
+                                        pass
+                                
+                                if not is_interleaved:
+                                    shutdown_events.append(str(ts))
+                                    node_state = "SHUTDOWN"
                     
                     if total_parsed % 500000 == 0: print(f"  ↳ {total_parsed:,} lines processed...", file=sys.stderr)
                     
@@ -1024,8 +1095,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                 "op_distribution": dict(op_registry.most_common(12)),
                 "global_efficiency": {str(k): v for k, v in global_forensic_sums.items()},
                 "global_health": {str(k): v for k, v in gh_counts.items()}, "global_bottlenecks": {str(k): v for k, v in global_bottlenecks.items()}, 
-                "timeline_buckets": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events).get("buckets", []),
-                "timeline_interval": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events).get("interval", "N/A"),
+                "timeline_buckets": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events, shutdown_events).get("buckets", []),
+                "timeline_interval": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events, shutdown_events).get("interval", "N/A"),
                 "time_window": {"start": str(start_ts), "end": str(end_ts)}, "severities": {str(k): v for k, v in severity_stats.items()}, 
                 "components": {str(k): v for k, v in component_stats.most_common(12)}, 
                 "top_messages": [
