@@ -171,6 +171,88 @@ The HTML report is organized into six professional focus areas:
 | **🔌 Connection Analytics** | Application Hygiene | Identity attribution, connection churn, and driver fingerprinting. |
 | **📚 Reference** | Diagnostic Glossary | Dynamic rule definitions, thresholds, and technical descriptions. |
 
+## 🤖 Automated Log Pipelines
+
+LogPeck includes orchestrators under the `scripts/` directory to automate downloading logs directly from MongoDB Atlas and generating dashboards in single, cohesive workflows.
+
+> [!NOTE]
+> These scripts require Atlas API Public/Private key credentials and permissions. You can set them via environment variables (`ATLAS_PUBLIC_KEY`, `ATLAS_PRIVATE_KEY`, `ATLAS_ORG_ID`) or a local `.env` file.
+
+### 1. Daily Partitioned Pipeline (`forensic_log_analysis_pipeline_by_day.py`)
+This script downloads logs and runs logpeck analysis partitioned **day-by-day** for a target range of `N` days, utilizing a daily start/end time window. It enforces **MANUAL mode** to prevent accidental bulk downloads of all projects/clusters over multiple days.
+
+#### Usage:
+* **Basic Execution (Last 3 days, default 00:00:00 to 23:59:59 UTC)**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline_by_day.py \
+      --project "mtech-orderplatform-prod" \
+      --clusters "ccts-prod-global" \
+      --days 3
+  ```
+
+* **Custom Time Window & Timezone Offset (Last 2 days, 8:00 AM to 6:00 PM EDT)**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline_by_day.py \
+      --project "mtech-orderplatform-prod" \
+      --clusters "ccts-prod-global" \
+      --days 2 \
+      --start-time-of-day "08:00:00" \
+      --end-time-of-day "18:00:00" \
+      --timezone-offset "-04:00"
+  ```
+
+* **Completion Email Notifications**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline_by_day.py \
+      --project "mtech-orderplatform-prod" \
+      --clusters "ccts-prod-global" \
+      --days 3 \
+      --email-to "your.email@example.com"
+  ```
+
+---
+
+### 2. Standard Forensic Pipeline (`forensic_log_analysis_pipeline.py`)
+This is the standard pipeline wrapper which handles the single execution flow (automatic project discovery or manual targeting), fetches logs, runs logpeck analysis, and handles data retention.
+
+#### Usage:
+* **Basic execution with default 7-day retention and AUTO discovery mode**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline.py --mode AUTO
+  ```
+
+* **Targeted primary nodes with 3-day retention and completion email**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline.py \
+      --mode AUTO \
+      --role PRIMARY \
+      --retention-days 3 \
+      --email-to "your.email@example.com"
+  ```
+
+* **Manual targets mode**:
+  ```bash
+  python3 scripts/forensic_log_analysis_pipeline.py \
+      --mode MANUAL \
+      --manual-targets '{"mtech-orderplatform-prod": ["ccts-prod-global"]}' \
+      --latency 100
+  ```
+
+---
+
+### 3. Log Downloader (`download_atlas_logs_v2.py`)
+Under the hood, both pipelines invoke this script to download logs from the Atlas Admin API.
+
+#### Usage:
+* **Manual run with ISO-8601 timestamps**:
+  ```bash
+  python3 scripts/download_atlas_logs_v2.py \
+      --mode MANUAL \
+      --manual-targets '{"mtech-orderplatform-prod": ["ccts-prod-global"]}' \
+      --start-time "2026-05-26T00:00:00-04:00" \
+      --end-time "2026-05-26T23:59:59-04:00"
+  ```
+
 ---
 
 ## 👤 Author

@@ -34,7 +34,7 @@ from .specification import (
     SYSTEM_EVENT_IDENTIFIERS, SIMPLIFIED_OPS, LIFECYCLE_EVENT_IDENTIFIERS, 
     GOSSIP_EVENT_IDENTIFIERS, ERROR_CODE_MAP,
     EXCLUDED_EVENT_MSGS, SEVERITY_MAP, LATENCY_BUCKETS,
-    TIMEOUT_SIGNATURES, FAILURE_SIGNATURES, NOISE_BLACKLIST
+    TIMEOUT_SIGNATURES, FAILURE_SIGNATURES, NOISE_BLACKLIST, WRITE_OPS, READ_OPS
 )
 from .version import __version__
 from .utils import format_duration
@@ -112,6 +112,77 @@ def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
         pass
         
     return code
+
+def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str):
+    from dateutil import parser as dp
+    from datetime import timedelta
+    
+    if not slow_events or not start_ts_str or not end_ts_str:
+        return []
+        
+    try:
+        start_dt = dp.isoparse(start_ts_str)
+        end_dt = dp.isoparse(end_ts_str)
+    except Exception:
+        return []
+        
+    duration_sec = (end_dt - start_dt).total_seconds()
+    if duration_sec <= 0:
+        duration_sec = 1
+        
+    # Determine dynamic bucket interval in seconds
+    if duration_sec < 3600:  # < 1 hour
+        interval_sec = 300  # 5 minutes
+        interval_str = "5 Min"
+    elif duration_sec < 21600:  # < 6 hours
+        interval_sec = 900  # 15 minutes
+        interval_str = "15 Min"
+    elif duration_sec < 129600:  # < 36 hours
+        interval_sec = 3600  # 1 hour
+        interval_str = "1 Hour"
+    elif duration_sec < 518400:  # < 6 days
+        interval_sec = 14400  # 4 hours
+        interval_str = "4 Hours"
+    else:
+        interval_sec = 86400  # 24 hours (1 day)
+        interval_str = "24 Hours"
+        
+    buckets = []
+    curr = start_dt
+    while curr <= end_dt:
+        buckets.append({
+            "ts": curr.isoformat()[:19],
+            "reads": 0,
+            "writes": 0,
+            "system": 0,
+            "failures": 0
+        })
+        curr += timedelta(seconds=interval_sec)
+        
+    if not buckets or (end_dt - start_dt).total_seconds() > (len(buckets) - 1) * interval_sec:
+        buckets.append({
+            "ts": curr.isoformat()[:19],
+            "reads": 0,
+            "writes": 0,
+            "system": 0,
+            "failures": 0
+        })
+        
+    for ev_ts_str, category in slow_events:
+        try:
+            ev_dt = dp.isoparse(ev_ts_str)
+            offset_sec = (ev_dt - start_dt).total_seconds()
+            if offset_sec < 0:
+                continue
+            idx = int(offset_sec // interval_sec)
+            if idx >= len(buckets):
+                idx = len(buckets) - 1
+            if idx >= 0:
+                buckets[idx][category] += 1
+        except Exception:
+            pass
+            
+    return {"buckets": buckets, "interval": interval_str}
 
 def read_logs_chunked(file_path: str):
     is_gz = file_path.lower().endswith(".gz")
@@ -221,6 +292,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
     
     total_parsed = 0; total_filtered = 0; total_slow_count = 0; total_accepted = 0; total_closed = 0
     start_ts = None; end_ts = None
+    slow_events = []
 
     # 🕵️ PASS 1: Light-Speed Forensic Sweep
     # Purpose: Capture every slow query, stitch sessions/ips, and map cursors.
@@ -821,6 +893,36 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             s_o["min_example_raw"] = entry
                             s_o["min_metrics"] = metrics
                             s_o["min_peek_attr"] = attr
+                        
+                        if ts:
+                            if is_timeout_op or is_error_op:
+                                cat = "failures"
+                            elif is_system_op or is_noise:
+                                cat = "system"
+                            else:
+                                op_lower = op.lower()
+                                
+                                # Strip 'tx-' transaction prefix (e.g., 'tx-update' -> 'update') to match base WRITE_OPS
+                                is_write_op = (
+                                    op_lower.startswith("tx-") and op_lower.replace("tx-", "") in WRITE_OPS
+                                ) or (
+                                    op_lower in WRITE_OPS
+                                )
+                                
+                                # Strip 'tx-' transaction prefix (e.g., 'tx-find' -> 'find') to match base READ_OPS
+                                is_read_op = (
+                                    op_lower.startswith("tx-") and op_lower.replace("tx-", "") in READ_OPS
+                                ) or (
+                                    op_lower in READ_OPS
+                                )
+                                
+                                if is_write_op:
+                                    cat = "writes"
+                                elif is_read_op:
+                                    cat = "reads"
+                                else:
+                                    continue
+                            slow_events.append((str(ts), cat))
 
                 except Exception as e:
                     if len(engine_errors) < 100: 
@@ -897,6 +999,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                 "op_distribution": dict(op_registry.most_common(12)),
                 "global_efficiency": {str(k): v for k, v in global_forensic_sums.items()},
                 "global_health": {str(k): v for k, v in gh_counts.items()}, "global_bottlenecks": {str(k): v for k, v in global_bottlenecks.items()}, 
+                "timeline_buckets": calculate_timeline_buckets(slow_events, start_ts, end_ts).get("buckets", []),
+                "timeline_interval": calculate_timeline_buckets(slow_events, start_ts, end_ts).get("interval", "N/A"),
                 "time_window": {"start": str(start_ts), "end": str(end_ts)}, "severities": {str(k): v for k, v in severity_stats.items()}, 
                 "components": {str(k): v for k, v in component_stats.most_common(12)}, 
                 "top_messages": [

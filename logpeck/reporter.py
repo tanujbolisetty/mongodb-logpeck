@@ -96,6 +96,100 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         </div>
     '''
     
+    # 📈 Detailed Workload Timeline (Read/Write/Failure Bucketing)
+    # --------------------------------------------------------------------------
+    timeline = stats.get("timeline_buckets", [])
+    timeline_html = ""
+    if timeline:
+        max_val = max([b["reads"] + b["writes"] + b.get("system", 0) + b["failures"] for b in timeline] + [1])
+        svg_w = 1000
+        svg_h = 200
+        n_buckets = len(timeline)
+        bar_gap_ratio = 0.15 if n_buckets < 100 else 0.05
+        bar_w = (svg_w / n_buckets) * (1.0 - bar_gap_ratio)
+        gap = (svg_w / n_buckets) * bar_gap_ratio
+        
+        bars_svg = []
+        labels_svg = []
+        
+        label_interval = 1 if n_buckets <= 30 else max(1, n_buckets // 10)
+        
+        for i, b in enumerate(timeline):
+            x = i * (bar_w + gap)
+            tot = b["reads"] + b["writes"] + b.get("system", 0) + b["failures"]
+            date_str = b["ts"].split("T")[0] if "T" in b["ts"] else ""
+            start_t = b["ts"].split("T")[1][:8] if "T" in b["ts"] else b["ts"]
+            if i < n_buckets - 1:
+                end_t = timeline[i+1]["ts"].split("T")[1][:8] if "T" in timeline[i+1]["ts"] else ""
+                time_window = f"{date_str} {start_t} → {end_t}"
+            else:
+                time_window = f"{date_str} {start_t} (Duration: {stats.get('timeline_interval', 'N/A')})"
+                
+            if tot > 0:
+                h_read = (b["reads"] / max_val) * svg_h
+                h_write = (b["writes"] / max_val) * svg_h
+                h_sys = (b.get("system", 0) / max_val) * svg_h
+                h_fail = (b["failures"] / max_val) * svg_h
+                
+                y_read = svg_h - h_read
+                y_write = y_read - h_write
+                y_sys = y_write - h_sys
+                y_fail = y_sys - h_fail
+                
+                tooltip_text = f"Window: {time_window}\nReads: {b['reads']:,}\nWrites: {b['writes']:,}\nSystem: {b.get('system', 0):,}\nFailures: {b['failures']:,}"
+                
+                if h_read > 0:
+                    bars_svg.append(f'<rect x="{x}" y="{y_read}" width="{bar_w}" height="{h_read}" fill="var(--accent)" rx="2"><title>{tooltip_text}</title></rect>')
+                if h_write > 0:
+                    bars_svg.append(f'<rect x="{x}" y="{y_write}" width="{bar_w}" height="{h_write}" fill="#a855f7" rx="2"><title>{tooltip_text}</title></rect>')
+                if h_sys > 0:
+                    bars_svg.append(f'<rect x="{x}" y="{y_sys}" width="{bar_w}" height="{h_sys}" fill="#64748b" rx="2"><title>{tooltip_text}</title></rect>')
+                if h_fail > 0:
+                    bars_svg.append(f'<rect x="{x}" y="{y_fail}" width="{bar_w}" height="{h_fail}" fill="var(--error)" rx="2"><title>{tooltip_text}</title></rect>')
+            else:
+                tooltip_text = f"Window: {time_window}\nReads: 0\nWrites: 0\nSystem: 0\nFailures: 0"
+                bars_svg.append(f'<rect x="{x}" y="0" width="{bar_w}" height="{svg_h}" fill="transparent"><title>{tooltip_text}</title></rect>')
+                
+            if i % label_interval == 0 or i == n_buckets - 1:
+                interval_str = stats.get('timeline_interval', 'N/A')
+                if interval_str == '24 Hours':
+                    time_label = b["ts"].split("T")[0]
+                elif interval_str in ['4 Hours', '1 Hour'] and n_buckets > 24:
+                    date_part = b["ts"].split("T")[0][5:] if "T" in b["ts"] else ""
+                    time_part = b["ts"].split("T")[1][:5] if "T" in b["ts"] else ""
+                    time_label = f"{date_part} {time_part}" if date_part else time_part
+                else:
+                    time_label = b["ts"].split("T")[1][:5] if "T" in b["ts"] else b["ts"][:10]
+                labels_svg.append(f'<text x="{x + bar_w/2}" y="{svg_h + 15}" fill="var(--text-secondary)" font-size="10" text-anchor="end" transform="rotate(-30, {x + bar_w/2}, {svg_h + 15})">{time_label}</text>')
+                
+        bars_str = "\n".join(bars_svg)
+        labels_str = "\n".join(labels_svg)
+        
+        timeline_html = f'''
+        <div class="card" style="border-left: 4px solid #a855f7; margin-bottom: 2rem">
+            <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
+                <span>📈 DETAILED WORKLOAD TIMELINE (SLOW QUERIES BY TIME)</span>
+                <span style="font-size:0.6rem; color:var(--text-secondary)">BUCKET INTERVAL: {stats.get('timeline_interval', 'N/A')} | TOTAL BUCKETS: {n_buckets}</span>
+            </div>
+            <div style="margin: 1.5rem 0 1rem 0; overflow-x: auto; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem 1rem 2rem 1rem">
+                <svg viewBox="0 0 {svg_w} {svg_h + 45}" width="100%" height="240" style="overflow: visible">
+                    <line x1="0" y1="{svg_h}" x2="{svg_w}" y2="{svg_h}" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+                    <line x1="0" y1="{svg_h/2}" x2="{svg_w}" y2="{svg_h/2}" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4" />
+                    <line x1="0" y1="0" x2="{svg_w}" y2="0" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="4" />
+                    {bars_str}
+                    {labels_str}
+                </svg>
+            </div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:0.8rem">
+                <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Reads</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div> Writes</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div> System</div>
+                <div class="legend-item"><div class="legend-dot" style="background:var(--error)"></div> Failures / Timeouts</div>
+            </div>
+        </div>
+        '''
+
+    
     def render_wave(counts: Dict[str, int], color_map: Dict[str, str] = None) -> str:
         total = sum(counts.values()) or 1
         html = ""
@@ -844,9 +938,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         <div style="margin-bottom: 2rem">
             {bottleneck_radar_html}
         </div>
-        <div style="margin-bottom:1.5rem">
-            <input type="text" id="healthSearch" onkeyup="filterRows('healthSearch', 'healthContent')" placeholder="🔍 Filter hotspots, error patterns, or component workloads..." style="width:100%; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
-        </div>
+        {timeline_html}
         <div id="healthContent">
             <div class="comparison-grid">
                 <div class="card"><div class="card-label">Severity Distribution</div><div style="margin-top:1.2rem">{severity_wave_html}</div></div>

@@ -306,6 +306,12 @@ COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count
 # Maps abbreviations to standard operation names.
 CRUD_OP_MAP = {"u": "update", "i": "insert", "d": "delete"}
 
+# Operations categorized as Writes for dynamic timeline analytics
+WRITE_OPS = {"insert", "update", "delete", "findandmodify", "ttl index"}
+
+# Operations categorized as Reads for dynamic timeline analytics
+READ_OPS = {"find", "aggregate", "getmore", "count", "distinct"}
+
 # Fields probed during flat-block induction for lean logs.
 SEARCH_PROBES = [
     "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 

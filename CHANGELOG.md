@@ -2,6 +2,13 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [5.3.0] - 2026-06-11
+### Added
+- 🧪 **Dynamic Time-Series Timeline Chart**: Added a stacked timeline chart to the Health dashboard categorizing slow queries into Reads, Writes, System, and Failures.
+- 🧪 **Slanted X-Axis Labels**: Implemented -30 degree slanted labels on the x-axis for improved readability and overlap prevention when there are 30 or fewer buckets.
+- 🧪 **Temporal Hover Tooltips**: Added interactive tooltips showing the exact time-window ranges for each bucket.
+- 🧹 **Centralized Query Registries**: Added centralized `WRITE_OPS` and `READ_OPS` collections to `specification.py` for uniform categorization.
+
 ## [5.2.2] - 2026-05-06
 ### Fixed
 - **Atlas Search Extraction Hardening**: Suppressed structural `value` leaks in forensic query parameter extraction.
