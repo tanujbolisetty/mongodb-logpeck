@@ -1243,7 +1243,6 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
     It serves as the Single Source of Truth for both the CLI output and 
     the final HTML dashboard.
     """
-    from .parser import extract_log_metrics
     final_results = []
     rules = rules or []
     top_shapes = sorted(shape_stats.values(), key=lambda x: x["total_ms"], reverse=True)

@@ -34,7 +34,6 @@ def load_glossary_rules() -> List[Dict[str, Any]]:
             pass
     return []
 
-import sys
 
 def generate_html_report(results: Dict[str, Any], output_path: str, source_name: str = "N/A"):
     stats = results.get("stats", {}); conn = results.get("connections", {}); summary = results.get("summary", [])
@@ -235,8 +234,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     severity_wave_html = render_wave(stats.get("severities", {}), {"ERROR": "var(--error)", "WARN": "var(--warn)", "INFO": "var(--accent)"})
     component_wave_html = render_wave(stats.get("components", {}))
     # 🕵️ Forensic Suppression: Filter out admin, local, config, and system namespaces to resolve signal-to-noise issues.
-    ns_grid_html = f"<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "N/A" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
-    msg_grid_html = f"<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
+    ns_grid_html = "<table><thead><tr><th>Namespace</th><th>Parsed Lines</th></tr></thead><tbody>" + "".join([f"<tr><td>{ns}</td><td style='font-family:monospace'>{cnt:,}</td></tr>" for ns, cnt in stats.get("namespaces", {}).items() if ns != "N/A" and ".$cmd" not in ns and not any(ns.startswith(p) for p in ["admin.", "local.", "config.", "system."])]) + "</tbody></table>"
+    msg_grid_html = "<table><thead><tr><th>Severity</th><th>Message Pattern</th><th>Count</th></tr></thead><tbody>" + "".join([f"<tr><td style='color:var(--accent)'>{m.get('severity', 'I')}</td><td style='font-size:0.75rem'>{m.get('msg', 'N/A')}</td><td>{m.get('count', 0):,}</td></tr>" for m in stats.get('top_messages', [])]) + "</tbody></table>"
     
     timeout_table_html = "" # Consolidated into Query Shape Analysis
 
@@ -510,7 +509,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             has_metrics = len(metrics_content) > 0 or row.get("max_time", 0) > 0
             l_panel = ""
             if has_metrics:
-                l_panel = f'<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
+                l_panel = '<table class="forensic-table"><thead><tr><th>INDUSTRIAL DIAGNOSTIC</th><th>🥊 FASTEST SAMPLE</th><th>🐢 SLOWEST SAMPLE</th></tr></thead><tbody>'
                 l_panel += f'<tr><td class="f-label" title="Wall-Clock duration of the operation">Wall-Clock Latency</td><td class="f-val-fast" style="color:var(--tier1)">{format_duration(row.get("min_time", 0))}</td><td class="f-val-slow" style="color:var(--error)">{format_duration(row.get("max_time", 0))}</td></tr>'
                 l_panel += metrics_content
                 l_panel += "</tbody></table>"
@@ -519,7 +518,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             has_params = len(pm1) > 0 or len(pm2) > 0
             r_panel = ""
             if has_params:
-                r_panel = f'<table class="forensic-table"><thead><tr><th>EXTRACTED FIELD</th><th>🥊 VALUE</th><th>🐢 VALUE</th></tr></thead><tbody>'
+                r_panel = '<table class="forensic-table"><thead><tr><th>EXTRACTED FIELD</th><th>🥊 VALUE</th><th>🐢 VALUE</th></tr></thead><tbody>'
                 # For query parameters, always force show even if value is "0" as it is structural identity
                 for k in sorted(list(set(pm1.keys()) | set(pm2.keys()))): r_panel += render_f_row(k, pm1, pm2, force_show=True)
                 r_panel += "</tbody></table>"

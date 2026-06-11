@@ -11,10 +11,9 @@
 
 import json
 import re
-import hashlib
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 from .specification import (
-    ERROR_CODE_MAP, FIELD_DISPLAY, METRIC_MARKERS,
+    ERROR_CODE_MAP, METRIC_MARKERS,
     RE_HEURISTIC_NS_PATTERNS, COMMON_COMMAND_KEYS, CRUD_OP_MAP,
     SEARCH_PROBES, NESTED_METRIC_MAPPING,
     SYSTEM_COMPONENTS, SYSTEM_NAMESPACES, SYSTEM_APP_NAMES,

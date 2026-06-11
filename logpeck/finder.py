@@ -10,9 +10,9 @@
 
 import sys
 import logging
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Dict, Any, Union
 from .analyzer import read_logs_chunked, build_forensic_context, normalize_conn_id
-from .parser import extract_log_metrics, get_nested_value, detect_op_and_ns
+from .parser import extract_log_metrics, get_nested_value
 
 logger = logging.getLogger(__name__)
 

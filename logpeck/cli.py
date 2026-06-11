@@ -2,19 +2,16 @@ import argparse
 import json
 import sys
 import os
-import re
 from .analyzer import analyze_slow_queries, aggregate_forensic_results
 from .reporter import generate_html_report
 from .finder import search_logs, filter_logs
 from .version import __version__ as VERSION
-from .specification import FIELD_DISPLAY, METRIC_TYPE
-from .utils import format_duration, format_bytes, format_metric_value, get_scan_efficiency_color
+from .specification import FIELD_DISPLAY
+from .utils import format_duration, format_metric_value
 
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
-from rich import print as rprint
 
 console = Console(stderr=True)
 
@@ -151,7 +148,7 @@ def print_log_card(entry, full=False):
     if q_shape != "N/A" or q_hash != "N/A" or p_key != "N/A":
         # Always show full hashes in Cards (Search/Filter results)
         console.print(f"  [dim]IDs:[/dim] Shape[[green]{q_shape}[/green]] Query[[green]{q_hash}[/green]] Plan[[green]{p_key}[/green]]")
-        console.print(f"  [dim](S: Shape Hash | Q: Query Hash | P: Plan Cache Key)[/dim]")
+        console.print("  [dim](S: Shape Hash | Q: Query Hash | P: Plan Cache Key)[/dim]")
 
     if full and "_raw" in entry:
         console.print(f"  [dim]Raw:[/dim] [italic]{entry['_raw']}[/italic]")
@@ -627,14 +624,14 @@ def main():
             console.print(f"\n[bold yellow]🐢 Business Workload Forensics (v{VERSION})[/bold yellow]")
             print_forensic_table(result["summary"])
 
-        elif f"system-workload" == args.command:
+        elif "system-workload" == args.command:
             result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency)
             if args.json: print(json.dumps(result["system_summary"], indent=2)); return
 
             console.print(f"\n[bold cyan]🛠️ System Query Forensics (v{VERSION})[/bold cyan]")
             print_forensic_table(result["system_summary"])
 
-        elif f"failure-workload" == args.command:
+        elif "failure-workload" == args.command:
             result = analyze_slow_queries(log_file_path=args.file, threshold_ms=args.latency)
             stats = result.get("stats", {})
             if args.json: 
@@ -710,7 +707,7 @@ def main():
                 driver_table.add_row(m["app"], f"[bold]{m['driver']}[/bold]", str(m["count"]))
             
             console.print(Panel(driver_table, title="Driver Fingerprint Analysis", border_style="dim"))
-            console.print(f"[dim]Connection audit completed. Parity: 100%.[/dim]\n")
+            console.print("[dim]Connection audit completed. Parity: 100%.[/dim]\n")
 
         elif args.command == "dashboard":
             if not args.file and not args.folder:
