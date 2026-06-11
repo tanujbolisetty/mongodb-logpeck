@@ -150,6 +150,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 tooltip_text = f"Window: {time_window}\nReads: 0\nWrites: 0\nSystem: 0\nFailures: 0"
                 bars_svg.append(f'<rect x="{x}" y="0" width="{bar_w}" height="{svg_h}" fill="transparent"><title>{tooltip_text}</title></rect>')
                 
+            restarts = b.get("restarts", [])
+            if restarts:
+                r_tooltips = ", ".join([r.split("T")[1][:8] if "T" in r else r for r in restarts])
+                tooltip_text_restarts = f"⚡ Node Started:\n{r_tooltips}"
+                bars_svg.append(f'<line x1="{x + bar_w/2}" y1="0" x2="{x + bar_w/2}" y2="{svg_h}" stroke="var(--error)" stroke-width="1.5" stroke-dasharray="4,4"><title>{tooltip_text_restarts}</title></line>')
+                bars_svg.append(f'<circle cx="{x + bar_w/2}" cy="0" r="4" fill="var(--error)"><title>{tooltip_text_restarts}</title></circle>')
+                
             if i % label_interval == 0 or i == n_buckets - 1:
                 interval_str = stats.get('timeline_interval', 'N/A')
                 if interval_str == '24 Hours':
@@ -185,6 +192,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div> Writes</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div> System</div>
                 <div class="legend-item"><div class="legend-dot" style="background:var(--error)"></div> Failures / Timeouts</div>
+                <div class="legend-item"><div style="border-left: 2px dashed var(--error); height: 12px; margin-right: 8px; display: inline-block; vertical-align: middle"></div> ⚡ Node Restart</div>
             </div>
         </div>
         '''

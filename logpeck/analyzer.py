@@ -113,18 +113,18 @@ def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
         
     return code
 
-def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str):
+def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str, restart_events=None):
     from dateutil import parser as dp
     from datetime import timedelta
     
-    if not slow_events or not start_ts_str or not end_ts_str:
-        return []
+    if not start_ts_str or not end_ts_str:
+        return {"buckets": [], "interval": "N/A"}
         
     try:
         start_dt = dp.isoparse(start_ts_str)
         end_dt = dp.isoparse(end_ts_str)
     except Exception:
-        return []
+        return {"buckets": [], "interval": "N/A"}
         
     duration_sec = (end_dt - start_dt).total_seconds()
     if duration_sec <= 0:
@@ -155,7 +155,8 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str):
             "reads": 0,
             "writes": 0,
             "system": 0,
-            "failures": 0
+            "failures": 0,
+            "restarts": []
         })
         curr += timedelta(seconds=interval_sec)
         
@@ -165,24 +166,42 @@ def calculate_timeline_buckets(slow_events, start_ts_str, end_ts_str):
             "reads": 0,
             "writes": 0,
             "system": 0,
-            "failures": 0
+            "failures": 0,
+            "restarts": []
         })
         
-    for ev_ts_str, category in slow_events:
-        try:
-            ev_dt = dp.isoparse(ev_ts_str)
-            offset_sec = (ev_dt - start_dt).total_seconds()
-            if offset_sec < 0:
-                continue
-            idx = int(offset_sec // interval_sec)
-            if idx >= len(buckets):
-                idx = len(buckets) - 1
-            if idx >= 0:
-                buckets[idx][category] += 1
-        except Exception:
-            pass
+    if slow_events:
+        for ev_ts_str, category in slow_events:
+            try:
+                ev_dt = dp.isoparse(ev_ts_str)
+                offset_sec = (ev_dt - start_dt).total_seconds()
+                if offset_sec < 0:
+                    continue
+                idx = int(offset_sec // interval_sec)
+                if idx >= len(buckets):
+                    idx = len(buckets) - 1
+                if idx >= 0:
+                    buckets[idx][category] += 1
+            except Exception:
+                pass
+                
+    if restart_events:
+        for r_ts_str in restart_events:
+            try:
+                r_dt = dp.isoparse(r_ts_str)
+                offset_sec = (r_dt - start_dt).total_seconds()
+                if offset_sec < 0:
+                    continue
+                idx = int(offset_sec // interval_sec)
+                if idx >= len(buckets):
+                    idx = len(buckets) - 1
+                if idx >= 0:
+                    buckets[idx]["restarts"].append(r_ts_str)
+            except Exception:
+                pass
             
     return {"buckets": buckets, "interval": interval_str}
+
 
 def read_logs_chunked(file_path: str):
     is_gz = file_path.lower().endswith(".gz")
@@ -293,6 +312,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
     total_parsed = 0; total_filtered = 0; total_slow_count = 0; total_accepted = 0; total_closed = 0
     start_ts = None; end_ts = None
     slow_events = []
+    restart_events = []
 
     # 🕵️ PASS 1: Light-Speed Forensic Sweep
     # Purpose: Capture every slow query, stitch sessions/ips, and map cursors.
@@ -317,6 +337,11 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         if not start_ts: start_ts = str(ts)
                         end_ts = str(ts)
                         last_known_ts = ts
+                    
+                    # Capture Node Restart (id 4615611 / msg "MongoDB starting")
+                    if entry.get("id") == 4615611 or entry.get("msg") == "MongoDB starting":
+                        if ts:
+                            restart_events.append(str(ts))
                     
                     if total_parsed % 500000 == 0: print(f"  ↳ {total_parsed:,} lines processed...", file=sys.stderr)
                     
@@ -999,8 +1024,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                 "op_distribution": dict(op_registry.most_common(12)),
                 "global_efficiency": {str(k): v for k, v in global_forensic_sums.items()},
                 "global_health": {str(k): v for k, v in gh_counts.items()}, "global_bottlenecks": {str(k): v for k, v in global_bottlenecks.items()}, 
-                "timeline_buckets": calculate_timeline_buckets(slow_events, start_ts, end_ts).get("buckets", []),
-                "timeline_interval": calculate_timeline_buckets(slow_events, start_ts, end_ts).get("interval", "N/A"),
+                "timeline_buckets": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events).get("buckets", []),
+                "timeline_interval": calculate_timeline_buckets(slow_events, start_ts, end_ts, restart_events).get("interval", "N/A"),
                 "time_window": {"start": str(start_ts), "end": str(end_ts)}, "severities": {str(k): v for k, v in severity_stats.items()}, 
                 "components": {str(k): v for k, v in component_stats.most_common(12)}, 
                 "top_messages": [
