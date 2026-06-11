@@ -412,6 +412,42 @@ def main():
             ]
             console.print(Panel(" | ".join(meta_items), border_style="cyan", title="Global Health Overview"))
 
+            # --- Panel 1.5: Detailed Workload Timeline & Lifecycles ---
+            timeline_buckets = s.get("timeline_buckets", [])
+            if timeline_buckets:
+                timeline_table = Table(box=None, padding=(0, 2))
+                timeline_table.add_column("🕐 Time Window (UTC)", style="cyan", width=22)
+                timeline_table.add_column("Reads", justify="right", style="bold green")
+                timeline_table.add_column("Writes", justify="right", style="bold magenta")
+                timeline_table.add_column("System", justify="right", style="dim")
+                timeline_table.add_column("Failures", justify="right", style="bold red")
+                timeline_table.add_column("Node Lifecycle Events", style="yellow", no_wrap=True)
+                
+                for b in timeline_buckets:
+                    time_label = b["ts"].replace("T", " ")[:16]
+                    reads_str = str(b.get("reads", 0)) if b.get("reads", 0) > 0 else "-"
+                    writes_str = str(b.get("writes", 0)) if b.get("writes", 0) > 0 else "-"
+                    system_str = str(b.get("system", 0)) if b.get("system", 0) > 0 else "-"
+                    failures_str = str(b.get("failures", 0)) if b.get("failures", 0) > 0 else "-"
+                    
+                    events = []
+                    if b.get("shutdowns"):
+                        events.append("[bold red]🛑 Shutdown[/bold red]")
+                    if b.get("restarts"):
+                        events.append("[bold green]🟢 Started[/bold green]")
+                    event_str = " ➡️ ".join(events) if events else ""
+                    
+                    timeline_table.add_row(
+                        time_label,
+                        reads_str,
+                        writes_str,
+                        system_str,
+                        failures_str,
+                        event_str
+                    )
+                
+                console.print(Panel(timeline_table, title="Workload Timeline & Node Lifecycles", border_style="magenta"))
+
             # --- Section 2: Workload & Op Profile ---
             workload_table = Table(box=None, padding=(0, 2))
             workload_table.add_column("🔥 Top Namespaces", style="green", ratio=1)
