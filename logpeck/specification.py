@@ -1,0 +1,827 @@
+# ==============================================================================
+# logpeck: specification.py
+# The Centralized 'Truth Registry' for MongoDB Forensic Mapping.
+# ==============================================================================
+# This module serves as the authoritative source of truth for the entire 
+# LogPeck pipeline. It manages:
+# 1. Metric Display Contracts (labels, units, sources).
+# 2. System Governance (Denoising & Exclusion rules).
+# 3. Query Hygiene (Structural vs Business field isolation).
+# 4. Diagnostic Event Routing (System Health vs Workload).
+# ==============================================================================
+
+import os
+import json
+
+# 🏛️ 1. Metric Display & Naming Contract
+# ------------------------------------------------------------------------------
+# The human-readable labels and metadata are defined in metrics.json to allow 
+# for dynamic UI updates without code changes. This function loads that registry.
+def load_metrics():
+    """Returns the list of forensic metrics defined in metrics.json."""
+    path = os.path.join(os.path.dirname(__file__), "metrics.json")
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get("metrics", [])
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load metrics.json: {e}")
+        return []
+
+# 🧪 Type-Safe Error resolution
+# ------------------------------------------------------------------------------
+# In Atlas logs, 'errCode' often arrives as a string ("50"). This function
+# ensures it is cast to an integer to match the keys in ERROR_CODE_MAP.
+def resolve_error_code(harvested_error):
+    """
+    Surgically resolves numeric error codes into human-readable names.
+    e.g., Code 50 -> MaxTimeMSExpired
+    """
+    try:
+        # 🧪 Type-Safe Error resolution
+        # Ensure string-based error codes map to human-readable names
+        try:
+            code = int(harvested_error["errCode"])
+            if code in ERROR_CODE_MAP:
+                harvested_error["errName"] = ERROR_CODE_MAP[code]
+                # Synthesize a clear message if missing
+                if not harvested_error.get("errMsg"):
+                    harvested_error["errMsg"] = f"{ERROR_CODE_MAP[code]} (Code: {code})"
+        except (ValueError, TypeError, KeyError):
+            pass
+    except Exception:
+        pass
+
+METRIC_REGISTRY = load_metrics()
+
+# Derived mapping constants for backward compatibility
+FIELD_DISPLAY = {m["id"]: m["label"] for m in METRIC_REGISTRY}
+METRIC_TYPE = {m["id"]: m["unit"] for m in METRIC_REGISTRY}
+METRIC_SOURCES = {m["id"]: m["source"] for m in METRIC_REGISTRY}
+
+# Marker-to-ID mapping for discovery-based harvesting
+METRIC_MARKERS = {}
+for m in METRIC_REGISTRY:
+    for marker in m.get("markers", [m["id"]]):
+        METRIC_MARKERS[marker] = m["id"]
+
+
+# Unique categories for UI grouping
+METRIC_CATEGORIES = []
+for m in METRIC_REGISTRY:
+    if m["category"] not in METRIC_CATEGORIES:
+        METRIC_CATEGORIES.append(m["category"])
+
+
+
+# 🏺 4. System Governance (Exclusions & Denoising)
+# ------------------------------------------------------------------------------
+# These registries define the "Noise Floor" of the server. Events matching 
+# these criteria are either excluded completely or flagged as 'System' 
+# to ensure the 'Business Workload' tab remains signal-heavy.
+
+# Components that represent background infrastructure tasks.
+SYSTEM_COMPONENTS = {
+    # Core Infrastructure
+    "FTDC", "NETWORK", "STORAGE", "ACCESS", "CONTROL", "SHARDING", "BALANCER", "SESSION",
+    # WiredTiger Storage Engine (Internal maintenance)
+    "WT", "WTBACKUP", "WTCHKPT", "WTCMPCT", "WTEVICT", "WTHS", "WTRECOV", 
+    "WTRTS", "WTSLVG", "WTTS", "WTTXN", "WTVRFY", "WTWRTLOG", "JOURNAL", "RECOVERY",
+    # Replication & Topology (Gossip)
+    "REPL", "REPL_HB", "ROLLBACK", "INITSYNC", "ELECTION", "HEARTBEAT",
+    # Planner & Statistics
+    "QUERYSTATS", "REJECTED", "PLANNER"
+}
+
+# Namespaces reserved for internal MongoDB management.
+SYSTEM_NAMESPACES = {"admin.", "config.", "local.", "system."}
+
+# Application names used by Atlas agents and internal drivers.
+SYSTEM_APP_NAMES = {
+    "Automation Agent", "Monitoring Agent", "CPS Module", "MongoDB CPS Module",
+    "MongoDB Internal", "mongotune", "OplogFetcher",
+    "MongoDB Automation Agent", "MongoDB Monitoring Module",
+    "MongoDB Internal Client", "mongot", "mongotune",
+    "mongot periodic optime fetcher", "mongot database metadata resolver",
+    "mongot server info resolver", "mongot initial sync and session refresh",
+    "mongot initial sync", "mongot steady state", "mongot steady state sync", "TTL Index"
+}
+
+# Log messages excluded from forensic analysis (lifecycle/metadata/internal noise).
+# Verified against 16 production log files (atlaslogs_20260427_185128).
+# Identity info (app, user, IP, driver) is still harvested for the MSH Matrix.
+EXCLUDED_EVENT_MSGS = {
+    # --- Connection Lifecycle (high-volume, ~371K/day each) ---
+    "Connection accepted",
+    "Connection ended",
+
+    # --- Client Identity / Handshake ---
+    "client metadata",                                          # ~314K/day
+    "Successfully authenticated",                                # ~298K/day
+
+    # --- Internal Storage / Executor Noise ---
+    "Failed to gather storage statistics for slow operation",    # ~8/day
+}
+
+# MongoDB log severity codes to human-readable labels.
+SEVERITY_MAP = {
+    "I": "INFO", "W": "WARN", "E": "ERROR", "F": "FATAL",
+    "D": "DEBUG", "D1": "DEBUG", "D2": "DEBUG"
+}
+
+# Histogram bucket boundaries for latency distribution (milliseconds).
+LATENCY_BUCKETS = [100, 250, 500, 1000, 2000, 5000, 10000]
+
+# Timeout signature strings (matched against lowercased search space).
+TIMEOUT_SIGNATURES = [
+    "exceeded time limit", "exceededtimelimit", "timed out",
+    "deadline exceeded", "code: 50", "code: 202",
+    "networkinterfaceexceededtimelimit",
+    "operation timed out while waiting to acquire connection"
+]
+
+# Failure indicator strings (matched against lowercased search space).
+# Used to classify non-INFO logs as error events.
+FAILURE_SIGNATURES = [
+    "error", "failed", "failure", "socketexception", "clientdisconnect", "interrupted",
+    "exceededtimelimit", "networkinterface", "steppeddown", "primarysteppeddown",
+    "notyetinitialized", "invalidsyncsource", "terminated", "connection closed",
+    "infrastructure failure"
+]
+
+# High-frequency infrastructure noise to suppress from error classification.
+NOISE_BLACKLIST = ["reauthenticate", "JWK Set", "certificate expiration", "heartbeat"]
+
+# ✂️ 5. Query Hygiene (Structural Pruning)
+# ------------------------------------------------------------------------------
+# These fields are removed during the "Normalization" phase.
+# The goal is to isolate the unique business-level query shape (e.g., 'find by orderId')
+# by stripping away transient or infrastructure keys ($clusterTime, txnNumber, etc.).
+
+EXCLUDED_SYSTEM_FIELDS = {
+    "lsid", "clusterTime", "signature", "txnNumber", "stmtId", "readConcern", 
+    "writeConcern", "dbName", "config", "ordered", "autocommit", "$clusterTime",
+    "help", "comment", "maxTimeMS", "hint", "shardNames", "allowDiskUse", 
+    "needsMerge", "fromMongos", "mayContinue", "appName", "driver", "version",
+    "os", "platform", "compression"
+}
+
+# Atlas Search structural keywords. 
+# We prune these to isolate the actual business fields being queried (e.g., 'productDescription').
+SEARCH_STRUCTURAL_FIELDS = {
+    "must", "should", "filter", "mustNot", "range", "compound", "text", "query", "path", 
+    "wildcard", "exists", "near", "geoWithin", "geoIntersects", "equals", "in", 
+    "regex", "autocomplete", "moreLikeThis", "phrase", "queryString", "search",
+    "index", "facet", "operator", "analyzer", "score", "fuzzy", "prefix", "term",
+    "span", "highlight", "synonyms", "tokenOrder", "multi", "queryVector", "filter",
+    "gte", "lte", "gt", "lt", "constant", "geoShape", "embeddedDocument", "value",
+    "o", "o2", "u", "i", "d", "diff", "upsert", "multi", "updates", "deletes", "CRUD"
+}
+
+
+# 🕵️ 6. System Health Routing
+# ==============================================================================
+# Patterns that trigger event promotion to the System Health tab.
+SYSTEM_EVENT_IDENTIFIERS = [
+    "replica set primary server change detected",
+    "operation timed out while waiting to acquire connection",
+    "deleted expired documents using index",
+    "wiredtiger record store oplog processing finished",
+    "dns resolution while connecting to peer was slow",
+    "task finished",
+    "ingress tls handshake complete",
+    "wiredtiger record store oplog truncation finished",
+    "replication recovery oplog truncation finished",
+    "wiredtiger opened",
+    "wiredtiger closed",
+    "wiredtiger message",
+    "interrupted operation as its client disconnected",
+    "logging invocation",
+    "terminating via shutdown command",
+    "rsm received error response",
+    "dropping all pooled connections",
+    "ending connection due to bad connection status",
+    "connecting",
+    "network interface redundant shutdown",
+    "interrupted all currently",
+    "socketexception",
+    "connection timed out",
+    "not writable primary",
+    "interrupted due to step down",
+    "interrupted at shutdown",
+    "infrastructure failure"
+]
+
+# 🧬 6.5 Lifecycle & Gossip Diagnostics
+# ==============================================================================
+# Patterns for high-velocity system events to be de-noised during sweep.
+LIFECYCLE_EVENT_IDENTIFIERS = [
+    "connection accepted",
+    "connection ended",
+    "session started",
+    "session ended",
+    "connection closed",
+    "ending idle connection",
+    "dropping unhealthy pooled connection"
+]
+
+GOSSIP_EVENT_IDENTIFIERS = [
+    "wiredtiger message",
+    "rsm monitoring host in expedited mode",
+    "rescheduling the next replica set monitoring request",
+    "rsm host was added to the topology",
+    "failed to gather storage statistics",
+    "initial creation method for pre-images",
+    "clearing serverless operation lock registry",
+    "completed initialization of pre-image",
+    "rsm not processing response",
+    "failed to handle request",
+    "failed to refresh key cache",
+    "pool reset",
+    "rsm error"
+]
+
+# 🧬 7. Simplified Event Logic
+# ==============================================================================
+# Normalizes verbose system logs into clean, diagnostic categories.
+SIMPLIFIED_OPS = {
+    "deleted expired documents using index": "TTL Index",
+    "TTL Index": "TTL Index",
+    "wiredtiger record store oplog processing finished": "Oplog Processing",
+    "wiredtiger record store oplog truncation finished": "Oplog Truncation",
+    "replica set primary server change detected": "Replica Set Change",
+    "Updated wire specification": "Wire Spec Update",
+    "OplogFetcher": "OplogFetcher",
+    "find": "find",
+    "update": "update",
+    "delete": "delete",
+    "remove": "delete",
+    "insert": "insert",
+    "aggregate": "aggregate",
+    "getmore": "getmore",
+    "findandmodify": "findAndModify",
+    "dns resolution while connecting to peer was slow": "DNS Delay",
+    "ingress tls handshake complete": "TLS Handshake",
+    "operation timed out while waiting to acquire connection": "Conn Wait Timeout",
+    "MaxTimeMSExpired": "MaxTimeMS Timeout",
+    "operation exceeded time limit": "MaxTimeMS Timeout",
+    "client's executor exceeded time limit": "MaxTimeMS Timeout",
+    "deadline exceeded": "MaxTimeMS Timeout",
+    "wiredtiger opened": "Storage Engine Open",
+    "wiredtiger closed": "Storage Engine Close",
+    "wiredtiger message": "Storage Engine Message",
+    "interrupted operation as its client disconnected": "Conn Disconnected",
+    "logging invocation": "Diagnostic Audit",
+    "terminating via shutdown command": "Shutdown Process",
+    "rsm received error response": "RSM Error",
+    "dropping all pooled connections": "Pool Reset",
+    "ending connection due to bad connection status": "Conn Status Error",
+    "connecting": "Conn Initiation",
+    "network interface redundant shutdown": "Network Shutdown",
+    "interrupted all currently": "Force Disconnect",
+    "socketexception": "Network Interrupt",
+    "connection timed out": "Network Timeout",
+    "not writable primary": "Replication Shift",
+    "interrupted due to step down": "Step Down Interrupt",
+    "interrupted at shutdown": "Shutdown Interrupt"
+}
+
+# 🔍 8. Parser Ingestion Registry
+# ==============================================================================
+# Patterns and mappings used during the Pass 1 ingestion phase in parser.py.
+
+# Heuristic patterns for namespace recovery when 'attr.ns' is missing.
+RE_HEURISTIC_NS_PATTERNS = [
+    r'on ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'ns: ["\']?([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'namespace: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'for ns: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'collection: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)',
+    r'target: ([a-zA-Z0-9_-]+\.[a-zA-Z0-9_\.-]+)'
+]
+
+# Keys that carry the target collection name in the command object.
+COMMON_COMMAND_KEYS = ["find", "update", "delete", "insert", "aggregate", "count", "distinct", "findAndModify", "getMore", "$search"]
+
+# Maps abbreviations to standard operation names.
+CRUD_OP_MAP = {"u": "update", "i": "insert", "d": "delete"}
+
+# Operations categorized as Writes for dynamic timeline analytics
+WRITE_OPS = {"insert", "update", "delete", "findandmodify", "ttl index"}
+
+# Operations categorized as Reads for dynamic timeline analytics
+READ_OPS = {"find", "aggregate", "getmore", "count", "distinct"}
+
+# Fields probed during flat-block induction for lean logs.
+SEARCH_PROBES = [
+    "errCode", "code", "errName", "codeName", "ok", "errMsg", "errmsg", 
+    "durationMillis", "durationMS", "ns", "appName", "user", "client", "remote", 
+    "queryHash", "queryShapeHash", "planCacheKey", "planCacheShapeHash", "target", "host",
+    "totalOplogSlotDurationMicros", "totalTimeQueuedMicros", "planningTimeMicros",
+    "workingMillis", "cpuNanos", "writeConflicts", "keysExamined", "docsExamined", 
+    "nreturned", "reslen", "ninserted", "nModified", "ndeleted",
+    "storage", "locks", "queues", "mongot", "command", "originatingCommand",
+    "waitForWriteConcernDurationMillis", "numYields", "flowControlMillis", "flowControl", "note"
+]
+
+# Maps nested BSON paths to canonical forensic metric IDs.
+NESTED_METRIC_MAPPING = {
+    "attr.mongot.timeWaitingMillis": "mongot_wait",
+    "attr.storage.data.txnBytesDirty": "txnBytesDirty",
+    "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache"
+}
+
+# 🐢 9. Performance Efficiency Thresholds
+# ==============================================================================
+THRESHOLD_SCAN_RATIO = 10.0  # Normalized limit for 'SCAN_REDUCTION' tag.
+THRESHOLD_SLOW_MS = 100      # Baseline for performance profiling.
+ERROR_CODE_MAP = {
+    1: 'InternalError',
+    2: 'BadValue',
+    4: 'NoSuchKey',
+    5: 'GraphContainsCycle',
+    6: 'HostUnreachable',
+    7: 'HostNotFound',
+    8: 'UnknownError',
+    9: 'FailedToParse',
+    10: 'CannotMutateObject',
+    11: 'UserNotFound',
+    12: 'UnsupportedFormat',
+    13: 'Unauthorized',
+    14: 'TypeMismatch',
+    15: 'Overflow',
+    16: 'InvalidLength',
+    17: 'ProtocolError',
+    18: 'AuthenticationFailed',
+    19: 'CannotReuseObject',
+    20: 'IllegalOperation',
+    21: 'EmptyArrayOperation',
+    22: 'InvalidBSON',
+    23: 'AlreadyInitialized',
+    24: 'LockTimeout',
+    25: 'RemoteValidationError',
+    26: 'NamespaceNotFound',
+    27: 'IndexNotFound',
+    28: 'PathNotViable',
+    29: 'NonExistentPath',
+    30: 'InvalidPath',
+    31: 'RoleNotFound',
+    32: 'RolesNotRelated',
+    33: 'PrivilegeNotFound',
+    34: 'CannotBackfillArray',
+    35: 'UserModificationFailed',
+    36: 'RemoteChangeDetected',
+    37: 'FileRenameFailed',
+    38: 'FileNotOpen',
+    39: 'FileStreamFailed',
+    40: 'ConflictingUpdateOperators',
+    41: 'FileAlreadyOpen',
+    42: 'LogWriteFailed',
+    43: 'CursorNotFound',
+    45: 'UserDataInconsistent',
+    46: 'LockBusy',
+    47: 'NoMatchingDocument',
+    48: 'NamespaceExists',
+    49: 'InvalidRoleModification',
+    50: 'MaxTimeMSExpired',
+    51: 'ManualInterventionRequired',
+    52: 'DollarPrefixedFieldName',
+    53: 'InvalidIdField',
+    54: 'NotSingleValueField',
+    55: 'InvalidDBRef',
+    56: 'EmptyFieldName',
+    57: 'DottedFieldName',
+    58: 'RoleModificationFailed',
+    59: 'CommandNotFound',
+    61: 'ShardKeyNotFound',
+    62: 'OplogOperationUnsupported',
+    63: 'StaleShardVersion',
+    64: 'WriteConcernTimeout',
+    65: 'MultipleErrorsOccurred',
+    66: 'ImmutableField',
+    67: 'CannotCreateIndex',
+    68: 'IndexAlreadyExists',
+    69: 'AuthSchemaIncompatible',
+    70: 'ShardNotFound',
+    71: 'ReplicaSetNotFound',
+    72: 'InvalidOptions',
+    73: 'InvalidNamespace',
+    74: 'NodeNotFound',
+    75: 'WriteConcernLegacyOK',
+    76: 'NoReplicationEnabled',
+    77: 'OperationIncomplete',
+    78: 'CommandResultSchemaViolation',
+    79: 'UnknownReplWriteConcern',
+    80: 'RoleDataInconsistent',
+    81: 'NoMatchParseContext',
+    82: 'NoProgressMade',
+    83: 'RemoteResultsUnavailable',
+    85: 'IndexOptionsConflict',
+    86: 'IndexKeySpecsConflict',
+    87: 'CannotSplit',
+    89: 'NetworkTimeout',
+    90: 'CallbackCanceled',
+    91: 'ShutdownInProgress',
+    92: 'SecondaryAheadOfPrimary',
+    93: 'InvalidReplicaSetConfig',
+    94: 'NotYetInitialized',
+    95: 'NotSecondary',
+    96: 'OperationFailed',
+    97: 'NoProjectionFound',
+    98: 'DBPathInUse',
+    100: 'UnsatisfiableWriteConcern',
+    101: 'OutdatedClient',
+    102: 'IncompatibleAuditMetadata',
+    103: 'NewReplicaSetConfigurationIncompatible',
+    104: 'NodeNotElectable',
+    105: 'IncompatibleShardingMetadata',
+    106: 'DistributedClockSkewed',
+    107: 'LockFailed',
+    108: 'InconsistentReplicaSetNames',
+    109: 'ConfigurationInProgress',
+    110: 'CannotInitializeNodeWithData',
+    111: 'NotExactValueField',
+    112: 'WriteConflict',
+    113: 'InitialSyncFailure',
+    114: 'InitialSyncOplogSourceMissing',
+    115: 'CommandNotSupported',
+    116: 'DocTooLargeForCapped',
+    117: 'ConflictingOperationInProgress',
+    118: 'NamespaceNotSharded',
+    119: 'InvalidSyncSource',
+    120: 'OplogStartMissing',
+    121: 'DocumentValidationFailure',
+    123: 'NotAReplicaSet',
+    124: 'IncompatibleElectionProtocol',
+    125: 'CommandFailed',
+    126: 'RPCProtocolNegotiationFailed',
+    127: 'UnrecoverableRollbackError',
+    128: 'LockNotFound',
+    129: 'LockStateChangeFailed',
+    130: 'SymbolNotFound',
+    133: 'FailedToSatisfyReadPreference',
+    134: 'ReadConcernMajorityNotAvailableYet',
+    135: 'StaleTerm',
+    136: 'CappedPositionLost',
+    137: 'IncompatibleShardingConfigVersion',
+    138: 'RemoteOplogStale',
+    139: 'JSInterpreterFailure',
+    140: 'InvalidSSLConfiguration',
+    141: 'SSLHandshakeFailed',
+    142: 'JSUncatchableError',
+    143: 'CursorInUse',
+    144: 'IncompatibleCatalogManager',
+    145: 'PooledConnectionsDropped',
+    146: 'ExceededMemoryLimit',
+    147: 'ZLibError',
+    148: 'ReadConcernMajorityNotEnabled',
+    149: 'NoConfigPrimary',
+    150: 'StaleEpoch',
+    151: 'OperationCannotBeBatched',
+    152: 'OplogOutOfOrder',
+    153: 'ChunkTooBig',
+    154: 'InconsistentShardIdentity',
+    155: 'CannotApplyOplogWhilePrimary',
+    157: 'CanRepairToDowngrade',
+    158: 'MustUpgrade',
+    159: 'DurationOverflow',
+    160: 'MaxStalenessOutOfRange',
+    161: 'IncompatibleCollationVersion',
+    162: 'CollectionIsEmpty',
+    163: 'ZoneStillInUse',
+    164: 'InitialSyncActive',
+    165: 'ViewDepthLimitExceeded',
+    166: 'CommandNotSupportedOnView',
+    167: 'OptionNotSupportedOnView',
+    168: 'InvalidPipelineOperator',
+    169: 'CommandOnShardedViewNotSupportedOnMongod',
+    170: 'TooManyMatchingDocuments',
+    171: 'CannotIndexParallelArrays',
+    172: 'TransportSessionClosed',
+    173: 'TransportSessionNotFound',
+    174: 'TransportSessionUnknown',
+    175: 'QueryPlanKilled',
+    176: 'FileOpenFailed',
+    177: 'ZoneNotFound',
+    178: 'RangeOverlapConflict',
+    179: 'WindowsPdhError',
+    180: 'BadPerfCounterPath',
+    181: 'AmbiguousIndexKeyPattern',
+    182: 'InvalidViewDefinition',
+    183: 'ClientMetadataMissingField',
+    184: 'ClientMetadataAppNameTooLarge',
+    185: 'ClientMetadataDocumentTooLarge',
+    186: 'ClientMetadataCannotBeMutated',
+    187: 'LinearizableReadConcernError',
+    188: 'IncompatibleServerVersion',
+    189: 'PrimarySteppedDown',
+    190: 'MasterSlaveConnectionFailure',
+    192: 'FailPointEnabled',
+    193: 'NoShardingEnabled',
+    194: 'BalancerInterrupted',
+    195: 'ViewPipelineMaxSizeExceeded',
+    197: 'InvalidIndexSpecificationOption',
+    199: 'ReplicaSetMonitorRemoved',
+    200: 'ChunkRangeCleanupPending',
+    201: 'CannotBuildIndexKeys',
+    202: 'NetworkInterfaceExceededTimeLimit',
+    203: 'ShardingStateNotInitialized',
+    204: 'TimeProofMismatch',
+    205: 'ClusterTimeFailsRateLimiter',
+    206: 'NoSuchSession',
+    207: 'InvalidUUID',
+    208: 'TooManyLocks',
+    209: 'StaleClusterTime',
+    210: 'CannotVerifyAndSignLogicalTime',
+    211: 'KeyNotFound',
+    212: 'IncompatibleRollbackAlgorithm',
+    213: 'DuplicateSession',
+    214: 'AuthenticationRestrictionUnmet',
+    215: 'DatabaseDropPending',
+    216: 'ElectionInProgress',
+    217: 'IncompleteTransactionHistory',
+    218: 'UpdateOperationFailed',
+    219: 'FTDCPathNotSet',
+    220: 'FTDCPathAlreadySet',
+    221: 'IndexModified',
+    222: 'CloseChangeStream',
+    223: 'IllegalOpMsgFlag',
+    224: 'QueryFeatureNotAllowed',
+    225: 'TransactionTooOld',
+    226: 'AtomicityFailure',
+    227: 'CannotImplicitlyCreateCollection',
+    228: 'SessionTransferIncomplete',
+    229: 'MustDowngrade',
+    230: 'DNSHostNotFound',
+    231: 'DNSProtocolError',
+    232: 'MaxSubPipelineDepthExceeded',
+    233: 'TooManyDocumentSequences',
+    234: 'RetryChangeStream',
+    235: 'InternalErrorNotSupported',
+    236: 'ForTestingErrorExtraInfo',
+    237: 'CursorKilled',
+    238: 'NotImplemented',
+    239: 'SnapshotTooOld',
+    240: 'DNSRecordTypeMismatch',
+    241: 'ConversionFailure',
+    242: 'CannotCreateCollection',
+    243: 'IncompatibleWithUpgradedServer',
+    245: 'BrokenPromise',
+    246: 'SnapshotUnavailable',
+    247: 'ProducerConsumerQueueBatchTooLarge',
+    248: 'ProducerConsumerQueueEndClosed',
+    249: 'StaleDbVersion',
+    250: 'StaleChunkHistory',
+    251: 'NoSuchTransaction',
+    252: 'ReentrancyNotAllowed',
+    253: 'FreeMonHttpInFlight',
+    254: 'FreeMonHttpTemporaryFailure',
+    255: 'FreeMonHttpPermanentFailure',
+    256: 'TransactionCommitted',
+    257: 'TransactionTooLarge',
+    258: 'UnknownFeatureCompatibilityVersion',
+    259: 'KeyedExecutorRetry',
+    260: 'InvalidResumeToken',
+    261: 'TooManyLogicalSessions',
+    262: 'ExceededTimeLimit',
+    263: 'OperationNotSupportedInTransaction',
+    264: 'TooManyFilesOpen',
+    265: 'OrphanedRangeCleanUpFailed',
+    266: 'FailPointSetFailed',
+    267: 'PreparedTransactionInProgress',
+    268: 'CannotBackup',
+    269: 'DataModifiedByRepair',
+    270: 'RepairedReplicaSetNode',
+    271: 'JSInterpreterFailureWithStack',
+    272: 'MigrationConflict',
+    273: 'ProducerConsumerQueueProducerQueueDepthExceeded',
+    274: 'ProducerConsumerQueueConsumed',
+    275: 'ExchangePassthrough',
+    276: 'IndexBuildAborted',
+    277: 'AlarmAlreadyFulfilled',
+    278: 'UnsatisfiableCommitQuorum',
+    279: 'ClientDisconnect',
+    280: 'ChangeStreamFatalError',
+    281: 'TransactionCoordinatorSteppingDown',
+    282: 'TransactionCoordinatorReachedAbortDecision',
+    283: 'WouldChangeOwningShard',
+    284: 'ForTestingErrorExtraInfoWithExtraInfoInNamespace',
+    285: 'IndexBuildAlreadyInProgress',
+    286: 'ChangeStreamHistoryLost',
+    287: 'TransactionCoordinatorDeadlineTaskCanceled',
+    288: 'ChecksumMismatch',
+    289: 'WaitForMajorityServiceEarlierOpTimeAvailable',
+    290: 'TransactionExceededLifetimeLimitSeconds',
+    291: 'NoQueryExecutionPlans',
+    292: 'QueryExceededMemoryLimitNoDiskUseAllowed',
+    293: 'InvalidSeedList',
+    294: 'InvalidTopologyType',
+    295: 'InvalidHeartBeatFrequency',
+    296: 'TopologySetNameRequired',
+    297: 'HierarchicalAcquisitionLevelViolation',
+    298: 'InvalidServerType',
+    299: 'OCSPCertificateStatusRevoked',
+    300: 'RangeDeletionAbandonedBecauseCollectionWithUUIDDoesNotExist',
+    301: 'DataCorruptionDetected',
+    302: 'OCSPCertificateStatusUnknown',
+    303: 'SplitHorizonChange',
+    304: 'ShardInvalidatedForTargeting',
+    306: 'ReadThroughCacheLookupCanceled',
+    307: 'RangeDeletionAbandonedBecauseTaskDocumentDoesNotExist',
+    308: 'CurrentConfigNotCommittedYet',
+    309: 'ExhaustCommandFinished',
+    310: 'PeriodicJobIsStopped',
+    311: 'TransactionCoordinatorCanceled',
+    312: 'OperationIsKilledAndDelisted',
+    313: 'ResumableRangeDeleterDisabled',
+    314: 'ObjectIsBusy',
+    315: 'TooStaleToSyncFromSource',
+    316: 'QueryTrialRunCompleted',
+    317: 'ConnectionPoolExpired',
+    318: 'ForTestingOptionalErrorExtraInfo',
+    319: 'MovePrimaryInProgress',
+    320: 'TenantMigrationConflict',
+    321: 'TenantMigrationCommitted',
+    322: 'APIVersionError',
+    323: 'APIStrictError',
+    324: 'APIDeprecationError',
+    325: 'TenantMigrationAborted',
+    326: 'OplogQueryMinTsMissing',
+    327: 'NoSuchTenantMigration',
+    328: 'TenantMigrationAccessBlockerShuttingDown',
+    329: 'TenantMigrationInProgress',
+    330: 'SkipCommandExecution',
+    331: 'FailedToRunWithReplyBuilder',
+    332: 'CannotDowngrade',
+    333: 'ServiceExecutorInShutdown',
+    334: 'MechanismUnavailable',
+    335: 'TenantMigrationForgotten',
+    336: 'TimeseriesBucketCleared',
+    337: 'AuthenticationAbandoned',
+    338: 'ReshardCollectionInProgress',
+    339: 'NoSuchReshardCollection',
+    340: 'ReshardCollectionCommitted',
+    341: 'ReshardCollectionAborted',
+    342: 'ReshardingCriticalSectionTimeout',
+    343: 'ShardCannotRefreshDueToLocksHeld',
+    344: 'AuditingNotEnabled',
+    345: 'RuntimeAuditConfigurationNotEnabled',
+    346: 'ChangeStreamInvalidated',
+    347: 'APIMismatchError',
+    348: 'ChangeStreamTopologyChange',
+    349: 'KeyPatternShorterThanBound',
+    350: 'ReshardCollectionTruncatedError',
+    351: 'ChangeStreamStartAfterInvalidate',
+    352: 'UnsupportedOpQueryCommand',
+    354: 'LoadBalancerSupportMismatch',
+    355: 'InterruptedDueToStorageChange',
+    356: 'TxnRetryCounterTooOld',
+    357: 'InvalidBSONType',
+    358: 'InternalTransactionNotSupported',
+    359: 'CannotConvertIndexToUnique',
+    360: 'PlacementVersionRefreshCanceled',
+    361: 'CollectionUUIDMismatch',
+    362: 'FutureAlreadyRetrieved',
+    363: 'RetryableTransactionInProgress',
+    365: 'TemporarilyUnavailable',
+    366: 'WouldChangeOwningShardDeletedNoDocument',
+    367: 'FLECompactionPlaceholder',
+    369: 'FLETransactionAbort',
+    370: 'CannotDropShardKeyIndex',
+    371: 'UserWritesBlocked',
+    372: 'CloseConnectionForShutdownCommand',
+    373: 'InternalTransactionsExhaustiveFindHasMore',
+    374: 'TransactionAPIMustRetryTransaction',
+    375: 'TransactionAPIMustRetryCommit',
+    376: 'ChangeStreamNotEnabled',
+    377: 'FLEMaxTagLimitExceeded',
+    378: 'NonConformantBSON',
+    379: 'DatabaseMetadataRefreshCanceled',
+    380: 'RequestAlreadyFulfilled',
+    381: 'ReshardingCoordinatorServiceConflictingOperationInProgress',
+    382: 'RemoteCommandExecutionError',
+    383: 'CollectionIsEmptyLocally',
+    384: 'ConnectionError',
+    385: 'ConflictingServerlessOperation',
+    386: 'DuplicateKeyId',
+    387: 'EncounteredFLEPayloadWhileApplyingHmac',
+    388: 'TransactionTooLargeForCache',
+    389: 'LibmongocryptError',
+    390: 'InvalidSignature',
+    391: 'ReauthenticationRequired',
+    392: 'InvalidJWT',
+    393: 'InvalidTenantId',
+    395: 'TruncatedSerialization',
+    396: 'IndexInformationTooLarge',
+    398: 'StreamTerminated',
+    400: 'CannotUpgrade',
+    401: 'ResumeTenantChangeStream',
+    402: 'ResourceExhausted',
+    403: 'UnsupportedShardingEventNotification',
+    404: 'LDAPRoleAcquisitionError',
+    405: 'CannotCreateChunkDistribution',
+    406: 'MigrationBlockingOperationCoordinatorCleaningUp',
+    407: 'PooledConnectionAcquisitionExceededTimeLimit',
+    408: 'CannotInsertTimeseriesBucketsWithMixedSchema',
+    409: 'TimeseriesBucketCompressionFailed',
+    410: 'TimeseriesBucketFrozen',
+    411: 'QueryRejectedBySettings',
+    412: 'UpdatesStillPending',
+    413: 'TransactionParticipantFailedUnyield',
+    414: 'AddOrRemoveShardInProgress',
+    415: 'StreamProcessorDoesNotExist',
+    416: 'StreamProcessorAlreadyExists',
+    417: 'StreamProcessorWorkerShuttingDown',
+    418: 'StreamProcessorWorkerOutOfMemory',
+    419: 'StreamProcessorKafkaConnectionError',
+    420: 'StreamProcessorInvalidOptions',
+    421: 'StreamProcessorAtlasConnectionError',
+    422: 'StreamProcessorAtlasUnauthorizedError',
+    423: 'StreamProcessorSourceDocTooLarge',
+    424: 'StreamProcessorTooManyOutputTargets',
+    425: 'StreamProcessorCannotResumeFromSource',
+    426: 'IndexIsEmpty',
+    427: 'DbCheckSecondaryBatchTimeout',
+    428: 'DbCheckAttemptOnClusteredCollectionIdIndex',
+    429: 'DbCheckInconsistentHash',
+    430: 'IndexKeyOrderViolation',
+    431: 'ChunkMetadataInconsistency',
+    432: 'OfflineValidationFailedToComplete',
+    433: 'AdmissionQueueOverflow',
+    434: 'NoDistinctScansForDistinctEligibleQuery',
+    435: 'QueryStatsFailedToRecord',
+    436: 'StreamProcessorHTTPSConnectionError',
+    440: 'StreamProcessorExternalFunctionConnectionError',
+    442: 'RetryMultiPlanning',
+    443: 'StreamProcessorS3ConnectionError',
+    444: 'StreamProcessorS3Error',
+    445: 'DatabaseMetadataRefreshCanceledDueToFCVTransition',
+    446: 'ClusterUMCErrorWithWriteConcernError',
+    447: 'ObjectAlreadyExists',
+    448: 'StreamProcessorInvalidNamespace',
+    449: 'RateLimitExceeded',
+    450: 'PooledConnectionAcquisitionRejected',
+    451: 'StreamProcessorS3TokenExpired',
+    452: 'ReleaseMemoryShardError',
+    453: 'InterruptedDueToReshardingCriticalSection',
+    454: 'ReplayClientConfigurationError',
+    455: 'ReplayClientNotConnected',
+    456: 'ReplayClientFailedToProcessBSON',
+    457: 'ReplayClientInternalError',
+    458: 'ReplayClientSessionSchedulerError',
+    459: 'ReplayClientSessionSimulationError',
+    460: 'StreamProcessorKinesisConnectionError',
+    461: 'StreamProcessorKinesisError',
+    462: 'IngressRequestRateLimitExceeded',
+    463: 'StreamProcessorKinesisRetryableError',
+    464: 'ShardRemovedError',
+    465: 'PlacementHistoryInitializationInProgress',
+    466: 'SchemaRegistryNonRetryableError',
+    467: 'StreamProcessorRetryableIcebergError',
+    468: 'StreamProcessorStartupRetryableError',
+    469: 'SchemaRegistryConnectionError',
+    470: 'StreamProcessorAtlasConnectionErrorDuringFirstStart',
+    471: 'InterruptedDueToAddShard',
+    472: 'InvalidBSONColumn',
+    482: 'MaxNumberOfOrPlansExceeded',
+    9001: 'SocketException',
+    10003: 'CannotGrowDocumentInCappedNamespace',
+    10058: 'LegacyNotPrimary',
+    10107: 'NotWritablePrimary',
+    10334: 'BSONObjectTooLarge',
+    11000: 'DuplicateKey',
+    11600: 'InterruptedAtShutdown',
+    11601: 'Interrupted',
+    11602: 'InterruptedDueToReplStateChange',
+    12586: 'BackgroundOperationInProgressForDatabase',
+    12587: 'BackgroundOperationInProgressForNamespace',
+    13113: 'MergeStageNoMatchingDocument',
+    13297: 'DatabaseDifferCase',
+    13388: 'StaleConfig',
+    13435: 'NotPrimaryNoSecondaryOk',
+    13436: 'NotPrimaryOrSecondary',
+    14031: 'OutOfDiskSpace',
+    28769: 'NamespaceCannotBeSharded',
+    31082: 'SearchNotEnabled',
+    40413: 'IDLDuplicateField',
+    40414: 'IDLFailedToParse',
+    40415: 'IDLUnknownField',
+    46841: 'ClientMarkedKilled',
+    50768: 'NotARetryableWriteCommand',
+    50915: 'BackupCursorOpenConflictWithCheckpoint',
+    56846: 'ConfigServerUnreachable',
+    57986: 'RetryableInternalTransactionNotSupported',
+    91331: 'RetriableRemoteCommandFailure',
+    640570: 'IllegalChangeToExpectedShardVersion',
+    640571: 'IllegalChangeToExpectedDatabaseVersion',
+    1003141: 'RemoveShardDrainingInProgress',
+    4662500: 'IDLUnknownFieldPossibleMongocryptd',
+    4938500: 'IndexNotFoundCachedPlan',
+    6371402: 'EncryptedFindAndModifyNewNotSupported',
+    9737301: 'UnsupportedCbrNode',
+    9751901: 'HistogramCEFailure',
+    9751902: 'SamplingCEFailure',
+    9751903: 'CEFailure',
+    10045600: 'InterruptedDueToFCVChange',
+    10171600: 'ReadThroughCacheTimeMonotonicityViolation',
+}
