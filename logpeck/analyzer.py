@@ -585,7 +585,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # 🧬 Orphan Routing Logic (Senior Implementation)
                     # Route timeouts with no query shape to Table 3 (System & Network Errors)
                     # to resolve detail-visibility gaps for background executor events.
-                    is_orphan_timeout = is_timeout_op and h_b in ["N/A", "N/A", "N/D"]
+                    h_b = str(metrics.get("query_shape_hash") or "N/A")
+                    is_orphan_timeout = is_timeout_op and h_b in ["N/A", "N/D"]
 
                     if (is_error_op and not is_timeout_op) or is_orphan_timeout:
                         # 🧬 High-Resolution Systemic Error Extraction

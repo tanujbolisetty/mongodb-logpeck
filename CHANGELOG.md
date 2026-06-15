@@ -2,6 +2,20 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.0] - 2026-06-15
+### Added
+- 🕵️ **Universal Search Dropdown Selectors**: Implemented interactive search-type select dropdowns across **all four** primary forensic tabs (**Business Workload**, **System Query Forensics**, **Failure Forensics**, and **Connection Analytics**) to allow users to filter rows by Operation, Namespace, Application, DB User, Client IP, or Diagnostics/Errors.
+- 🧪 **Connection Analytics Search Support**: Integrated Connection Analytics metadata cards (Client Application, Client IP, DB User, and Driver Mapping) into the Javascript `filterRows` engine by wrapping elements with `#connTable` and adding custom `.conn-row` item classes, enabling full metadata filtering on keystroke.
+- ⏱️ **Failure Forensics Column Mapping**: Hardened `filterRows` logic to dynamically resolve table columns for timeout/failure logs (mapping Namespace to cell index `4` and Application to index `5`), ensuring precise, column-specific filters.
+- 🧪 **Interactive Scroll-to-Target Navigation**: Updated the main overview cards (Slow Queries, Workload Failures, Log Errors) to automatically switch tabs and smoothly scroll to their corresponding details tables upon user interaction.
+- 🧹 **Custom CSS Tooltips**: Replaced conflicting native tooltips on dashboard info-icons with a pure-CSS hover tooltip system to prevent OS-level tooltips from getting stuck during hover transitions.
+
+### Removed
+- 🧹 **Reference Tab Search Bar**: Removed the search bar in the **Reference** tab as searching static methodology notes was determined to be overkill.
+
+### Fixed
+- 🐛 **Analyzer NameError**: Resolved a silent `NameError` in `analyzer.py` where the `h_b` query shape variable was referenced prior to its definition.
+
 ## [5.3.5] - 2026-06-11
 ### Changed
 - 🧪 **State-Based Crash-Loop Filtering**: Implemented a sequential state machine (`node_state = STARTED | SHUTDOWN`) in `analyzer.py` to track actual availability transitions. Consecutive `"shutdown complete"` events without an intervening `"mongod startup complete"` are ignored, preventing rapid crash-loop logs (restarts that fail instantly) from cluttering the reports.

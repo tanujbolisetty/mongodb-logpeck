@@ -50,11 +50,23 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     health_summary_html = f'''
         <div class="card"><div class="card-label">Total Logs Parsed</div><div class="card-value">{stats.get("total_parsed", 0):,}</div></div>
         <div class="card"><div class="card-label">Time Window</div><div class="card-value" style="font-size:0.9rem">{time_start} → {time_end}<span style="display:block;font-size:0.6rem;color:var(--text-secondary);margin-top:4px;letter-spacing:0.08em">🕐 UTC</span></div></div>
-        <div class="card"><div class="card-label">Slow Queries</div><div class="card-value">{stats.get("total_slow_count", 0)}</div></div>
+        <div class="card card-clickable" onclick="navigateToTab('slow', 'slowTable')"><div class="card-label">Slow Queries</div><div class="card-value">{stats.get("total_slow_count", 0)}</div></div>
         <div class="card"><div class="card-label">Avg Slow Duration</div><div class="card-value">{format_duration(stats.get("avg_slow_ms", 0))}</div></div>
         <div class="card"><div class="card-label">Max Slow Duration</div><div class="card-value" style="color:var(--error)">{latency_max}</div></div>
-        <div class="card"><div class="card-label">Workload Failures</div><div class="card-value">{stats.get("timeout_count", 0)}</div></div>
-        <div class="card"><div class="card-label">Log Errors</div><div class="card-value" style="color:{err_color}">{stats.get("log_error_count", 0)}</div></div>
+        <div class="card card-clickable" onclick="navigateToTab('timeouts', 'timeoutTable')">
+            <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
+                <span>Workload Failures</span>
+                <span class="info-icon" data-tooltip="Timeout and execution limit errors. Refer to the 'Query Shape Failure Analysis' table in the 'Failure Forensics' tab.">ℹ️</span>
+            </div>
+            <div class="card-value">{stats.get("timeout_count", 0)}</div>
+        </div>
+        <div class="card card-clickable" onclick="navigateToTab('timeouts', 'systemErrorCard')">
+            <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
+                <span>Log Errors</span>
+                <span class="info-icon" data-tooltip="System, network, or driver-level warnings/errors. Refer to the 'System & Network Errors' table in the 'Failure Forensics' tab.">ℹ️</span>
+            </div>
+            <div class="card-value" style="color:{err_color}">{stats.get("log_error_count", 0)}</div>
+        </div>
     '''
     
     # 🧬 Forensic Bottleneck Radar
@@ -223,12 +235,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         '''
 
     
-    def render_wave(counts: Dict[str, int], color_map: Dict[str, str] = None) -> str:
+    def render_wave(counts: Dict[str, int], color_map: Dict[str, str] = None, item_type: str = "") -> str:
         total = sum(counts.values()) or 1
         html = ""
         for k, v in sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]:
             pct = (v / total) * 100; color = color_map.get(k, "var(--accent)") if color_map else "var(--accent)"
-            html += f'<div style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-secondary);margin-bottom:6px"><span>{k}</span><span>{v:,} ({pct:.1f}%)</span></div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{pct}%;background:{color}"></div></div></div>'
+            class_str = f'class="conn-row {item_type}-item"' if item_type else 'class="conn-row"'
+            html += f'<div {class_str} style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-secondary);margin-bottom:6px"><span>{k}</span><span>{v:,} ({pct:.1f}%)</span></div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{pct}%;background:{color}"></div></div></div>'
         return html
 
     severity_wave_html = render_wave(stats.get("severities", {}), {"ERROR": "var(--error)", "WARN": "var(--warn)", "INFO": "var(--accent)"})
@@ -264,7 +277,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             payload_html = f'''
                 <div style="position:relative">
                     <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard(\'sys-payload-{i}\', this)">COPY</button>
-                    <pre id="sys-payload-{i}" class="payload-pre" style="background:#000;padding:1.5rem;border-radius:12px;font-size:0.72rem;color:var(--text-secondary);border:1px solid var(--border);border-left:4px solid var(--warn);max-height:450px;overflow:auto">{p_pretty}</pre>
+                    <pre id="sys-payload-{i}" class="payload-pre search-exclude" style="background:#000;padding:1.5rem;border-radius:12px;font-size:0.72rem;color:var(--text-secondary);border:1px solid var(--border);border-left:4px solid var(--warn);max-height:450px;overflow:auto">{p_pretty}</pre>
                 </div>'''
             
         system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="6"><div class="details-content">
@@ -274,13 +287,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     system_error_table_html += "</tbody></table>"
     
     def generate_tier_buttons(table_id):
-        buttons = f'<button class="badge" style="cursor:pointer; border:1px solid var(--border); background:#1e293b" onclick="filterByTier(0, \'{table_id}\')">ALL</button>'
+        buttons = f'<button class="badge tier-btn active" style="cursor:pointer; border:1px solid var(--border); background:#1e293b; color:var(--text-primary)" onclick="filterByTier(0, \'{table_id}\', this)">ALL</button>'
         active_tiers = stats.get("active_latency_tiers", [])
         # Only show up to 3 most relevant tiers to avoid clutter
         for t in active_tiers[-3:]:
             label = format_duration(t) + "+"
             color = "var(--warn)" if t < 1000 else ("#EA580C" if t < 5000 else "var(--error)")
-            buttons += f'<button class="badge" style="cursor:pointer; border:1px solid {color}44; color:{color}" onclick="filterByTier({t}, \'{table_id}\')">{label}</button>'
+            buttons += f'<button class="badge tier-btn" style="cursor:pointer; border:1px solid {color}44; color:{color}; background:transparent" onclick="filterByTier({t}, \'{table_id}\', this)">{label}</button>'
         return buttons
 
     slow_tier_buttons_html = generate_tier_buttons("slowTable")
@@ -292,9 +305,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         <div class="card"><div class="card-label">Auth Failures</div><div class="card-value">{conn.get('auth_fail_count', 0)}</div></div>
         <div class="card"><div class="card-label">Log Trace Duration</div><div class="card-value" style="font-size:0.9rem">{int(conn.get('duration_sec', 0)//3600)}h {int((conn.get('duration_sec', 0)%3600)//60)}m</div></div>
     '''
-    app_wave_html = render_wave(conn.get("top_apps", {}))
-    ip_wave_html = render_wave(conn.get("top_ips", {}))
-    user_wave_html = render_wave(conn.get("top_users", {}))
+    app_wave_html = render_wave(conn.get("top_apps", {}), item_type="app")
+    ip_wave_html = render_wave(conn.get("top_ips", {}), item_type="ip")
+    user_wave_html = render_wave(conn.get("top_users", {}), item_type="user")
     driver_mapping_html = "<table style='margin-top:1rem'><thead><tr><th>CLIENT APPLICATION</th><th>DRIVER STITCHING</th><th>COUNT</th></tr></thead><tbody>" + "".join([f"<tr><td style='font-size:0.85rem;color:var(--text-secondary)'>{m.get('app', 'N/A')}</td><td style='font-size:0.82rem;color:var(--accent);font-weight:700'>{m.get('driver', 'N/A')}</td><td style='font-family:monospace'>{m.get('count', 0):,}</td></tr>" for m in conn.get("app_driver_mapping", [])]) + "</tbody></table>"
 
     # 🧬 Executive Failure Summary: Metadata setup
@@ -644,7 +657,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     <div class="card-label search-exclude" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">REPRESENTATIVE FORENSIC PAYLOAD</div>
                     <div style="position:relative">
                         <button class="btn-copy" style="position:absolute; top:10px; right:10px" onclick="copyToClipboard('payload-msg-{start_idx + i}', this)">COPY</button>
-                        <pre id="payload-msg-{start_idx + i}" class="payload-pre" style="background:#000; padding:1.5rem; border-radius:12px; font-size:0.72rem; color:var(--text-secondary); border:1px solid var(--border); border-left:4px solid var(--error); max-height:450px; overflow:auto">{payload_pretty}</pre>
+                        <pre id="payload-msg-{start_idx + i}" class="payload-pre search-exclude" style="background:#000; padding:1.5rem; border-radius:12px; font-size:0.72rem; color:var(--text-secondary); border:1px solid var(--border); border-left:4px solid var(--error); max-height:450px; overflow:auto">{payload_pretty}</pre>
                     </div>
                     
                     <div style="margin-top:1.5rem; display:flex; gap:1.5rem; font-size:0.75rem; color:var(--text-secondary)">
@@ -686,7 +699,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                                     <button class="btn-copy" onclick="copyToClipboard('payload-fast-{start_idx + i}', this)">COPY JSON</button>
                                 </div>
                             </div>
-                            <pre id="payload-fast-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{fast_json}</pre>
+                            <pre id="payload-fast-{start_idx + i}" class="payload-pre search-exclude" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{fast_json}</pre>
                         </div>
                         <div>
                             <div class="card-label" style="display:flex; align-items:center; gap:20px;">
@@ -696,7 +709,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                                     <button class="btn-copy" onclick="copyToClipboard('payload-slow-{start_idx + i}', this)">COPY JSON</button>
                                 </div>
                             </div>
-                            <pre id="payload-slow-{start_idx + i}" class="payload-pre" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{slow_json}</pre>
+                            <pre id="payload-slow-{start_idx + i}" class="payload-pre search-exclude" style="background:#000000; padding:1.5rem; border-radius:12px; font-size:0.72rem; overflow:auto; max-height:450px; border:1px solid var(--border); color:#a1a1aa; margin-top:0.5rem">{slow_json}</pre>
                         </div>
                     </div>
                 </div></td></tr>'''
@@ -758,6 +771,23 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             if(target) { target.classList.add('active'); target.style.display = 'block'; } 
             el.classList.add('active'); 
         }
+        function navigateToTab(tabId, targetId) {
+            const tabs = Array.from(document.querySelectorAll('.tab'));
+            const tabHeader = tabs.find(el => el.getAttribute('onclick')?.includes(tabId));
+            if (tabHeader) {
+                openTab(tabId, tabHeader);
+                if (targetId) {
+                    const target = document.getElementById(targetId);
+                    if (target) {
+                        setTimeout(() => {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 50);
+                        return;
+                    }
+                }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
         function filterTable(tableId, inputId) {
             const input = document.getElementById(inputId);
             const filter = input.value.toLowerCase();
@@ -796,6 +826,10 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         function filterRows(inputId, containerId) {
             const input = document.getElementById(inputId), filter = input.value.toLowerCase(), container = document.getElementById(containerId);
             if(!container) return;
+            
+            const typeSelect = document.getElementById(inputId + "Type");
+            const searchType = typeSelect ? typeSelect.value : "all";
+            
             const trs = container.getElementsByTagName("tr");
             for (let i = 0; i < trs.length; i++) {
                 const row = trs[i];
@@ -803,18 +837,45 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if (row.classList.contains('cat-header') || row.parentElement.tagName === 'THEAD') continue;
                 
                 if (row.classList.contains('row-main')) {
-                    const mainText = row.textContent.toLowerCase();
+                    let isMatch = false;
                     const nextRow = row.nextElementSibling;
-                    let detailText = "";
-                    if (nextRow && nextRow.classList.contains('details-row')) {
-                        const content = nextRow.querySelector('.details-content');
-                        if (content) {
-                            const clone = content.cloneNode(true);
-                            clone.querySelectorAll('.search-exclude').forEach(el => el.remove());
-                            detailText = clone.textContent.toLowerCase();
+                    
+                    if (searchType === "all") {
+                        const mainText = row.textContent.toLowerCase();
+                        let detailText = "";
+                        if (nextRow && nextRow.classList.contains('details-row')) {
+                            const content = nextRow.querySelector('.details-content');
+                            if (content) {
+                                const clone = content.cloneNode(true);
+                                clone.querySelectorAll('.search-exclude').forEach(el => el.remove());
+                                detailText = clone.textContent.toLowerCase();
+                            }
                         }
+                        isMatch = mainText.includes(filter) || detailText.includes(filter);
+                    } else {
+                        let targetText = "";
+                        const isTimeoutTable = containerId === "timeoutContent" || row.closest("#timeoutTable");
+                        if (isTimeoutTable) {
+                            if (searchType === "op" || searchType === "diag") {
+                                targetText = row.cells[1] ? row.cells[1].textContent : "";
+                            } else if (searchType === "ns") {
+                                targetText = row.cells[4] ? row.cells[4].textContent : "";
+                            } else if (searchType === "app") {
+                                targetText = row.cells[5] ? row.cells[5].textContent : "";
+                            }
+                        } else {
+                            if (searchType === "op") {
+                                targetText = row.cells[1] ? row.cells[1].textContent : "";
+                            } else if (searchType === "ns") {
+                                targetText = row.cells[7] ? row.cells[7].textContent : "";
+                            } else if (searchType === "diag") {
+                                targetText = row.cells[8] ? row.cells[8].textContent : "";
+                            } else if (searchType === "app") {
+                                targetText = row.cells[9] ? row.cells[9].textContent : "";
+                            }
+                        }
+                        isMatch = targetText.toLowerCase().includes(filter);
                     }
-                    const isMatch = mainText.includes(filter) || detailText.includes(filter);
                     
                     row.style.display = isMatch ? "" : "none";
                     if (nextRow && nextRow.classList.contains('details-row')) {
@@ -827,10 +888,51 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     continue;
                 }
                 if (row.classList.contains('details-row')) continue;
-                row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+                
+                if (containerId === "connTable") {
+                    let isMatch = false;
+                    if (searchType === "all") {
+                        isMatch = row.textContent.toLowerCase().includes(filter);
+                    } else if (searchType === "app") {
+                        const cellText = row.cells[0] ? row.cells[0].textContent : "";
+                        isMatch = cellText.toLowerCase().includes(filter);
+                    } else if (searchType === "driver") {
+                        const cellText = row.cells[1] ? row.cells[1].textContent : "";
+                        isMatch = cellText.toLowerCase().includes(filter);
+                    } else {
+                        isMatch = false;
+                    }
+                    row.style.display = isMatch ? "" : "none";
+                } else {
+                    row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+                }
+            }
+            
+            if (containerId === "connTable") {
+                const divs = container.getElementsByClassName("conn-row");
+                for (let i = 0; i < divs.length; i++) {
+                    const div = divs[i];
+                    let isMatch = false;
+                    if (searchType === "all") {
+                        isMatch = div.textContent.toLowerCase().includes(filter);
+                    } else if (searchType === "app") {
+                        isMatch = div.classList.contains("app-item") && div.textContent.toLowerCase().includes(filter);
+                    } else if (searchType === "ip") {
+                        isMatch = div.classList.contains("ip-item") && div.textContent.toLowerCase().includes(filter);
+                    } else if (searchType === "user") {
+                        isMatch = div.classList.contains("user-item") && div.textContent.toLowerCase().includes(filter);
+                    } else {
+                        isMatch = false;
+                    }
+                    div.style.display = isMatch ? "" : "none";
+                }
             }
         }
-        function filterByTier(minMs, tableId) {
+        function filterByTier(minMs, tableId, btn) {
+            if (btn) {
+                btn.parentElement.querySelectorAll('.tier-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
             document.querySelectorAll('#' + tableId + ' .row-main').forEach(row => {
                 const maxMsText = row.cells[3].textContent;
                 const ms = parseFloat(maxMsText) * (maxMsText.includes('s') && !maxMsText.includes('ms') ? 1000 : 1);
@@ -875,6 +977,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }}
         h1 {{ font-family: 'Outfit', sans-serif; font-size: 2rem; margin: 0; display: flex; align-items: center; gap: 10px; }}
         .badge {{ background: var(--accent); color: var(--bg); padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; }}
+        .tier-btn {{ background: transparent; transition: all 0.2s; }}
+        .tier-btn.active {{ background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; }}
         
         .tabs {{ display: flex; gap: 0.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); }}
         .tab {{ padding: 1rem 2rem; cursor: pointer; font-weight: 600; color: var(--text-secondary); border-bottom: 3px solid transparent; transition: all 0.2s; border-top-left-radius: 8px; border-top-right-radius: 8px; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }}
@@ -883,7 +987,40 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         .tab-content {{ display: none; }} .tab-content.active {{ display: block; }}
 
         .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }}
-        .card {{ background: var(--card-bg); border: 1px solid var(--border); padding: 1.5rem; border-radius: 12px; }}
+        .card {{ background: var(--card-bg); border: 1px solid var(--border); padding: 1.5rem; border-radius: 12px; transition: all 0.2s ease-in-out; }}
+        .card-clickable {{ cursor: pointer; }}
+        .card-clickable:hover {{ border-color: var(--accent); background: rgba(0, 237, 100, 0.02); transform: translateY(-2px); }}
+        .info-icon {{ font-size: 0.75rem; opacity: 0.6; cursor: help; transition: all 0.2s; margin-left: 6px; position: relative; }}
+        .info-icon:hover {{ opacity: 1; color: var(--accent); }}
+        .info-icon::after {{
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 150%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            text-transform: none;
+            white-space: normal;
+            width: 260px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 10000;
+            font-family: inherit;
+            line-height: 1.4;
+            text-align: left;
+            font-weight: 500;
+        }}
+        .info-icon:hover::after {{
+            opacity: 1;
+            transform: translateX(-50%) translateY(-6px);
+        }}
         .card-label {{ color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; font-weight: 700; }}
         .card-value {{ font-size: 1.6rem; font-weight: 700; color: var(--accent); font-family: 'Outfit'; }}
 
@@ -986,6 +1123,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
     <div id="system" class="tab-content">
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+            <select id="systemSearchType" onchange="filterRows('systemSearch', 'systemTable')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
+                <option value="all">All Fields</option>
+                <option value="op">Operation (OP)</option>
+                <option value="ns">Namespace</option>
+                <option value="app">Application</option>
+                <option value="diag">Diagnostics/Labels</option>
+            </select>
             <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Forensic search of background tasks, heartbeats, and admin commands..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
             <div style="display:flex; gap:0.5rem">
                 {system_tier_buttons_html}
@@ -1022,6 +1166,12 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
     <div id="timeouts" class="tab-content">
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+            <select id="timeoutSearchType" onchange="filterRows('timeoutSearch', 'timeoutContent')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
+                <option value="all">All Fields</option>
+                <option value="op">Error Msg / Code</option>
+                <option value="ns">Namespace</option>
+                <option value="app">Application</option>
+            </select>
             <input type="text" id="timeoutSearch" onkeyup="filterRows('timeoutSearch', 'timeoutContent')" placeholder="🔍 Search connection timeouts and execution limits..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--error)">
             <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
         </div>
@@ -1052,7 +1202,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 </table>
             </div>
 
-            <div class="card" style="margin-top:1.5rem">
+            <div id="systemErrorCard" class="card" style="margin-top:1.5rem">
                 <div class="card-label" style="color:var(--warn)">🌐 System & Network Errors</div>
                 <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:1.5rem">Raw infrastructure and network anomalies that occurred outside of tracked query boundaries.</p>
                 {system_error_table_html}
@@ -1063,6 +1213,13 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 
     <div id="slow" class="tab-content">
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+            <select id="slowSearchType" onchange="filterRows('slowSearch', 'slowTable')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
+                <option value="all">All Fields</option>
+                <option value="op">Operation (OP)</option>
+                <option value="ns">Namespace</option>
+                <option value="app">Application</option>
+                <option value="diag">Diagnostics/Labels</option>
+            </select>
             <input type="text" id="slowSearch" onkeyup="filterRows('slowSearch', 'slowTable')" placeholder="🔍 Search by namespace, op, app, or hash..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
             <div style="display:flex; gap:0.5rem">
                 {slow_tier_buttons_html}
@@ -1093,25 +1250,30 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     </div>
 
     <div id="connections" class="tab-content">
-        <div style="margin-bottom:1.5rem">
-            <input type="text" id="connSearch" onkeyup="filterRows('connSearch', 'connTable')" placeholder="🔍 Search connection metadata..." style="width:100%; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none;">
+        <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+            <select id="connSearchType" onchange="filterRows('connSearch', 'connTable')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
+                <option value="all">All Fields</option>
+                <option value="app">Application</option>
+                <option value="ip">Client IP</option>
+                <option value="user">DB User</option>
+                <option value="driver">Driver Name</option>
+            </select>
+            <input type="text" id="connSearch" onkeyup="filterRows('connSearch', 'connTable')" placeholder="🔍 Search connection metadata..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none;">
         </div>
         <div class="grid">{conn_summary_html}</div>
-        <div class="comparison-grid">
-            <div class="card"><div class="card-label">Top Client Applications</div><div style="margin-top:1.2rem">{app_wave_html}</div></div>
-            <div class="card"><div class="card-label">Top Client IPs</div><div style="margin-top:1.2rem">{ip_wave_html}</div></div>
-        </div>
-        <div class="comparison-grid" style="margin-top:1.5rem">
-            <div class="card"><div class="card-label">Top DB Users</div><div style="margin-top:1.2rem">{user_wave_html}</div></div>
-            <div class="card"><div class="card-label">App → Driver Mapping</div><div style="margin-top:1.2rem">{driver_mapping_html}</div></div>
+        <div id="connTable">
+            <div class="comparison-grid">
+                <div class="card"><div class="card-label">Top Client Applications</div><div style="margin-top:1.2rem">{app_wave_html}</div></div>
+                <div class="card"><div class="card-label">Top Client IPs</div><div style="margin-top:1.2rem">{ip_wave_html}</div></div>
+            </div>
+            <div class="comparison-grid" style="margin-top:1.5rem">
+                <div class="card"><div class="card-label">Top DB Users</div><div style="margin-top:1.2rem">{user_wave_html}</div></div>
+                <div class="card"><div class="card-label">App → Driver Mapping</div><div style="margin-top:1.2rem">{driver_mapping_html}</div></div>
+            </div>
         </div>
     </div>
 
     <div id="reference" class="tab-content">
-        <div style="margin-bottom:1.5rem">
-            <input type="text" id="refSearch" onkeyup="filterRows('refSearch', 'referenceContent')" placeholder="🔍 Search diagnostic rules or metric sources..." style="width:100%; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
-        </div>
-        
         <div id="referenceContent">
             <div class="card" style="margin-bottom:2rem; border-left: 4px solid var(--accent)">
                 <div class="card-label" style="color:var(--accent)">🔬 Forensic Methodology: Diagnostics vs. Clinical Insights</div>
