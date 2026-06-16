@@ -865,6 +865,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                                 targetText = row.cells[4] ? row.cells[4].textContent : "";
                             } else if (searchType === "app") {
                                 targetText = row.cells[5] ? row.cells[5].textContent : "";
+                            } else if (searchType === "hash") {
+                                targetText = row.cells[0] ? row.cells[0].textContent : "";
                             }
                         } else {
                             if (searchType === "op") {
@@ -1136,7 +1138,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <option value="hash">Hash</option>
                 <option value="diag">Diagnostics/Labels</option>
             </select>
-            <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Forensic search of background tasks, heartbeats, and admin commands..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
+            <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Search by namespace, op, app, hash, or diagnostics/labels..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
             <div style="display:flex; gap:0.5rem">
                 {system_tier_buttons_html}
             </div>
@@ -1177,8 +1179,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <option value="op">Error Msg</option>
                 <option value="ns">Namespace</option>
                 <option value="app">Application</option>
+                <option value="hash">Hash</option>
             </select>
-            <input type="text" id="timeoutSearch" onkeyup="filterRows('timeoutSearch', 'timeoutContent')" placeholder="🔍 Search connection timeouts and execution limits..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--error)">
+            <input type="text" id="timeoutSearch" onkeyup="filterRows('timeoutSearch', 'timeoutContent')" placeholder="🔍 Search by error msg, namespace, application, or hash..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--error)">
             <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
         </div>
         <div id="timeoutContent">

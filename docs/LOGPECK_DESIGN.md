@@ -640,7 +640,7 @@ Because the search engine matches against the `textContent` of a table row (`row
 | :--- | :--- | :--- |
 | **Business Workload** | Namespace, Operation, App Name, Diagnostic Tags | Query Shape Hash, Query Hash, Plan Cache Key |
 | **System Workload** | Background Task Name, Component, Diagnostic Tags | Query Shape Hash, Query Hash, Plan Cache Key, Internal Thread ID |
-| **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | **Client IP**, Connection Context ID, Shape Hash, Full Error Description |
+| **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | Query Shape Hash, Query Hash, Plan Cache Key, **Client IP**, Connection Context ID, Full Error Description |
 | **Connection Analytics**| App Name, Driver Version | **Client IP**, Username |
 
 ### 16.3 Developer Checklist for Searchable Fields
