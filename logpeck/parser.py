@@ -148,8 +148,11 @@ def extract_query_params(cmd_obj: dict, op: str) -> Dict[str, Any]:
             val = cmd_obj.get(field)
             if val: _harvest_params(val, params)
             
-        for u in cmd_obj.get("updates", []):
-            _harvest_params(u.get("q"), params)
+        updates_val = cmd_obj.get("updates")
+        if isinstance(updates_val, list):
+            for u in updates_val:
+                if isinstance(u, dict):
+                    _harvest_params(u.get("q"), params)
             
     elif op in ["delete", "tx-delete", "d"]:
         for field in ["filter", "q"]:

@@ -2,6 +2,10 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.2] - 2026-06-16
+### Fixed
+- 🐛 **Transaction Update Schema Extraction**: Added a defensive list type check for the `"updates"` key inside `extract_query_params` in `parser.py` to prevent `TypeError: 'int' object is not iterable` crashes when parsing sparse transaction log lines.
+
 ## [6.1.1] - 2026-06-15
 ### Added
 - 🔍 **Hash Search Support**: Added the **Hash** option to the search dropdown menu on both the **Business Workload Forensics** and **System Query Forensics** tabs. Included hidden spans inside table row first cells to expose `query_shape_hash`, `query_hash`, and `plan_cache_key` to the filter selector.
