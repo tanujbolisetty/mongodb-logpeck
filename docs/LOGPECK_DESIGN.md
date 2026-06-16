@@ -105,15 +105,13 @@ To ensure proportionality, the **AAS Load %** (green progress bar) is calculated
 ### 3.2 Hierarchical Diagnostic Routing
 Events are bucketed using the priority defined in Section 3.1 to ensure that infrastructure noise never masks workload performance issues or critical failures.
 
----
-
-### 🧬 CRUD Normalization
+### 🧬 CRUD Normalization & Noise Exclusion
 All business workload operations are normalized into a standard forensic vocabulary:
 *   **Abbreviation Expansion**: `u`, `i`, `d` are expanded to `update`, `insert`, `delete`.
 *   **Transaction Prefixing**: Operations part of a multi-document transaction (tagged with `txnNumber`) are prefixed with `tx-` (e.g., `tx-update`).
-*   **Infrastructure Ops**: Background maintenance tasks are standardized (e.g., `OplogFetcher`).
- with 0ms duration are silenced entirely.
-- **Event ID Blacklist**: Explicitly excludes redundant markers such as `51800` (Metadata), `21530` (Ping), and `51801` (System Stats) from slow query reports.
+*   **Infrastructure Ops**: Background maintenance tasks are standardized (e.g., `OplogFetcher`). Operations with 0ms duration are silenced entirely.
+*   **Noise Suppression & TLS Handshake Exclusion**: High-volume, low-signal entries such as `"ingress tls handshake complete"` are ignored globally to prevent system/network query forensics from being overshadowed by connectivity chatter.
+*   **Event ID Blacklist**: Explicitly excludes redundant markers such as `51800` (Metadata), `21530` (Ping), and `51801` (System Stats) from slow query reports.
 
 ---
 
@@ -271,16 +269,17 @@ To maintain a high signal-to-noise ratio in the **Failure Forensics** dashboard,
 
 The Failure Forensics dashboard is designed for rapid diagnostic triage.
 
-### 13.1 Failure Forensic Columns
-The "Failure Forensics" tab is optimized for signal-to-noise ratio by consolidating multiple views into a three-part diagnostic hierarchy:
+### 8.1 Failure Forensic Columns
+The "Failure Forensics" tab is optimized for signal-to-noise ratio by consolidating multiple views into a four-part diagnostic hierarchy:
 
-1.  **Executive Failure Summary**: Aggregated by `Error Code`.
-2.  **Query Shape Failure Analysis**: Aggregated by `Query Shape` + `Error Code`.
-3.  **System & Network Errors**: Raw infrastructure anomalies.
+1.  **Failure Summary (Log Errors)**: Aggregated by `Error Code`. Displays `CODE`, `ERROR / DESCRIPTION`, `OCCURRENCES`, `AVG DELAY`, `PRIMARY NAMESPACE`, and `MOST IMPACTED APP` (which allows the removal of the redundant first card).
+2.  **Timeout Summary**: Aggregated by `Error Code` for timeout operations.
+3.  **Query Shape Failure Analysis**: Aggregated by `Query Shape` + `Error Code`.
+4.  **System & Network Errors**: Raw infrastructure anomalies, with dynamic context.
 
-The "Error Event Timeline" (previously Section 2) has been deprecated in to prevent UI clutter. Its critical chronological signal has been merged into the Query Shape table.
+The "Error Event Timeline" (previously Section 2) has been deprecated to prevent UI clutter. Its critical chronological signal has been merged into the Query Shape table.
 
-#### 13.1.1 Query Shape Failure Analysis Table
+#### 8.1.1 Query Shape Failure Analysis Table
 | Column | Width | Description |
 | :--- | :--- | :--- |
 | **CODE** | 80px | MongoDB Error Code (e.g., 50, 11000). |
@@ -293,6 +292,9 @@ The "Error Event Timeline" (previously Section 2) has been deprecated in to prev
 
 ### 8.2 Redundancy Elimination
 The UI automatically scrubs numeric suffixes from descriptions (e.g., `Operation Exceeded (50)` becomes `Operation Exceeded`) when the Code column is present, providing a concise, industrial-grade view.
+
+### 8.3 Tab 5: Connection Analytics (Search Filter Removal)
+In Connection Analytics, the search filter has been removed to simplify the user interface and focus on the aggregate application, IP, and driver profiles.
 
 ---
 
@@ -425,7 +427,7 @@ Both tabs share the same structure. System tab wraps the table in a card with a 
 #### 13.4.1 Controls Bar
 | Element | Description |
 | :--- | :--- |
-| **Search Input** | Full-text filter across namespace, op, app, hash. Green left-border (Business) or Gold (System). |
+| **Search Input & Type** | Dropdown options to search by: `All Fields` (default), `Operation (OP)`, `Namespace`, `Application`, `Hash`, or `Diagnostics/Labels`. Green left-border (Business) or Gold (System). |
 | **Tier Filter Buttons** | Up to 3 latency tier buttons (e.g., `500ms+`, `1s+`, `5s+`) + `ALL` reset button |
 | **Collapse All** | Closes all expanded drill-down rows |
 
@@ -521,24 +523,14 @@ When a row is clicked, a `details-row` expands below it with a 6px green left-bo
 
 ### 13.5 Tab 4: Failure Forensics
 
-#### 13.5.1 Executive Summary
-- **Failure Summary Grid**: Table with CODE · ERROR/DESCRIPTION · OCCURRENCES · AVG DELAY · PRIMARY NAMESPACE · MOST IMPACTED APP
-- **Timeout Pattern Grid**: Table with Last Seen · Code · Count · Avg · Max · Namespace · Op Preview · Error Pattern · App · Context (IP + Ctx)
+#### 13.5.1 Diagnostic Tables
+- **Failure Summary (Log Errors)**: Table displaying CODE · ERROR / DESCRIPTION · OCCURRENCES · AVG DELAY · PRIMARY NAMESPACE · MOST IMPACTED APP.
+- **Timeout Summary**: Table displaying CODE · ERROR / DESCRIPTION · OCCURRENCES · AVG DELAY · PRIMARY NAMESPACE · MOST IMPACTED APP specifically for timeout events.
+- **Query Shape Failure Analysis**: Table displaying CODE · ERROR / DESCRIPTION · OCCURRENCES · SHAPE HASH · NAMESPACE · CONTEXT / APP · LAST SEEN. Clicking a row expands into a full drill-down.
+- **System & Network Errors**: Raw infrastructure anomalies, mapping patterns to occurrence counts, last-seen timestamps, and application contexts.
 
-#### 13.5.2 Forensic Drill-Down Table
-- Same column structure as Tab 2 but with timeout-specific columns:
-
-| # | Column | Content |
-| :--- | :--- | :--- |
-| 1 | `#` | Row number |
-| 2 | `CODE` | Error code (JetBrains Mono, bold red: `hsl(0, 84%, 60%)`) |
-| 3 | `DESCRIPTION` | Error name with 🚨 (timeout) or ☢️ (error) prefix |
-| 4 | `OCCURRENCES` | Total count of this failure shape |
-| 5 | `HASH` | Short query shape hash (12 chars) |
-| 6 | `NAMESPACE` | Target namespace |
-| 7 | `APPLICATION` | Client application name |
-
-- Expanded drill-down follows the same Section A–F structure as Tab 2
+#### 13.5.2 Forensic Drill-Down Details
+- The Query Shape Failure Analysis table supports expandable rows following the same Section A–F structure as Tab 2.
 
 ---
 
@@ -646,8 +638,8 @@ Because the search engine matches against the `textContent` of a table row (`row
 
 | Dashboard Tab | Visual Search Fields | Forensic Search Anchors (Hidden) |
 | :--- | :--- | :--- |
-| **Business Workload** | Namespace, Operation, App Name, Diagnostic Tags | Query Shape Hash, Plan Cache Key |
-| **System Workload** | Background Task Name, Component, Diagnostic Tags | Internal Thread ID |
+| **Business Workload** | Namespace, Operation, App Name, Diagnostic Tags | Query Shape Hash, Query Hash, Plan Cache Key |
+| **System Workload** | Background Task Name, Component, Diagnostic Tags | Query Shape Hash, Query Hash, Plan Cache Key, Internal Thread ID |
 | **Failure Forensics** | Error Code, Error Pattern, Namespace, App Name | **Client IP**, Connection Context ID, Shape Hash, Full Error Description |
 | **Connection Analytics**| App Name, Driver Version | **Client IP**, Username |
 

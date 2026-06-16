@@ -53,10 +53,10 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         <div class="card card-clickable" onclick="navigateToTab('slow', 'slowTable')"><div class="card-label">Slow Queries</div><div class="card-value">{stats.get("total_slow_count", 0)}</div></div>
         <div class="card"><div class="card-label">Avg Slow Duration</div><div class="card-value">{format_duration(stats.get("avg_slow_ms", 0))}</div></div>
         <div class="card"><div class="card-label">Max Slow Duration</div><div class="card-value" style="color:var(--error)">{latency_max}</div></div>
-        <div class="card card-clickable" onclick="navigateToTab('timeouts', 'timeoutTable')">
+        <div class="card card-clickable" onclick="navigateToTab('timeouts', 'timeoutSummaryCard')">
             <div class="card-label" style="display:flex; justify-content:space-between; align-items:center">
-                <span>Workload Failures</span>
-                <span class="info-icon" data-tooltip="Timeout and execution limit errors. Refer to the 'Query Shape Failure Analysis' table in the 'Failure Forensics' tab.">ℹ️</span>
+                <span>Timeouts</span>
+                <span class="info-icon" data-tooltip="Timeout and execution limit errors. Refer to the 'Timeout Summary' table in the 'Failure Forensics' tab.">ℹ️</span>
             </div>
             <div class="card-value">{stats.get("timeout_count", 0)}</div>
         </div>
@@ -253,7 +253,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     timeout_table_html = "" # Consolidated into Query Shape Analysis
 
     
-    system_error_table_html = "<table><thead><tr><th>Code</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Count</th><th style='text-align:right'>Last Seen</th></tr></thead><tbody>"
+    system_error_table_html = "<table><thead><tr><th>Code</th><th>Category</th><th>Error Message</th><th>System Note</th><th>Most Impacted App</th><th>Count</th><th style='text-align:right'>Last Seen</th></tr></thead><tbody>"
     for i, err in enumerate(stats.get("system_error_patterns", [])):
         did = f"syserr-{i}"
         err_ts = str(err.get('ts', 'N/A'))[11:19]
@@ -263,6 +263,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             <td style='font-weight:600;color:var(--accent)'>{err.get('category', 'N/A')}</td>
             <td style='font-size:0.8rem'>{err.get('msg', 'N/A')}</td>
             <td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('note', 'N/A')}</td>
+            <td style='font-size:0.75rem;color:var(--text-secondary)'>{err.get('top_app', 'N/A')}</td>
             <td><span class='tag-critical'>{err.get('count', 0)}</span></td>
             <td style='font-size:0.75rem;font-family:monospace;text-align:right'>{err_ts}</td>
         </tr>"""
@@ -280,7 +281,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                     <pre id="sys-payload-{i}" class="payload-pre search-exclude" style="background:#000;padding:1.5rem;border-radius:12px;font-size:0.72rem;color:var(--text-secondary);border:1px solid var(--border);border-left:4px solid var(--warn);max-height:450px;overflow:auto">{p_pretty}</pre>
                 </div>'''
             
-        system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="6"><div class="details-content">
+        system_error_table_html += f'''<tr id="{did}" class="details-row"><td colspan="7"><div class="details-content">
             <div class="card-label" style="font-size:0.65rem; color:var(--text-secondary); letter-spacing:0.1em; margin-bottom:1rem">TECHNICAL FORENSIC PAYLOAD</div>
             {payload_html}
         </div></td></tr>'''
@@ -334,7 +335,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             
             dist = row.get("latency_distribution", {}); tiers = [100, 250, 500, 1000, 2000, 5000, 10000]; t_colors = ["var(--tier1)", "var(--tier2)", "var(--tier3)", "var(--tier4)", "var(--tier5)", "var(--tier6)", "var(--tier7)"]; total_d = sum(dist.values()) or 1
             wave_html = "".join([f'<div style="width:{(dist.get(t, 0)/total_d)*100}%; background:{t_colors[j]}; height:100%"></div>' for j, t in enumerate(tiers) if (dist.get(t, 0)/total_d)*100 > 0])
-            legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+</div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
+            legend_html = "".join([f'<div class="legend-item"><div class="legend-dot" style="background:{t_colors[j]}"></div>{t}ms+ <span style="opacity:0.6; font-size:0.75rem; margin-left:2px">({dist.get(t, 0):,})</span></div>' for j, t in enumerate(tiers) if dist.get(t, 0) > 0])
             
             def render_clinical_insights(row_data):
                 """
@@ -597,14 +598,14 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 last_seen = str(row.get('last_ts', 'N/A'))
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}</td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}<span style="display:none">{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}</span></td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = "" # Prevent double-appending
             elif is_system_view:
                 last_seen = str(row.get('last_ts', 'N/A'))
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
                 ns = row.get('namespace', 'N/A')
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}<span style="display:none">{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}</span></td><td style="font-weight:700;color:var(--warn)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = ""
             else:
                 # 🧪 Standard Workload Row ( Restoration)
@@ -612,7 +613,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 total_ms = row.get('total_ms', 0)
                 ns = row.get('namespace', 'N/A')
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}</td><td style="font-weight:700;color:var(--accent)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{i+1}<span style="display:none">{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}</span></td><td style="font-weight:700;color:var(--accent)">{row.get('category', 'N/A').upper()}</td><td>{format_duration(row.get('avg_time', 0))}</td><td>{format_duration(row.get('max_time', 0))}</td><td>{row.get('count', 0):,}</td>{aas_load_col}<td>{format_duration(total_ms)}</td><td>{ns}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
 
             
             schema_col = ""
@@ -720,7 +721,9 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     rows_html = render_summary_rows(summary, 0)
     system_rows_html = render_summary_rows(system_summary, 1000, is_system_view=True)
     timeout_forensic_rows_html = render_summary_rows(timeout_summary, 2000, is_timeout_view=True)
-    failure_summary_html = render_summary_rows(ecs, 3000, is_failure_summary=True)
+    
+    ecs_timeouts = [item for item in ecs if item.get("is_timeout")]
+    timeout_summary_html = render_summary_rows(ecs_timeouts, 3000, is_failure_summary=True)
 
     # 📚 Forensic Knowledge Base: Diagnostic Decoder
     diag_rows = []
@@ -776,7 +779,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             const tabHeader = tabs.find(el => el.getAttribute('onclick')?.includes(tabId));
             if (tabHeader) {
                 openTab(tabId, tabHeader);
-                if (targetId) {
+                if (targetId && targetId !== 'slowTable') {
                     const target = document.getElementById(targetId);
                     if (target) {
                         setTimeout(() => {
@@ -872,6 +875,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                                 targetText = row.cells[8] ? row.cells[8].textContent : "";
                             } else if (searchType === "app") {
                                 targetText = row.cells[9] ? row.cells[9].textContent : "";
+                            } else if (searchType === "hash") {
+                                targetText = row.cells[0] ? row.cells[0].textContent : "";
                             }
                         }
                         isMatch = targetText.toLowerCase().includes(filter);
@@ -996,8 +1001,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             content: attr(data-tooltip);
             position: absolute;
             bottom: 150%;
-            left: 50%;
-            transform: translateX(-50%);
+            right: 0;
             background: #0f172a;
             border: 1px solid var(--border);
             color: var(--text-primary);
@@ -1016,10 +1020,11 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             line-height: 1.4;
             text-align: left;
             font-weight: 500;
+            transform: translateY(0);
         }}
         .info-icon:hover::after {{
             opacity: 1;
-            transform: translateX(-50%) translateY(-6px);
+            transform: translateY(-6px);
         }}
         .card-label {{ color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; font-weight: 700; }}
         .card-value {{ font-size: 1.6rem; font-weight: 700; color: var(--accent); font-family: 'Outfit'; }}
@@ -1128,6 +1133,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <option value="op">Operation (OP)</option>
                 <option value="ns">Namespace</option>
                 <option value="app">Application</option>
+                <option value="hash">Hash</option>
                 <option value="diag">Diagnostics/Labels</option>
             </select>
             <input type="text" id="systemSearch" onkeyup="filterRows('systemSearch', 'systemTable')" placeholder="🔍 Forensic search of background tasks, heartbeats, and admin commands..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--warn)">
@@ -1168,7 +1174,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
         <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
             <select id="timeoutSearchType" onchange="filterRows('timeoutSearch', 'timeoutContent')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
                 <option value="all">All Fields</option>
-                <option value="op">Error Msg / Code</option>
+                <option value="op">Error Msg</option>
                 <option value="ns">Namespace</option>
                 <option value="app">Application</option>
             </select>
@@ -1176,10 +1182,10 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
             <button class="badge" style="cursor:pointer; border:none; padding:0 1.5rem; height:42px" onclick="collapseAll()">COLLAPSE ALL</button>
         </div>
         <div id="timeoutContent">
-            <div class="card">
-                <div class="card-label" style="color:var(--warn)">📊 Executive Failure Summary (Error Code Distribution)</div>
-                <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:1.5rem">Systemic view of errors across all query shapes. Use this to identify global infrastructure bottlenecks.</p>
-                {failure_summary_html}
+            <div id="timeoutSummaryCard" class="card" style="margin-top:1.5rem">
+                <div class="card-label" style="color:var(--error)">📊 Timeout Summary (Error Code Distribution)</div>
+                <p style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:1.5rem">Distribution of timeout and execution limit error codes across the workload.</p>
+                {timeout_summary_html}
             </div>
 
             <div class="card" style="margin-top:1.5rem">
@@ -1218,6 +1224,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 <option value="op">Operation (OP)</option>
                 <option value="ns">Namespace</option>
                 <option value="app">Application</option>
+                <option value="hash">Hash</option>
                 <option value="diag">Diagnostics/Labels</option>
             </select>
             <input type="text" id="slowSearch" onkeyup="filterRows('slowSearch', 'slowTable')" placeholder="🔍 Search by namespace, op, app, or hash..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; border-left:4px solid var(--accent)">
@@ -1250,16 +1257,6 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
     </div>
 
     <div id="connections" class="tab-content">
-        <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
-            <select id="connSearchType" onchange="filterRows('connSearch', 'connTable')" style="padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none; cursor:pointer; font-weight:600; font-size:0.85rem;">
-                <option value="all">All Fields</option>
-                <option value="app">Application</option>
-                <option value="ip">Client IP</option>
-                <option value="user">DB User</option>
-                <option value="driver">Driver Name</option>
-            </select>
-            <input type="text" id="connSearch" onkeyup="filterRows('connSearch', 'connTable')" placeholder="🔍 Search connection metadata..." style="flex:1; min-width:300px; padding:1rem; border-radius:12px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-primary); outline:none;">
-        </div>
         <div class="grid">{conn_summary_html}</div>
         <div id="connTable">
             <div class="comparison-grid">

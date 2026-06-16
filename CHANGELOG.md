@@ -2,6 +2,14 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.1] - 2026-06-15
+### Added
+- 🔍 **Hash Search Support**: Added the **Hash** option to the search dropdown menu on both the **Business Workload Forensics** and **System Query Forensics** tabs. Included hidden spans inside table row first cells to expose `query_shape_hash`, `query_hash`, and `plan_cache_key` to the filter selector.
+- 📊 **Muted Operational Legend Counts**: Injected exact count values next to bracket labels in the Latency Fingerprint legend grid (e.g. `100ms+ (28,142)`), styled with muted opacity for maximum incident triage legibility without UI clutter.
+
+### Fixed
+- 🐢 **Tab Top-Scroll Alignment**: Updated `navigateToTab` navigation javascript to intercept transitions to the Business Workload `slowTable` and align the scroll viewport smoothly back to the top of the tab contents rather than jumping to the center.
+
 ## [6.1.0] - 2026-06-15
 ### Added
 - 🕵️ **Universal Search Dropdown Selectors**: Implemented interactive search-type select dropdowns across **all four** primary forensic tabs (**Business Workload**, **System Query Forensics**, **Failure Forensics**, and **Connection Analytics**) to allow users to filter rows by Operation, Namespace, Application, DB User, Client IP, or Diagnostics/Errors.

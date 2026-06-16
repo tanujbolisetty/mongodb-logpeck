@@ -41,6 +41,7 @@ from .utils import format_duration
 
 RE_OBJECT_ID = re.compile(r'ObjectId\([^)]+\)')
 RE_TIMESTAMP = re.compile(r'\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\s]*')
+REVERSE_ERROR_CODE_MAP = {v: k for k, v in ERROR_CODE_MAP.items()}
 
 def load_diagnostic_rules() -> List[dict]:
     """
@@ -88,7 +89,7 @@ def evaluate_rule(rule: dict, data: dict) -> Tuple[bool, Optional[float]]:
 def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
     """
     Surgically extracts the numerical error code from potentially nested blocks.
-    Priority: 1. Top-level errCode, 2. Top-level code, 3. Nested error.code
+    Priority: 1. Top-level errCode, 2. Top-level code, 3. Nested error.code, 4. Text matching
     """
     if not isinstance(attr, dict): return 50 if is_timeout else None
     
@@ -100,11 +101,20 @@ def harvest_error_code(attr: dict, is_timeout: bool = False) -> Optional[int]:
         e_obj = attr["error"]
         code = e_obj.get("code") or e_obj.get("value")
         
-    # 3. Timeout Defaulting
+    # 3. String-based error name extraction
+    if code is None:
+        err_str = str(attr.get("error") or attr.get("errmsg") or attr.get("errMsg") or "")
+        if err_str:
+            for name, num in REVERSE_ERROR_CODE_MAP.items():
+                if name in err_str:
+                    code = num
+                    break
+
+    # 4. Timeout Defaulting
     if code is None and is_timeout:
         return 50
         
-    # 4. Type Normalization (ensure int if it looks like one)
+    # 5. Type Normalization (ensure int if it looks like one)
     try:
         if code is not None:
             return int(code)
@@ -478,7 +488,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     # INFO logs are only treated as failures if they have an explicit
                     # timeout signature or error code. Signatures are defined in
                     # specification.py (TIMEOUT_SIGNATURES, FAILURE_SIGNATURES).
-                    is_timeout_op = any(sig in search_space for sig in TIMEOUT_SIGNATURES) or "planexecutor error" in search_space
+                    is_timeout_op = any(sig in search_space for sig in TIMEOUT_SIGNATURES)
                     has_error_code = any(k in (attr or {}) or k in entry for k in ["errCode", "code"])
                     
                     # Core Predicate: Real errors are Warning/Error/Fatal OR (Info + Explicit Code/Timeout)
@@ -637,9 +647,12 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                                 "note": str(e_note)[:120],
                                 "code": str(sys_code) if sys_code is not None else "N/A",
                                 "count": 0,
-                                "payload": json.dumps(err_payload, indent=2) if err_payload else "N/A"
+                                "payload": json.dumps(err_payload, indent=2) if err_payload else "N/A",
+                                "apps": Counter()
                             }
                         system_error_patterns[key]["count"] += 1
+                        app_name = str(attr.get("appName") or conn_registry.get(ctx, {}).get("app") or conn_metadata.get(ctx, {}).get("app") or "N/A")
+                        system_error_patterns[key]["apps"][app_name] += 1
 
                     if not isinstance(attr, dict): continue
 
@@ -862,14 +875,16 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             # Standardize description: if we have a name, use it.
                             err_desc = str(err_n) if err_n != "N/A" else str(err_c)
                             
-                            if err_c not in error_code_agg:
-                                error_code_agg[err_c] = {
+                            err_key = (err_c, is_timeout_op)
+                            if err_key not in error_code_agg:
+                                error_code_agg[err_key] = {
                                     "code": err_c, "name": err_desc, "count": 0, "total_ms": 0,
                                     "namespaces": Counter(), "apps": Counter(),
                                     "max_ms": 0, "max_metrics": None, "max_peek_attr": None, "max_example_raw": None,
-                                    "last_ts": None
+                                    "last_ts": None,
+                                    "is_timeout": is_timeout_op
                                 }
-                            ec_o = error_code_agg[err_c]
+                            ec_o = error_code_agg[err_key]
                             ec_o["count"] += 1; ec_o["total_ms"] += duration
                             ec_o["namespaces"][ns] += 1
                             ec_o["apps"][a_n] += 1
@@ -1110,7 +1125,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                 "error_namespaces": {str(k): v for k, v in error_namespace_stats.most_common(16) if k != "N/A" and ".$cmd" not in k},
                 "error_code_summary": [
                     {
-                        "code": k,
+                        "code": k[0],
                         "name": v["name"],
                         "count": v["count"],
                         "avg_ms": v["total_ms"] / v["count"] if v["count"] > 0 else 0,
@@ -1120,11 +1135,24 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                         "max_metrics": v["max_metrics"],
                         "max_peek_attr": v["max_peek_attr"],
                         "max_example_raw": v["max_example_raw"],
-                        "diagnostic_tags": [{"label": "ERROR", "severity": "error"}]
+                        "diagnostic_tags": [{"label": "ERROR", "severity": "error"}],
+                        "is_timeout": k[1]
                     }
                     for k, v in sorted(error_code_agg.items(), key=lambda x: x[1]["count"], reverse=True)
                 ],
-                "system_error_patterns": sorted(system_error_patterns.values(), key=lambda x: x["count"], reverse=True)[:10],
+                "system_error_patterns": [
+                    {
+                        "ts": v["ts"],
+                        "category": v["category"],
+                        "msg": v["msg"],
+                        "note": v["note"],
+                        "code": v["code"],
+                        "count": v["count"],
+                        "payload": v["payload"],
+                        "top_app": v["apps"].most_common(1)[0][0] if v["apps"] else "N/A"
+                    }
+                    for v in sorted(system_error_patterns.values(), key=lambda x: x["count"], reverse=True)
+                ][:10],
                 "active_latency_tiers": sorted([int(k) for k, v in global_latency_dist.items() if v > 0]),
             }, 
             "connections": {

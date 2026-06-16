@@ -114,6 +114,8 @@ EXCLUDED_EVENT_MSGS = {
     # --- Connection Lifecycle (high-volume, ~371K/day each) ---
     "Connection accepted",
     "Connection ended",
+    "ingress tls handshake complete",
+    "Ingress TLS handshake complete",
 
     # --- Client Identity / Handshake ---
     "client metadata",                                          # ~314K/day
