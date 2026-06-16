@@ -63,6 +63,10 @@ The flagship feature of **logpeck**. Generates a professional six-tab surgical r
 # Defaults to --latency 0 (Full forensic capture)
 peck dashboard --file mongod.log.gz --html output/dashboard.html
 
+# Bulk Folder Analysis
+# Generates a separate HTML report for each log file in the folder
+peck dashboard --folder /path/to/log/directory --html output/directory_reports/
+
 # Custom Diagnostic Sizing (Optional: filter for queries > 100ms)
 peck dashboard --file mongod.log.gz --latency 100
 ```
