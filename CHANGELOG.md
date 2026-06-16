@@ -2,6 +2,10 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.3] - 2026-06-16
+### Fixed
+- 🐛 **Client Disconnect Triage**: Hardened error message resolution to map error code `279` (`ClientDisconnect`) to a readable summary description (`ClientDisconnect: [raw error]`) in System & Network Errors.
+
 ## [6.1.2] - 2026-06-16
 ### Fixed
 - 🐛 **Transaction Update Schema Extraction**: Added a defensive list type check for the `"updates"` key inside `extract_query_params` in `parser.py` to prevent `TypeError: 'int' object is not iterable` crashes when parsing sparse transaction log lines.

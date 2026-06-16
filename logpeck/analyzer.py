@@ -628,6 +628,9 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             e_msg = f"Unauthorized: {e_msg}"
                         elif "ConnectionPoolExpired" in str(e_msg):
                             e_msg = f"ConnectionPoolExpired: {e_msg}"
+                        elif sys_code == 279 or attr_name == "ClientDisconnect":
+                            # Resolve the ClientDisconnect error message more descriptively
+                            e_msg = f"ClientDisconnect: {e_msg or 'Client closed connection before completion'}"
 
                         # Hardened Payload Guard: Skip if empty forensic evidence exists for informational logs
                         # (Allow orphaned timeouts through even if payload is sparse)
