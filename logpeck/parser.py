@@ -605,7 +605,7 @@ def extract_search_metadata(attr: Dict[str, Any], entry: Dict[str, Any], cmd_obj
     
     # Trace target (handle getMore originations)
     target = cmd_obj
-    if op == "getMore" and isinstance(attr.get("originatingCommand"), dict):
+    if op.lower() == "getmore" and isinstance(attr.get("originatingCommand"), dict):
         target = attr["originatingCommand"]
         
     if not isinstance(target, dict): return plan_summary

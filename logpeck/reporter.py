@@ -560,7 +560,8 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 colspan_val = "12"
                 aas_load_col = f"""<td class="impact-container"><div class="card-label" style="font-size:0.7rem;margin-bottom:2px">{row.get('aas_load', 0)} load</div><div class="stat-bar-bg"><div class="stat-bar-fill" style="width:{l_wid}%"></div></div><div style="font-size:0.7rem;color:var(--accent);font-weight:700;margin-top:2px">{l_pct}%</div></td>"""
             elif is_timeout_view:
-                colspan_val = "7"
+                extra_cols = f"""<td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
+                colspan_val = "8"
                 aas_load_col = ""
             else:
                 extra_cols = f"""<td>{chips}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;opacity:0.7">{plan_html}</td>"""
@@ -598,7 +599,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                 last_seen = str(row.get('last_ts', 'N/A'))
                 if len(last_seen) > 19: last_seen = last_seen[11:19]
                 
-                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}<span style="display:none">{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}</span></td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td><td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
+                rows += f'''<tr class="row-main" onclick="toggleDetails('{did}')"><td>{code_html}<span style="display:none">{row.get('query_shape_hash', '')} {row.get('query_hash', '')} {row.get('plan_cache_key', '')}</span></td><td>{desc_html}</td><td>{row.get('count', 0):,}</td><td style="font-family:monospace;font-size:0.7rem;color:var(--text-secondary)">{row.get('query_shape_hash', 'N/A')}</td><td style="color:var(--text-secondary)">{row.get('namespace', 'N/A')}</td><td style="font-size:0.75rem;color:var(--text-secondary)">{row.get('app_name', 'N/A')}</td>{extra_cols}<td style="font-family:monospace;font-size:0.75rem;color:var(--text-secondary);text-align:right">{last_seen}</td></tr>\n'''
                 extra_cols = "" # Prevent double-appending
             elif is_system_view:
                 last_seen = str(row.get('last_ts', 'N/A'))
@@ -1087,7 +1088,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
 <body>
     <div class="header">
         <div style="display:flex; align-items:center; gap:1.5rem">
-            <h1>🐦 logpeck <span class="badge">Forensic Analytics {VERSION}</span></h1>
+            <h1><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.5rem; color: var(--accent);"><path d="M16 3c-3.47 0-6.42 2.05-7.66 5A5 5 0 0 0 3 13c0 2.76 2.24 5 5 5h1a4 4 0 0 0 4-4v-1.5c0-.83.67-1.5 1.5-1.5h1.5a4 4 0 0 0 4-4V3z"></path><path d="M12 8H9"></path></svg>logpeck <span class="badge">Forensic Analytics {VERSION}</span></h1>
             <div style="background:rgba(255,255,255,0.05); padding:0.4rem 1rem; border-radius:8px; border:1px solid var(--border); border-left:4px solid var(--accent)">
                 <div class="card-label" style="font-size:0.6rem; margin-bottom:0.2rem">SOURCE LOG AUDIT</div>
                 <div style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--text-primary); font-weight:700">{source_name}</div>
@@ -1202,6 +1203,7 @@ def generate_html_report(results: Dict[str, Any], output_path: str, source_name:
                             <th style="width:150px">SHAPE HASH</th>
                             <th style="width:220px">NAMESPACE</th>
                             <th style="width:200px">CONTEXT / APP</th>
+                            <th style="width:250px">PLAN</th>
                             <th style="width:100px; text-align:right">LAST SEEN</th>
                         </tr>
                     </thead>

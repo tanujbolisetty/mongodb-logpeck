@@ -606,7 +606,7 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             e_cat = "TIMEOUT" if is_orphan_timeout else "SYSTEM"
                         
                         # Preferred extraction order for the "Summary" column
-                        raw_err = attr.get("error") or attr.get("errmsg") or attr.get("message") or msg
+                        raw_err = attr.get("error") or attr.get("errMsg") or attr.get("errmsg") or attr.get("errName") or attr.get("message") or msg
                         if isinstance(raw_err, dict):
                             e_msg = raw_err.get("errmsg") or raw_err.get("message") or raw_err.get("codeName") or str(raw_err)
                         else:

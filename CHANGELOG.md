@@ -2,6 +2,13 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.4] - 2026-06-18
+### Added
+- 🧪 **Failure Forensics Plan Visibility**: Integrated the **PLAN** column into the Query Shape Failure Analysis table on the **Failure Forensics** tab to provide execution strategy context (e.g., `IXSCAN`, `SEARCH`) directly alongside timeouts and errors.
+### Fixed
+- 🐛 **GetMore Index Extraction**: Normalized operation matching to be case-insensitive (`getmore` instead of strictly `getMore`), ensuring that Atlas Search and Vector Search index names are properly extracted from the originating command on getmore operations.
+- 🎨 **Logo Standardisation**: Standardized the header logo icon with an inline SVG cross-platform vector format to ensure consistent appearance across macOS, Windows, and Linux.
+
 ## [6.1.3] - 2026-06-16
 ### Fixed
 - 🐛 **Client Disconnect Triage**: Hardened error message resolution to map error code `279` (`ClientDisconnect`) to a readable summary description (`ClientDisconnect: [raw error]`) in System & Network Errors.
