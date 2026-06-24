@@ -136,8 +136,35 @@ peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"g
 > - **PowerShell**: Escape the inner quotes: `--filters '{\"ms\": {\"gt\": 500}}'`
 > - **CMD**: Wrap in double quotes and escape the inner quotes: `--filters "{\"ms\": {\"gt\": 500}}"`
 
+#### Common Filter Keys (Shortcuts)
+LogPeck standardizes and flattens over 40+ MongoDB fields. The most common shortcuts you can query against are:
+
+| Key | Description | MongoDB Source Fields |
+| :--- | :--- | :--- |
+| `ms` | Operation duration in milliseconds | `durationMillis`, `durationMS` |
+| `op` | Operation type (e.g., `find`, `update`, `insert`, `getmore`) | `attr.command` keys / type |
+| `ns` | Namespace of the target collection | `attr.ns` |
+| `app_name` | Client application name | `attr.appName`, `doc.application.name` |
+| `user` | Database user identity | `attr.user` |
+| `client_ip` | Client IP address | `attr.remote` / `client` |
+| `query_hash` | Query fingerprint hash | `attr.queryHash` |
+| `query_shape_hash` | Query shape fingerprint hash | `attr.queryShapeHash` |
+| `plan_cache_key` | Plan cache key | `attr.planCacheKey` |
+| `has_regex` | Boolean: query contains a `$regex` parameter | Derived |
+| `has_lookup` | Boolean: query contains a `$lookup` aggregation | Derived |
+| `keysExamined` | Number of index entries scanned | `attr.keysExamined` |
+| `docsExamined` | Number of documents scanned from disk/memory | `attr.docsExamined` |
+| `nreturned` | Number of documents returned | `attr.nreturned` |
+| `reslen` | Size of the result set in bytes | `attr.reslen` |
+| `nModified` | Number of documents modified | `attr.nModified` |
+| `ndeleted` | Number of documents deleted | `attr.ndeleted` |
+| `storage_wait` | Derived physical storage wait (ms) | `read + write + cache stalls` |
+| `lock_wait` | Lock contention acquisition wait time (us) | `attr.locks.*.timeAcquiringMicros` |
+| `queue_wait` | Time spent waiting for execution ticket (us) | `queues.execution.totalTimeQueuedMicros` |
+| `replication_wait` | Replication flow control throttle wait (ms) | `attr.flowControlMillis` |
+
 > [!TIP]
-> **Metric Normalization**: LogPeck standardizes various MongoDB fields into short identifiers for easier filtering. For example, `ms` automatically maps to `durationMillis` (or `durationMS` in older logs). Use the **Reference Tab** in the dashboard to see all 40+ mapping definitions.
+> **Deep-Path Filtering**: You can also filter on any non-standard or raw MongoDB JSON field by specifying its exact path, e.g. `'{"attr.storage.data.txnBytesDirty": {"gt": 50000}}'`. Check the **Reference Tab** in the dashboard to see all 40+ mapping definitions.
 
 ### 7. Forensic Search (Stateful vs. Stateless)
 LogPeck offers two ways to discover information:

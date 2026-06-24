@@ -8,6 +8,7 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 ### Changed
 - 📝 **Windows Shell Query Escaping Documentation**: Added explicit guidelines and examples to the `README.md` filtering section for Windows PowerShell and CMD users to prevent JSON parsing issues.
 - 📝 **Filter Operators Documentation**: Added a table of supported comparison operators (`gt`, `lt`, `contains`, `eq`) to the `README.md` filtering section.
+- 📝 **Filter Shortcuts Documentation**: Added a reference table of common queryable shortcuts (like `ms`, `op`, `ns`, `lock_wait`, `keysExamined`, etc.) to the `README.md` filtering section.
 ### Fixed
 - 🐛 **GetMore Index Extraction**: Normalized operation matching to be case-insensitive (`getmore` instead of strictly `getMore`), ensuring that Atlas Search and Vector Search index names are properly extracted from the originating command on getmore operations.
 - 🎨 **Logo Standardisation**: Standardized the header logo icon with an inline SVG cross-platform vector format to ensure consistent appearance across macOS, Windows, and Linux.
