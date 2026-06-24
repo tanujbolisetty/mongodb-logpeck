@@ -7,6 +7,7 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 - 🧪 **Failure Forensics Plan Visibility**: Integrated the **PLAN** column into the Query Shape Failure Analysis table on the **Failure Forensics** tab to provide execution strategy context (e.g., `IXSCAN`, `SEARCH`) directly alongside timeouts and errors.
 ### Changed
 - 📝 **Windows Shell Query Escaping Documentation**: Added explicit guidelines and examples to the `README.md` filtering section for Windows PowerShell and CMD users to prevent JSON parsing issues.
+- 📝 **Filter Operators Documentation**: Added a table of supported comparison operators (`gt`, `lt`, `contains`, `eq`) to the `README.md` filtering section.
 ### Fixed
 - 🐛 **GetMore Index Extraction**: Normalized operation matching to be case-insensitive (`getmore` instead of strictly `getMore`), ensuring that Atlas Search and Vector Search index names are properly extracted from the originating command on getmore operations.
 - 🎨 **Logo Standardisation**: Standardized the header logo icon with an inline SVG cross-platform vector format to ensure consistent appearance across macOS, Windows, and Linux.

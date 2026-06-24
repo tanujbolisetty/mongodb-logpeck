@@ -123,6 +123,14 @@ peck filter --file mongod.log --filters '{"ms": {"gt": 500}}' --limit 5
 peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"gt": 536045710}}' --cards
 ```
 
+#### Supported Operators
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| `gt` | Greater than (numeric) | `'{"ms": {"gt": 500}}'` |
+| `lt` | Less than (numeric) | `'{"ms": {"lt": 100}}'` |
+| `contains` | Substring match (case-insensitive) | `'{"ns": {"contains": "orders"}}'` |
+| `eq` | Equal to (default, case-insensitive string) | `'{"plan": "COLLSCAN"}'` or `'{"plan": {"eq": "COLLSCAN"}}'` |
+
 > [!IMPORTANT]
 > **Windows Shell Note (PowerShell & CMD)**: Windows command line parsers can strip or misinterpret nested single/double quotes, leading to a `JSONDecodeError`. If you are on Windows, format your filters as follows:
 > - **PowerShell**: Escape the inner quotes: `--filters '{\"ms\": {\"gt\": 500}}'`
