@@ -123,6 +123,11 @@ peck filter --file mongod.log --filters '{"ms": {"gt": 500}}' --limit 5
 peck filter --file mongod.log --filters '{"attr.storage.data.txnBytesDirty": {"gt": 536045710}}' --cards
 ```
 
+> [!IMPORTANT]
+> **Windows Shell Note (PowerShell & CMD)**: Windows command line parsers can strip or misinterpret nested single/double quotes, leading to a `JSONDecodeError`. If you are on Windows, format your filters as follows:
+> - **PowerShell**: Escape the inner quotes: `--filters '{\"ms\": {\"gt\": 500}}'`
+> - **CMD**: Wrap in double quotes and escape the inner quotes: `--filters "{\"ms\": {\"gt\": 500}}"`
+
 > [!TIP]
 > **Metric Normalization**: LogPeck standardizes various MongoDB fields into short identifiers for easier filtering. For example, `ms` automatically maps to `durationMillis` (or `durationMS` in older logs). Use the **Reference Tab** in the dashboard to see all 40+ mapping definitions.
 
