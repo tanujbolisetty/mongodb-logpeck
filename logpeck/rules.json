@@ -419,6 +419,17 @@
       "description": "WiredTiger cache pressure detected. The operation was stalled while waiting for dirty data to be evicted to disk, indicating that the cache is full and I/O cannot keep up with write volume."
     },
     {
+      "id": "HIGH_PHYSICAL_READ",
+      "type": "threshold",
+      "field": "physical_reads_mb",
+      "technical_path": "attr.storage.data.bytesRead",
+      "op": "gt",
+      "value": 1024,
+      "label": "🚨 [TRACE] High Disk Read ({value:.1f} MB)",
+      "severity": "critical",
+      "description": "The operation read a massive volume of physical data from disk. This can cause high disk I/O pressure, cache eviction stalls, and latency cliffs."
+    },
+    {
       "id": "INDEX_AMPLIFICATION",
       "type": "threshold",
       "field": "ins_amp",

@@ -136,6 +136,15 @@
       "description": "Amount of data modified in cache that requires a sweep to disk."
     },
     {
+      "id": "bytesRead",
+      "label": "Physical Data Read Volume",
+      "category": "💾 STORAGE WAIT",
+      "unit": "bytes",
+      "source": "attr.storage.data.bytesRead",
+      "markers": ["bytesRead"],
+      "description": "Total physical bytes read from disk by WiredTiger."
+    },
+    {
       "id": "writeConflicts",
       "label": "Write Conflicts",
       "category": "🖋️ WRITE CHURN",

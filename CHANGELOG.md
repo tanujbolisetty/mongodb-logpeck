@@ -2,6 +2,13 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.5] - 2026-06-29
+### Added
+- 💾 **WiredTiger Data Read Volume Metrics**: Integrated extraction for `bytesRead` (Physical Data Read Volume) from `attr.storage.data.bytesRead` under the **Storage Wait** section in HTML reports and diagnostics.
+- 🚨 **High Physical Disk Read Rule**: Added the `HIGH_PHYSICAL_READ` diagnostic rule in `rules.json` to automatically flag operations reading more than 1 GB of data from disk with a warning badge.
+### Fixed
+- 🐛 **Command Extraction for Op Type None**: Updated parser to ignore type `"none"`, allowing it to fall back and correctly identify actual command names like `createIndexes` (surfaced as `CREATEINDEXES` in UI tables).
+
 ## [6.1.4] - 2026-06-23
 ### Added
 - 🧪 **Failure Forensics Plan Visibility**: Integrated the **PLAN** column into the Query Shape Failure Analysis table on the **Failure Forensics** tab to provide execution strategy context (e.g., `IXSCAN`, `SEARCH`) directly alongside timeouts and errors.

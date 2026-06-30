@@ -189,7 +189,7 @@ def detect_op_and_ns(attr: Dict[str, Any], cmd_obj: Dict, msg: str, ns: str):
     attr_type = attr.get("type")
     
     crud = attr.get("CRUD")
-    if attr_type and attr_type != "command":
+    if attr_type and attr_type not in ("command", "none"):
         raw_op = attr_type
     elif isinstance(crud, dict):
         raw_op = crud.get("op")

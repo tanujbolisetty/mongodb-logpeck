@@ -1368,6 +1368,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "del_amp": round(k_del / n_del, 1) if n_del > 0 else 0,
             # ✨ Advanced Clinical Suite (The Full Stack)
             "cache_pressure": round(max_d.get("forensic", {}).get("txnBytesDirty", 0) / (1024 * 1024), 1),
+            "physical_reads_mb": round(max_d.get("forensic", {}).get("bytesRead", 0) / (1024 * 1024), 1),
             "replication_backpressure": max(max_d.get("forensic", {}).get("flowControlMillis", 0), max_d.get("max_peek_attr", {}).get("waitForWriteConcernDurationMillis", 0)),
             "storage_intensity": min(100.0, round((max_d.get("waits_ms", {}).get("storage_wait", 0) / max(max_d.get("ms", 1), 1)) * 100, 1)),
             "search_latency": max_d.get("forensic", {}).get("mongot_wait", 0),
@@ -1386,6 +1387,7 @@ def finalize_forensic_summary(shape_stats: Dict[str, Dict], log_dur_sec: float =
             "error_name": max_d.get("forensic", {}).get("errName") or max_d.get("forensic", {}).get("codeName"),
             "clinical_stats": stats,
             "cache_pressure": stats["cache_pressure"],
+            "physical_reads_mb": stats["physical_reads_mb"],
             "cache_stall": stats["cache_stall"],
             "ins_amp": stats["ins_amp"],
             "doc_mut": doc_mut,

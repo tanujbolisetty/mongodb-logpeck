@@ -72,6 +72,7 @@ Every metric harvested by LogPeck is bound to a deterministic source path in the
 | `queue_wait` | `attr.totalTimeQueuedMicros` | Ticket Queue | ms |
 | `replication_wait`| `attr.flowControlMillis` | Replication Throttling | ms |
 | `txnBytesDirty` | `attr.storage.data.txnBytesDirty` | Cache Dirty | bytes |
+| `bytesRead` | `attr.storage.data.bytesRead` | Physical Data Read Volume | bytes |
 | `writeConflicts` | `attr.writeConflicts` | Write Conflicts | count |
 | `ninserted` | `attr.ninserted` | Docs Inserted | count |
 | `nModified` | `attr.nModified` | Docs Modified | count |

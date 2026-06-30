@@ -330,7 +330,8 @@ SEARCH_PROBES = [
 NESTED_METRIC_MAPPING = {
     "attr.mongot.timeWaitingMillis": "mongot_wait",
     "attr.storage.data.txnBytesDirty": "txnBytesDirty",
-    "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache"
+    "attr.storage.timeWaitingMicros.cache": "timeWaitingMicros_cache",
+    "attr.storage.data.bytesRead": "bytesRead"
 }
 
 # 🐢 9. Performance Efficiency Thresholds
