@@ -5,6 +5,7 @@ All notable changes to the `mongodb-logpeck` project will be documented in this 
 ## [6.1.6] - 2026-06-30
 ### Fixed
 - 🧹 **Denoise buildUUID Messages**: Filter out index build (`buildUUID`) start/progress messages that do not have a duration (0ms) and are not errors or timeouts, preventing them from polluting operation categories and workload tables.
+- 🧹 **System Queries Parity**: Aligned the workload timeline chart grey (system) bars to only count system events that have a recorded duration (`duration > 0`), matching the System Query Forensics tab. Previously, 0ms system events (TLS handshakes, TTL pings, connection initiations) were counted in the grey timeline bars but never appeared in the System Queries tab, causing confusion.
 
 ## [6.1.5] - 2026-06-29
 ### Added

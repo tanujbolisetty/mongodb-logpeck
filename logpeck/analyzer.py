@@ -1015,7 +1015,10 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                             if is_timeout_op or is_error_op:
                                 cat = "failures"
                             elif is_system_op or is_noise:
-                                cat = "system"
+                                if duration > 0:
+                                    cat = "system"
+                                else:
+                                    continue
                             else:
                                 op_lower = op.lower()
                                 
