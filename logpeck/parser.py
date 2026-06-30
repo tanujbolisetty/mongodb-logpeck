@@ -395,6 +395,12 @@ def extract_log_metrics(entry: Dict[str, Any], include_full_command: bool = Fals
     if not ms and "parameters" in attr: 
         ms = attr["parameters"].get("durationMillis", 0)
 
+    # 🛡️ Skip buildUUID messages without duration (0ms) if they are not errors or timeouts.
+    if ("buildUUID" in attr or "buildUUID" in entry) and ms == 0:
+        is_err = any(k in attr or k in entry for k in ["error", "errCode", "code", "errorMessage", "errmsg", "errMsg"])
+        if not is_err:
+            return None
+
     # 🕵️ Forensic Stats Extraction
     forensic = extract_forensic_stats(attr, entry)
     

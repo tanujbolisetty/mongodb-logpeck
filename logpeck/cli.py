@@ -78,7 +78,7 @@ def print_log_card(entry, full=False):
     
     # Late-binding metric extraction if missing (guarantees ms/ns availability)
     if not metrics:
-        metrics = extract_log_metrics(entry)
+        metrics = extract_log_metrics(entry) or {}
 
     duration = metrics.get("ms") or attr.get("durationMillis")
     ns = metrics.get("ns")

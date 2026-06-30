@@ -2,6 +2,10 @@
 
 All notable changes to the `mongodb-logpeck` project will be documented in this file.
 
+## [6.1.6] - 2026-06-30
+### Fixed
+- 🧹 **Denoise buildUUID Messages**: Filter out index build (`buildUUID`) start/progress messages that do not have a duration (0ms) and are not errors or timeouts, preventing them from polluting operation categories and workload tables.
+
 ## [6.1.5] - 2026-06-29
 ### Added
 - 💾 **WiredTiger Data Read Volume Metrics**: Integrated extraction for `bytesRead` (Physical Data Read Volume) from `attr.storage.data.bytesRead` under the **Storage Wait** section in HTML reports and diagnostics.

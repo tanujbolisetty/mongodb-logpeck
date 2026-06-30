@@ -439,6 +439,8 @@ def analyze_slow_queries(log_file_path: str, threshold_ms: int = 0) -> Dict[str,
                     
                     # 🧪 Early Forensic Matrix Extraction
                     metrics = extract_log_metrics(entry, include_full_command=True, last_ts=last_known_ts)
+                    if not metrics:
+                        continue
                     attr = metrics.get("attr") or entry.get("attr", {})
                     op = metrics.get("op") or "N/A"
                     
